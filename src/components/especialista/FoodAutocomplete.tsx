@@ -3,8 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Star } from "lucide-react";
+import { Star, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface FoodDBItem {
   id: string;
@@ -28,11 +29,17 @@ interface Props {
   className?: string;
 }
 
+/** Strip diacritics for accent-insensitive matching */
+function removeDiacritics(str: string): string {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export default function FoodAutocomplete({ value, onChange, onSelect, className }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [rawQuery, setRawQuery] = useState("");
+  const debouncedQuery = useDebounce(rawQuery.trim(), 500);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Fetch user's favorite food IDs
@@ -49,32 +56,52 @@ export default function FoodAutocomplete({ value, onChange, onSelect, className 
     enabled: !!user?.id,
   });
 
-  const { data: suggestions } = useQuery({
-    queryKey: ["food-autocomplete", query],
+  const { data: suggestions, isLoading: isSearching } = useQuery({
+    queryKey: ["food-autocomplete", debouncedQuery],
     queryFn: async () => {
-      if (query.length < 2) return [];
+      if (debouncedQuery.length < 2) return [];
+
+      // Build accent-insensitive search term
+      const term = removeDiacritics(debouncedQuery);
+
+      // Try ilike first with the raw term for exact diacritics match,
+      // then also with stripped diacritics version
       const { data } = await supabase
         .from("food_database")
         .select("id, name, portion, calories, protein, carbs, fat, category, portion_unit, portion_amount, portion_grams, fonte")
-        .ilike("name", `%${query}%`)
-        .limit(50);
-      const items = (data ?? []) as FoodDBItem[];
-      // Sort: favorites first, then shorter names (simpler foods), then TACO before TBCA
+        .ilike("name", `%${debouncedQuery}%`)
+        .limit(30);
+
+      let items = (data ?? []) as FoodDBItem[];
+
+      // If few results, also search with accent-stripped term
+      if (items.length < 10 && term !== debouncedQuery) {
+        const { data: extraData } = await supabase
+          .from("food_database")
+          .select("id, name, portion, calories, protein, carbs, fat, category, portion_unit, portion_amount, portion_grams, fonte")
+          .ilike("name", `%${term}%`)
+          .limit(30);
+
+        const existingIds = new Set(items.map(i => i.id));
+        const extras = ((extraData ?? []) as FoodDBItem[]).filter(e => !existingIds.has(e.id));
+        items = [...items, ...extras].slice(0, 30);
+      }
+
+      // Sort: favorites first, then shorter names, then TACO before TBCA
       items.sort((a, b) => {
         const aFav = favoriteIds?.has(a.id) ? 0 : 1;
         const bFav = favoriteIds?.has(b.id) ? 0 : 1;
         if (aFav !== bFav) return aFav - bFav;
-        // Shorter names = simpler foods first
         const lenDiff = a.name.length - b.name.length;
         if (lenDiff !== 0) return lenDiff;
-        // TACO before TBCA
         const aSource = a.fonte === "TACO" ? 0 : 1;
         const bSource = b.fonte === "TACO" ? 0 : 1;
         return aSource - bSource;
       });
+
       return items.slice(0, 20);
     },
-    enabled: query.length >= 2,
+    enabled: debouncedQuery.length >= 2,
   });
 
   // Close dropdown on outside click
@@ -90,8 +117,8 @@ export default function FoodAutocomplete({ value, onChange, onSelect, className 
 
   const handleInputChange = (val: string) => {
     onChange(val);
-    setQuery(val);
-    setOpen(val.length >= 2);
+    setRawQuery(val);
+    setOpen(val.trim().length >= 2);
   };
 
   const handleSelect = (food: FoodDBItem) => {
@@ -112,52 +139,72 @@ export default function FoodAutocomplete({ value, onChange, onSelect, className 
     queryClient.invalidateQueries({ queryKey: ["food-favorites", user.id] });
   };
 
+  const showDropdown = open && debouncedQuery.length >= 2;
+  const hasResults = suggestions && suggestions.length > 0;
+
   return (
     <div ref={wrapperRef} className="relative flex-1">
-      <Input
-        placeholder="Alimento"
-        value={value}
-        onChange={(e) => handleInputChange(e.target.value)}
-        onFocus={() => value.length >= 2 && setOpen(true)}
-        className={cn("h-7 text-xs", className)}
-      />
-      {open && suggestions && suggestions.length > 0 && (
+      <div className="relative">
+        <Input
+          placeholder="Alimento"
+          value={value}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => value.trim().length >= 2 && setOpen(true)}
+          className={cn("h-7 text-xs", className)}
+        />
+        {isSearching && debouncedQuery.length >= 2 && (
+          <Loader2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
+        )}
+      </div>
+
+      {showDropdown && (
         <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
-          {suggestions.map((food) => (
-            <button
-              key={food.id}
-              type="button"
-              className="w-full text-left px-3 py-2 hover:bg-secondary/50 transition-colors border-b border-border/30 last:border-0 flex items-start gap-2"
-              onClick={() => handleSelect(food)}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground truncate">
-                  {food.name}
-                  {food.fonte && (
-                    <span className="ml-1 text-[9px] font-normal text-muted-foreground">
-                      [{food.fonte}]
-                    </span>
-                  )}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {food.calories} kcal · P{food.protein}g · C{food.carbs}g · G{food.fat}g
-                </p>
-              </div>
+          {isSearching ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              Buscando...
+            </div>
+          ) : hasResults ? (
+            suggestions.map((food) => (
               <button
+                key={food.id}
                 type="button"
-                className="shrink-0 mt-0.5"
-                onClick={(e) => toggleFavorite(e, food.id)}
+                className="w-full text-left px-3 py-2 hover:bg-secondary/50 transition-colors border-b border-border/30 last:border-0 flex items-start gap-2"
+                onClick={() => handleSelect(food)}
               >
-                <Star
-                  size={12}
-                  className={cn(
-                    "transition-colors",
-                    favoriteIds?.has(food.id) ? "text-amber-400 fill-amber-400" : "text-muted-foreground"
-                  )}
-                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {food.name}
+                    {food.fonte && (
+                      <span className="ml-1 text-[9px] font-normal text-muted-foreground">
+                        [{food.fonte}]
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {food.calories} kcal · P{food.protein}g · C{food.carbs}g · G{food.fat}g
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 mt-0.5"
+                  onClick={(e) => toggleFavorite(e, food.id)}
+                >
+                  <Star
+                    size={12}
+                    className={cn(
+                      "transition-colors",
+                      favoriteIds?.has(food.id) ? "text-amber-400 fill-amber-400" : "text-muted-foreground"
+                    )}
+                  />
+                </button>
               </button>
-            </button>
-          ))}
+            ))
+          ) : (
+            <p className="py-4 px-3 text-xs text-muted-foreground text-center">
+              Nenhum alimento encontrado. Tente buscar por termos mais simples.
+            </p>
+          )}
         </div>
       )}
     </div>
