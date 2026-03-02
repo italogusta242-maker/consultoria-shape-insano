@@ -1541,6 +1541,34 @@ export type Database = {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
       }
+      search_foods_unaccent: {
+        Args: { max_results?: number; search_term: string }
+        Returns: {
+          calories: number
+          carbs: number
+          category: string
+          created_at: string
+          created_by: string | null
+          fat: number
+          fiber: number | null
+          fonte: string | null
+          id: string
+          name: string
+          original_name: string | null
+          portion: string
+          portion_amount: number | null
+          portion_grams: number | null
+          portion_unit: string | null
+          protein: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "food_database"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       app_role:

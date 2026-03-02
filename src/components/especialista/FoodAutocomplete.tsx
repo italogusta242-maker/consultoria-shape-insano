@@ -29,10 +29,6 @@ interface Props {
   className?: string;
 }
 
-/** Strip diacritics for accent-insensitive matching */
-function removeDiacritics(str: string): string {
-  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
 
 export default function FoodAutocomplete({ value, onChange, onSelect, className }: Props) {
   const { user } = useAuth();
@@ -61,31 +57,18 @@ export default function FoodAutocomplete({ value, onChange, onSelect, className 
     queryFn: async () => {
       if (debouncedQuery.length < 2) return [];
 
-      // Build accent-insensitive search term
-      const term = removeDiacritics(debouncedQuery);
+      // Use unaccent DB function for accent-insensitive search
+      const { data, error } = await supabase.rpc("search_foods_unaccent", {
+        search_term: debouncedQuery,
+        max_results: 30,
+      });
 
-      // Try ilike first with the raw term for exact diacritics match,
-      // then also with stripped diacritics version
-      const { data } = await supabase
-        .from("food_database")
-        .select("id, name, portion, calories, protein, carbs, fat, category, portion_unit, portion_amount, portion_grams, fonte")
-        .ilike("name", `%${debouncedQuery}%`)
-        .limit(30);
+      if (error) {
+        console.error("search_foods_unaccent error:", error);
+        return [];
+      }
 
       let items = (data ?? []) as FoodDBItem[];
-
-      // If few results, also search with accent-stripped term
-      if (items.length < 10 && term !== debouncedQuery) {
-        const { data: extraData } = await supabase
-          .from("food_database")
-          .select("id, name, portion, calories, protein, carbs, fat, category, portion_unit, portion_amount, portion_grams, fonte")
-          .ilike("name", `%${term}%`)
-          .limit(30);
-
-        const existingIds = new Set(items.map(i => i.id));
-        const extras = ((extraData ?? []) as FoodDBItem[]).filter(e => !existingIds.has(e.id));
-        items = [...items, ...extras].slice(0, 30);
-      }
 
       // Sort: favorites first, then shorter names, then TACO before TBCA
       items.sort((a, b) => {
