@@ -113,9 +113,14 @@ serve(async (req) => {
 `;
     }
 
+    // Extract dados_extras
+    const extras = (anamnese?.dados_extras && typeof anamnese.dados_extras === "object")
+      ? anamnese.dados_extras as Record<string, any>
+      : {};
+
     // Build explicit forbidden foods list
     const forbiddenFoods: string[] = [];
-    if (anamnese?.restricoes_alimentares && anamnese.restricoes_alimentares.trim() !== "" && anamnese.restricoes_alimentares !== "Nenhuma") {
+    if (anamnese?.restricoes_alimentares && anamnese.restricoes_alimentares.trim() !== "" && anamnese.restricoes_alimentares !== "Nenhuma" && anamnese.restricoes_alimentares !== "Não") {
       forbiddenFoods.push(anamnese.restricoes_alimentares);
     }
     if (assessment?.alimentos_proibidos && assessment.alimentos_proibidos.trim() !== "" && assessment.alimentos_proibidos !== "Nenhum") {
@@ -124,19 +129,34 @@ serve(async (req) => {
     if (assessment?.restricao_alimentar && assessment.restricao_alimentar.trim() !== "" && assessment.restricao_alimentar !== "Nenhuma") {
       forbiddenFoods.push(assessment.restricao_alimentar);
     }
-    // Check dados_extras for additional restrictions
-    if (anamnese?.dados_extras && typeof anamnese.dados_extras === "object") {
-      const extras = anamnese.dados_extras as Record<string, any>;
-      if (extras.alimentos_nao_come) forbiddenFoods.push(String(extras.alimentos_nao_come));
-      if (extras.alimentos_proibidos) forbiddenFoods.push(String(extras.alimentos_proibidos));
-      if (extras.alergias) forbiddenFoods.push(String(extras.alergias));
-      if (extras.alergia_outra) forbiddenFoods.push(String(extras.alergia_outra));
-      if (extras.intolerâncias) forbiddenFoods.push(String(extras.intolerâncias));
-      if (extras.intolerancias) forbiddenFoods.push(String(extras.intolerancias));
-    }
+    if (extras.alimentos_nao_come) forbiddenFoods.push(String(extras.alimentos_nao_come));
+    if (extras.alimentos_proibidos) forbiddenFoods.push(String(extras.alimentos_proibidos));
+    if (extras.alergias) forbiddenFoods.push(String(extras.alergias));
+    if (extras.alergia_outra) forbiddenFoods.push(String(extras.alergia_outra));
+    if (extras.intolerancias) forbiddenFoods.push(String(extras.intolerancias));
 
     const forbiddenSection = forbiddenFoods.length > 0
-      ? `\n⛔ ALIMENTOS/INGREDIENTES ABSOLUTAMENTE PROIBIDOS (NUNCA USE ESTES NO PLANO):\n${forbiddenFoods.map(f => `- ${f}`).join("\n")}\n\nSe qualquer alimento listado acima aparecer no plano gerado, o plano será REJEITADO. Substitua por alternativas compatíveis.\n`
+      ? `\n⛔ ALIMENTOS/INGREDIENTES ABSOLUTAMENTE PROIBIDOS (NUNCA USE ESTES NO PLANO):\n${forbiddenFoods.map(f => `- ${f}`).join("\n")}\nSe qualquer alimento listado acima aparecer no plano, o plano será REJEITADO.\n`
+      : "";
+
+    // Extract meal preferences from dados_extras
+    const refeicoesDia = extras.refeicoes_dia ? String(extras.refeicoes_dia) : null;
+    const horarioRefeicoes = extras.horario_refeicoes ? String(extras.horario_refeicoes) : null;
+    const frutasPreferidas = extras.frutas ? String(extras.frutas) : null;
+    const alimentosDiarios = extras.alimentos_diarios ? String(extras.alimentos_diarios) : null;
+    const nivelAtividade = extras.nivel_atividade ? String(extras.nivel_atividade) : null;
+    const investimentoDieta = extras.investimento_dieta ? String(extras.investimento_dieta) : null;
+    const liquidoRefeicao = extras.liquido_refeicao ? String(extras.liquido_refeicao) : null;
+    const liquidoQual = extras.liquido_qual ? String(extras.liquido_qual) : null;
+    const horarioSono = extras.horario_sono ? String(extras.horario_sono) : null;
+    const objetivoExtras = extras.objetivo ? String(extras.objetivo) : null;
+
+    const mealCountRule = refeicoesDia
+      ? `\n🔢 NÚMERO DE REFEIÇÕES: O aluno faz APENAS ${refeicoesDia} refeições por dia. O plano DEVE conter EXATAMENTE ${refeicoesDia} refeições, NÃO MAIS.\n`
+      : "";
+
+    const mealScheduleInfo = horarioRefeicoes
+      ? `\n🕐 PREFERÊNCIAS DE REFEIÇÕES: "${horarioRefeicoes}"\nRespeite ao nomear e organizar as refeições.\n`
       : "";
 
     const systemPrompt = `Você é um nutricionista esportivo altamente qualificado.
@@ -147,19 +167,21 @@ ${specialistStyle}
 REGRAS CRÍTICAS (OBEDEÇA RIGOROSAMENTE):
 1. Cada refeição deve conter alimentos com quantidades em gramas (unit: "g")
 2. Inclua macros calculados para cada refeição baseados nos alimentos
-3. ⛔ PRIORIDADE MÁXIMA: JAMAIS inclua alimentos que o aluno informou que não come, tem alergia, intolerância ou restrição. Analise CUIDADOSAMENTE os campos de restrições alimentares, alimentos proibidos e condições de saúde. Se o aluno disse que NÃO COME um alimento, esse alimento NÃO PODE aparecer no plano em nenhuma refeição, nem como substituto.
+3. ⛔ JAMAIS inclua alimentos que o aluno não come, tem alergia ou restrição.
 4. Analise o estado mental (sono, estresse, humor) para ajustar o plano
 5. Considere o nível de atividade física e gasto calórico
 6. Respeite o objetivo calórico (déficit, bulking, manutenção, recomposição)
 7. Retorne APENAS o JSON válido no formato especificado
-8. Antes de finalizar, revise CADA alimento e verifique se ele viola alguma restrição listada. Se violar, SUBSTITUA.
-${forbiddenSection}
+8. Revise CADA alimento contra as restrições antes de finalizar.
+9. ⛔ RESPEITE O NÚMERO DE REFEIÇÕES informado. Se o aluno faz 3 refeições, gere EXATAMENTE 3. NÃO invente refeições extras.
+10. Respeite preferências e horários de refeições do aluno.
+${forbiddenSection}${mealCountRule}${mealScheduleInfo}
 
 FORMATO DE SAÍDA (JSON):
 {
   "title": "Nome do Plano",
   "goal": "deficit|bulking|manutenção|recomposição",
-  "goal_description": "Descrição detalhada do objetivo e estratégia nutricional para o aluno",
+  "goal_description": "Descrição detalhada do objetivo e estratégia",
   "meals": [
     {
       "name": "Café da Manhã",
@@ -192,9 +214,7 @@ FORMATO DE SAÍDA (JSON):
       }
     }
   ]
-}
-
-Nomes de refeições devem ser: Café da Manhã, Lanche da Manhã, Almoço, Lanche da Tarde, Pré-Treino, Pós-Treino, Jantar, Ceia.`;
+}`;
 
     const userPrompt = `Gere um plano alimentar personalizado para este aluno:
 
@@ -206,16 +226,25 @@ Nomes de refeições devem ser: Café da Manhã, Lanche da Manhã, Almoço, Lanc
 - GET estimado: ${estimatedCalories} kcal
 
 ## ANAMNESE
-- Objetivo: ${anamnese?.objetivo || "N/A"}
+- Objetivo: ${anamnese?.objetivo || objetivoExtras || "N/A"}
 - Dieta atual: ${anamnese?.dieta_atual || "N/A"}
 - Restrições alimentares: ${anamnese?.restricoes_alimentares || "Nenhuma"}
 - Suplementos: ${anamnese?.suplementos || "Nenhum"}
 - Água diária: ${anamnese?.agua_diaria || "N/A"}
-- Sono: ${anamnese?.sono_horas || "N/A"}h
+- Sono: ${anamnese?.sono_horas || horarioSono || "N/A"}
 - Nível de estresse: ${anamnese?.nivel_estresse || "N/A"}
 - Ocupação: ${anamnese?.ocupacao || "N/A"}
 - Condições de saúde: ${anamnese?.condicoes_saude || "Nenhuma"}
 - Medicamentos: ${anamnese?.medicamentos || "Nenhum"}
+- Nível de atividade: ${nivelAtividade || "N/A"}
+
+## PREFERÊNCIAS ALIMENTARES DO ALUNO
+- Número de refeições por dia: ${refeicoesDia || "N/A"}
+- Horários/preferências de refeições: ${horarioRefeicoes || "N/A"}
+- Frutas preferidas: ${frutasPreferidas || "N/A"}
+- Alimentos diários preferidos: ${alimentosDiarios || "N/A"}
+- Investimento em dieta: ${investimentoDieta || "N/A"}
+- Bebe líquido durante refeição: ${liquidoRefeicao || "N/A"} ${liquidoQual ? `(${liquidoQual})` : ""}
 
 ## ASSESSMENT MENSAL RECENTE
 - Adesão dieta: ${assessment?.adesao_dieta || "N/A"}
@@ -245,7 +274,8 @@ ${previousDiets.length > 0
 
 ## OBJETIVO SELECIONADO: ${goal_type || "manutenção"}
 ${goal_hint ? `## INSTRUÇÃO ADICIONAL DO NUTRICIONISTA\n${goal_hint}` : ""}
-${forbiddenFoods.length > 0 ? `\n## ⛔ LEMBRETE FINAL: NÃO INCLUA ESTES ALIMENTOS NO PLANO:\n${forbiddenFoods.map(f => `❌ ${f}`).join("\n")}\nVerifique cada alimento antes de incluir.` : ""}
+${forbiddenFoods.length > 0 ? `\n## ⛔ LEMBRETE: NÃO INCLUA ESTES ALIMENTOS:\n${forbiddenFoods.map(f => `❌ ${f}`).join("\n")}` : ""}
+${refeicoesDia ? `\n## 🔢 GERE EXATAMENTE ${refeicoesDia} REFEIÇÕES. NÃO MAIS.` : ""}
 
 Gere o plano agora. Responda APENAS com o JSON válido.`;
 
