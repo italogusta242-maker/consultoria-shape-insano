@@ -604,13 +604,19 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
     setMeals(next);
   };
 
+  /** Detect "Opção 2/3/4" alternative meals that should NOT count in totals */
+  const isAlternativeMeal = (name: string) => /[–\-]\s*Op[çc][ãa]o\s*[2-9]/i.test(name);
+
   const totalMacros = meals.reduce(
-    (acc, m) => ({
-      protein: acc.protein + (m.macros?.protein ?? 0),
-      carbs: acc.carbs + (m.macros?.carbs ?? 0),
-      fat: acc.fat + (m.macros?.fat ?? 0),
-      calories: acc.calories + (m.macros?.calories ?? 0),
-    }),
+    (acc, m) => {
+      if (isAlternativeMeal(m.name)) return acc; // skip alternatives
+      return {
+        protein: acc.protein + (m.macros?.protein ?? 0),
+        carbs: acc.carbs + (m.macros?.carbs ?? 0),
+        fat: acc.fat + (m.macros?.fat ?? 0),
+        calories: acc.calories + (m.macros?.calories ?? 0),
+      };
+    },
     { protein: 0, carbs: 0, fat: 0, calories: 0 }
   );
 
@@ -899,8 +905,11 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
                     onClick={() => setExpandedMeal(isExpanded ? null : mi)}
                   >
                     <div className="flex items-center gap-2">
-                      <Apple size={14} className="text-emerald-400" />
+                      <Apple size={14} className={isAlternativeMeal(meal.name) ? "text-blue-400" : "text-emerald-400"} />
                       <span className="text-sm font-medium text-foreground">{meal.name}</span>
+                      {isAlternativeMeal(meal.name) && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 font-medium">ALTERNATIVA</span>
+                      )}
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock size={10} /> {meal.time}
                       </span>
