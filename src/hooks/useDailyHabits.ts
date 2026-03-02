@@ -51,10 +51,15 @@ export function useDailyHabits(date?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["daily-habits", user?.id, targetDate] });
       queryClient.invalidateQueries({ queryKey: ["daily-habits-range"] });
+      // Invalidate flame state so adherence recalculates immediately
+      queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
       // Motor 1: Check if meal completion triggers flame reactivation
       if (user) {
         import("@/lib/flameMotor").then(({ checkAndUpdateFlame }) => {
-          checkAndUpdateFlame(user.id);
+          checkAndUpdateFlame(user.id).then(() => {
+            // Re-invalidate after motor updates flame_status
+            queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
+          });
         });
       }
     },
