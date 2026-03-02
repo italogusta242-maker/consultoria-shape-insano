@@ -148,7 +148,20 @@ async function isDayApproved(
 
   if (workouts && workouts.length > 0) return true;
 
-  // Check diet (50% of meals)
+  // Check diet (50% of meals) — guard against 0/0 false positive
+  const { data: dietPlan } = await supabase
+    .from("diet_plans")
+    .select("meals")
+    .eq("user_id", userId)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  // No active diet plan or empty meals → cannot approve by diet
+  const totalMeals = Array.isArray(dietPlan?.meals) ? dietPlan.meals.length : 0;
+  if (totalMeals === 0) return false;
+
   const { data: habits } = await supabase
     .from("daily_habits")
     .select("completed_meals")
@@ -156,23 +169,9 @@ async function isDayApproved(
     .eq("date", dateStr)
     .maybeSingle();
 
-  if (habits?.completed_meals) {
-    const { data: dietPlan } = await supabase
-      .from("diet_plans")
-      .select("meals")
-      .eq("user_id", userId)
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (dietPlan?.meals) {
-      const totalMeals = Array.isArray(dietPlan.meals) ? dietPlan.meals.length : 0;
-      if (totalMeals > 0) {
-        const percentage = habits.completed_meals.length / totalMeals;
-        if (percentage >= 0.5) return true;
-      }
-    }
+  if (habits?.completed_meals && Array.isArray(habits.completed_meals)) {
+    const percentage = habits.completed_meals.length / totalMeals;
+    if (percentage >= 0.5) return true;
   }
 
   return false;
