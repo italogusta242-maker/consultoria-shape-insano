@@ -655,7 +655,8 @@ const Dashboard = () => {
                 });
                 queryClient.invalidateQueries({ queryKey: ["today-checkin"] });
                 queryClient.invalidateQueries({ queryKey: ["last30-checkins"] });
-                // Recalculate flame adherence (sleep affects score)
+                // Instant flame update: sleep = +10 adherence
+                (await import("@/lib/flameOptimistic")).optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
                 queryClient.invalidateQueries({ queryKey: ["flame-state", user.id] });
               } catch (e) {
                 console.error("Failed to save check-in:", e);
@@ -955,6 +956,7 @@ const Dashboard = () => {
               });
               queryClient.invalidateQueries({ queryKey: ["today-checkin"] });
               queryClient.invalidateQueries({ queryKey: ["last30-checkins"] });
+              (await import("@/lib/flameOptimistic")).optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
               queryClient.invalidateQueries({ queryKey: ["flame-state", user.id] });
             } catch (e) {
               console.error("Failed to save check-in:", e);

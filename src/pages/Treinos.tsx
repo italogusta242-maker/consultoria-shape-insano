@@ -511,9 +511,11 @@ const Treinos = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workout-history"] });
-      queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-      // Motor 1: Immediately check and update flame
+      // Instant flame: workout = +40 adherence, force ativa
       if (user) {
+        import("@/lib/flameOptimistic").then(({ optimisticFlameUpdate }) => {
+          optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
+        });
         import("@/lib/flameMotor").then(({ checkAndUpdateFlame }) => {
           checkAndUpdateFlame(user.id).then(() => {
             queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
