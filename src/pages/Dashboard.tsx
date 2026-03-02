@@ -19,6 +19,7 @@ import { useDailyHabits } from "@/hooks/useDailyHabits";
 import { useFlameState } from "@/hooks/useFlameState";
 import FlameCard from "@/components/FlameCard";
 import FlameBanner from "@/components/FlameBanner";
+import AnamneseRequestAlert from "@/components/AnamneseRequestAlert";
 
 // ── Daily goals config ──
 const dailyGoalsBase = {
@@ -628,6 +629,9 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
+        {/* Aggressive anamnesis request alert (specialist-triggered) */}
+        <AnamneseRequestAlert />
+
         <MonthlyAnamnesisBanner />
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="relative z-10">
@@ -704,6 +708,8 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* Flame Card */}
           <FlameCard state={flameState} streak={streak} adherence={adherence} />
+          {/* Aggressive anamnesis request alert (specialist-triggered) */}
+          <AnamneseRequestAlert />
           {/* Monthly Anamnesis CTA */}
           <MonthlyAnamnesisBanner />
         </div>
