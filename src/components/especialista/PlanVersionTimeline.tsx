@@ -87,7 +87,8 @@ export default function PlanVersionTimeline({ planId, type, open, onClose, onRes
   const renderDietSummary = (v: Version) => {
     const meals = v.meals as any[] | undefined;
     if (!meals?.length) return <p className="text-xs text-muted-foreground">Sem refeições</p>;
-    const totalCals = meals.reduce((sum: number, m: any) => sum + (m.macros?.calories ?? 0), 0);
+    const isAlt = (name: string) => /[–\-]\s*Op[çc][ãa]o\s*[2-9]/i.test(name);
+    const totalCals = meals.filter((m: any) => !isAlt(m.name)).reduce((sum: number, m: any) => sum + (m.macros?.calories ?? 0), 0);
     return (
       <div className="space-y-1">
         {meals.map((m: any, i: number) => (

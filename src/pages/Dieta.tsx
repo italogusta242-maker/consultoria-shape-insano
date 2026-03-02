@@ -193,14 +193,20 @@ const Dieta = () => {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [showSubstitute, setShowSubstitute] = useState<string | null>(null); // "mealId-foodIdx"
 
+  /** Detect "Opção 2/3/4" alternative meals that should NOT count in totals */
+  const isAlternativeMeal = (name: string) => /[–\-]\s*Op[çc][ãa]o\s*[2-9]/i.test(name);
+
   const totalMacros = useMemo(() => {
     return meals.reduce(
-      (acc, meal) => ({
-        cal: acc.cal + meal.calories,
-        prot: acc.prot + meal.macros.protein,
-        carb: acc.carb + meal.macros.carbs,
-        fat: acc.fat + meal.macros.fats,
-      }),
+      (acc, meal) => {
+        if (isAlternativeMeal(meal.label)) return acc;
+        return {
+          cal: acc.cal + meal.calories,
+          prot: acc.prot + meal.macros.protein,
+          carb: acc.carb + meal.macros.carbs,
+          fat: acc.fat + meal.macros.fats,
+        };
+      },
       { cal: 0, prot: 0, carb: 0, fat: 0 }
     );
   }, [meals]);
@@ -269,11 +275,17 @@ const Dieta = () => {
         <GoalDescriptionCard description={dietPlan.goal_description} />
       )}
 
-      {/* Refeição counter */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <p className="text-xs text-muted-foreground">Refeições feitas</p>
-        <p className="text-sm font-bold text-foreground">{completedMeals.size} / {meals.length}</p>
-      </div>
+      {/* Refeição counter - exclude alternatives */}
+      {(() => {
+        const mainMeals = meals.filter(m => !isAlternativeMeal(m.label));
+        const completedMain = mainMeals.filter(m => completedMeals.has(m.id));
+        return (
+          <div className="flex items-center justify-between mb-3 px-1">
+            <p className="text-xs text-muted-foreground">Refeições feitas</p>
+            <p className="text-sm font-bold text-foreground">{completedMain.length} / {mainMeals.length}</p>
+          </div>
+        );
+      })()}
       <div className="flex gap-1.5 mb-4 px-1">
         {meals.map((meal) => (
           <div
@@ -321,6 +333,9 @@ const Dieta = () => {
                   <p className={`font-cinzel text-sm font-bold truncate ${isCompleted ? "text-foreground/60 line-through" : "text-foreground"}`}>
                     {meal.time ? `${meal.time} - ` : ""}{meal.label}
                   </p>
+                  {isAlternativeMeal(meal.label) && (
+                    <span className="text-[9px] text-blue-400 font-medium">Opção alternativa</span>
+                  )}
                 </div>
 
                 {/* Chevron */}

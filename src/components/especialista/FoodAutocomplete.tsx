@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,7 @@ interface Props {
 }
 
 
-export default function FoodAutocomplete({ value, onChange, onSelect, className }: Props) {
+const FoodAutocomplete = memo(function FoodAutocomplete({ value, onChange, onSelect, className }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -192,4 +192,6 @@ export default function FoodAutocomplete({ value, onChange, onSelect, className 
       )}
     </div>
   );
-}
+});
+
+export default FoodAutocomplete;
