@@ -414,6 +414,7 @@ const Treinos = () => {
       return data as unknown as TrainingPlan | null;
     },
     enabled: !!user,
+    refetchOnMount: "always",
   });
 
   const { data: workoutHistory = [] } = useQuery({
@@ -584,6 +585,10 @@ const Treinos = () => {
 
   const openGroup = (index: number) => {
     const group = workoutGroups[index];
+    if (!group.exercises || group.exercises.length === 0) {
+      toast.error("Este treino ainda não possui exercícios. Aguarde seu preparador configurá-lo.");
+      return;
+    }
     const storageKey = `workout-in-progress-${index}`;
 
     try {
@@ -892,7 +897,11 @@ const Treinos = () => {
                   </div>
                   <div className="flex-1 text-left">
                     <p className="text-sm font-semibold text-foreground">{group.name}</p>
-                    <p className="text-xs text-muted-foreground">{group.exercises.length} exercícios · {groupSessions} sessões</p>
+                    <p className="text-xs text-muted-foreground">
+                      {group.exercises.length === 0
+                        ? "⏳ Aguardando exercícios..."
+                        : `${group.exercises.length} exercícios · ${groupSessions} sessões`}
+                    </p>
                   </div>
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${i === nextGroupIndex ? "crimson-gradient crimson-shadow" : "bg-secondary/80 border border-border"}`}>
                     <Play size={16} className={`ml-0.5 ${i === nextGroupIndex ? "text-primary-foreground" : "text-muted-foreground"}`} />
