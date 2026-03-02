@@ -384,6 +384,7 @@ export type Database = {
           id: string
           instructions: string | null
           level: string | null
+          movement_pattern: string | null
           muscle_group: string
           name: string
           secondary_muscles: string | null
@@ -400,6 +401,7 @@ export type Database = {
           id?: string
           instructions?: string | null
           level?: string | null
+          movement_pattern?: string | null
           muscle_group: string
           name: string
           secondary_muscles?: string | null
@@ -416,6 +418,7 @@ export type Database = {
           id?: string
           instructions?: string | null
           level?: string | null
+          movement_pattern?: string | null
           muscle_group?: string
           name?: string
           secondary_muscles?: string | null
