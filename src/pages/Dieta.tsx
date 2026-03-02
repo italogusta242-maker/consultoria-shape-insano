@@ -128,16 +128,34 @@ const Dieta = () => {
                 substitutes: subs,
               };
             });
+          // Compute macros from meal.macros if available, otherwise sum from foods
+          let mealCalories = meal.macros?.calories || 0;
+          let mealProtein = meal.macros?.protein || 0;
+          let mealCarbs = meal.macros?.carbs || 0;
+          let mealFat = meal.macros?.fat || 0;
+
+          if (mealCalories === 0 && (meal.foods ?? []).length > 0) {
+            for (const fd of meal.foods ?? []) {
+              mealCalories += Number(fd.calories) || 0;
+              mealProtein += Number(fd.protein) || 0;
+              mealCarbs += Number(fd.carbs) || 0;
+              mealFat += Number(fd.fat) || 0;
+            }
+            if (mealCalories === 0 && (mealProtein > 0 || mealCarbs > 0 || mealFat > 0)) {
+              mealCalories = Math.round(mealProtein * 4 + mealCarbs * 4 + mealFat * 9);
+            }
+          }
+
           return {
             id: mealId,
             time: meal.time || "",
             label: meal.name || `Refeição ${idx + 1}`,
             foods,
-            calories: meal.macros?.calories || 0,
+            calories: Math.round(mealCalories),
             macros: {
-              protein: meal.macros?.protein || 0,
-              carbs: meal.macros?.carbs || 0,
-              fats: meal.macros?.fat || 0,
+              protein: Math.round(mealProtein),
+              carbs: Math.round(mealCarbs),
+              fats: Math.round(mealFat),
             },
             notes: meal.notes || "",
           };
