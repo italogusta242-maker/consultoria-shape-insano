@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getToday } from "@/lib/dateUtils";
 import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
+import { onMealToggle } from "@/lib/coachNotifications";
 
 export interface DailyHabit {
   id: string;
@@ -89,7 +90,7 @@ export function useDailyHabits(date?: string) {
     });
   };
 
-  const toggleMeal = (mealId: string) => {
+  const toggleMeal = (mealId: string, totalMeals?: number) => {
     const current = habits?.completed_meals || [];
     const isRemoving = current.includes(mealId);
     const next = isRemoving
@@ -112,6 +113,11 @@ export function useDailyHabits(date?: string) {
         adherenceDelta: delta,
         forceActive: !isRemoving && next.length >= 1,
       });
+
+      // Motivational notification (10% chance on 50% or 100% diet)
+      if (!isRemoving && totalMeals && totalMeals > 0) {
+        onMealToggle(user.id, next.length, totalMeals, true);
+      }
     }
     upsertHabits.mutate({
       water_liters: habits?.water_liters || 0,

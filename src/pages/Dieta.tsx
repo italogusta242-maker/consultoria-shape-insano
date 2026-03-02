@@ -314,7 +314,7 @@ const Dieta = () => {
                 {/* Check-in button */}
                 <div
                   role="button"
-                  onClick={(e) => { e.stopPropagation(); toggleMealInDb(meal.id); }}
+                  onClick={(e) => { e.stopPropagation(); toggleMealInDb(meal.id, meals.filter(m => !isAlternativeMeal(m.label)).length); }}
                   className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${
                     isCompleted
                       ? "bg-green-600/20 border border-green-500/40"
