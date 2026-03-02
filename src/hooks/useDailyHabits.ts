@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getToday } from "@/lib/dateUtils";
+import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
 
 export interface DailyHabit {
   id: string;
@@ -67,7 +68,8 @@ export function useDailyHabits(date?: string) {
 
   const setWater = (liters: number) => {
     const clamped = Math.max(0, Math.min(10, liters));
-    // Optimistic update
+    const oldWater = habits?.water_liters ?? 0;
+    // Optimistic UI update
     queryClient.setQueryData(
       ["daily-habits", user?.id, targetDate],
       (old: DailyHabit | null) => ({
@@ -75,6 +77,12 @@ export function useDailyHabits(date?: string) {
         water_liters: clamped,
       })
     );
+    // Optimistic flame: water is 10pts proportional to 2.5L goal
+    if (user) {
+      const oldScore = Math.round(Math.min(oldWater / 2.5, 1) * 10);
+      const newScore = Math.round(Math.min(clamped / 2.5, 1) * 10);
+      optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: newScore - oldScore });
+    }
     upsertHabits.mutate({
       water_liters: clamped,
       completed_meals: habits?.completed_meals || [],
@@ -83,7 +91,8 @@ export function useDailyHabits(date?: string) {
 
   const toggleMeal = (mealId: string) => {
     const current = habits?.completed_meals || [];
-    const next = current.includes(mealId)
+    const isRemoving = current.includes(mealId);
+    const next = isRemoving
       ? current.filter((id) => id !== mealId)
       : [...current, mealId];
 
@@ -95,6 +104,15 @@ export function useDailyHabits(date?: string) {
         completed_meals: next,
       })
     );
+    // Optimistic flame: each meal toggle changes adherence proportionally
+    if (user) {
+      // We don't know totalMeals here precisely, estimate ~5 pts per meal toggle (40pts / ~8 meals)
+      const delta = isRemoving ? -5 : 5;
+      optimisticFlameUpdate(queryClient, user.id, {
+        adherenceDelta: delta,
+        forceActive: !isRemoving && next.length >= 1,
+      });
+    }
     upsertHabits.mutate({
       water_liters: habits?.water_liters || 0,
       completed_meals: next,
