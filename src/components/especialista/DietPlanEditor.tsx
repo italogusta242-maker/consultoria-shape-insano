@@ -167,21 +167,41 @@ function calculateMacros(baseMacros: { protein: number; carbs: number; fat: numb
   };
 }
 
-/** Normalize meals: migrate substitute → substitutes, ensure all fields exist */
+/** Normalize meals: migrate substitute → substitutes, ensure all fields exist, compute macros from foods */
 function normalizeMeals(raw: any[]): Meal[] {
-  return (raw ?? []).map((m: any) => ({
-    ...m,
-    foods: (m.foods ?? []).map((f: any) => {
+  return (raw ?? []).map((m: any) => {
+    const foods = (m.foods ?? []).map((f: any) => {
       const substitutes: SubstituteItem[] = f.substitutes ?? [];
       // Migrate legacy single substitute
       if (f.substitute && !f.substitutes?.length) {
         substitutes.push(f.substitute);
       }
       return { ...f, substitutes, substitute: undefined };
-    }),
-    notes: m.notes ?? "",
-    macros: m.macros ? { ...defaultMacros, ...m.macros } : { ...defaultMacros },
-  }));
+    });
+
+    // If meal already has macros with non-zero calories, keep them
+    let macros = m.macros ? { ...defaultMacros, ...m.macros } : { ...defaultMacros };
+
+    // If macros are empty/zero, compute from food-level macros
+    if (macros.calories === 0 && foods.length > 0) {
+      let protein = 0, carbs = 0, fat = 0, calories = 0;
+      for (const f of foods) {
+        protein += Number(f.protein) || 0;
+        carbs += Number(f.carbs) || 0;
+        fat += Number(f.fat) || 0;
+        calories += Number(f.calories) || 0;
+      }
+      // Use computed calories if available, otherwise derive from macros
+      macros = {
+        protein: Math.round(protein),
+        carbs: Math.round(carbs),
+        fat: Math.round(fat),
+        calories: calories > 0 ? Math.round(calories) : Math.round(protein * 4 + carbs * 4 + fat * 9),
+      };
+    }
+
+    return { ...m, foods, notes: m.notes ?? "", macros };
+  });
 }
 
 export default function DietPlanEditor({ open, onClose, students, editingPlan, embedded, preSelectedStudent }: Props) {
