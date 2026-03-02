@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { SFX } from "@/hooks/useSoundEffects";
+import { onWorkoutStart, onWorkoutFinish } from "@/lib/coachNotifications";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dumbbell, Play, ChevronDown, ChevronUp, ArrowLeft, Check,
@@ -653,6 +654,8 @@ const Treinos = () => {
     setTimer(0);
     setStartedAt(new Date().toISOString());
     setExpandedExercise(0);
+    // 10% chance "Igor is watching" notification
+    if (user) onWorkoutStart(user.id);
   };
 
   const updateSet = (exIdx: number, setIdx: number, field: "weight" | "actualReps", value: string) => {
@@ -744,6 +747,10 @@ const Treinos = () => {
 
       toast.success("Treino registrado!");
       try { SFX.victory(); } catch { }
+      // Calculate total volume for motivational notification
+      const totalVolume = exercises.reduce((sum, ex) => 
+        sum + ex.setsData.reduce((s, set) => s + ((set.weight || 0) * (set.actualReps || 0)), 0), 0);
+      if (user) onWorkoutFinish(user.id, totalVolume);
       localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
       localStorage.removeItem("workout-execution-state");
       // Go to share view instead of list
