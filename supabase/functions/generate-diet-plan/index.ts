@@ -113,19 +113,47 @@ serve(async (req) => {
 `;
     }
 
+    // Build explicit forbidden foods list
+    const forbiddenFoods: string[] = [];
+    if (anamnese?.restricoes_alimentares && anamnese.restricoes_alimentares.trim() !== "" && anamnese.restricoes_alimentares !== "Nenhuma") {
+      forbiddenFoods.push(anamnese.restricoes_alimentares);
+    }
+    if (assessment?.alimentos_proibidos && assessment.alimentos_proibidos.trim() !== "" && assessment.alimentos_proibidos !== "Nenhum") {
+      forbiddenFoods.push(assessment.alimentos_proibidos);
+    }
+    if (assessment?.restricao_alimentar && assessment.restricao_alimentar.trim() !== "" && assessment.restricao_alimentar !== "Nenhuma") {
+      forbiddenFoods.push(assessment.restricao_alimentar);
+    }
+    // Check dados_extras for additional restrictions
+    if (anamnese?.dados_extras && typeof anamnese.dados_extras === "object") {
+      const extras = anamnese.dados_extras as Record<string, any>;
+      if (extras.alimentos_nao_come) forbiddenFoods.push(String(extras.alimentos_nao_come));
+      if (extras.alimentos_proibidos) forbiddenFoods.push(String(extras.alimentos_proibidos));
+      if (extras.alergias) forbiddenFoods.push(String(extras.alergias));
+      if (extras.alergia_outra) forbiddenFoods.push(String(extras.alergia_outra));
+      if (extras.intolerâncias) forbiddenFoods.push(String(extras.intolerâncias));
+      if (extras.intolerancias) forbiddenFoods.push(String(extras.intolerancias));
+    }
+
+    const forbiddenSection = forbiddenFoods.length > 0
+      ? `\n⛔ ALIMENTOS/INGREDIENTES ABSOLUTAMENTE PROIBIDOS (NUNCA USE ESTES NO PLANO):\n${forbiddenFoods.map(f => `- ${f}`).join("\n")}\n\nSe qualquer alimento listado acima aparecer no plano gerado, o plano será REJEITADO. Substitua por alternativas compatíveis.\n`
+      : "";
+
     const systemPrompt = `Você é um nutricionista esportivo altamente qualificado.
 Gere planos alimentares profissionais, detalhados e individualizados.
 
 ${specialistStyle}
 
-REGRAS IMPORTANTES:
+REGRAS CRÍTICAS (OBEDEÇA RIGOROSAMENTE):
 1. Cada refeição deve conter alimentos com quantidades em gramas (unit: "g")
 2. Inclua macros calculados para cada refeição baseados nos alimentos
-3. Considere restrições alimentares, alergias e preferências do aluno
+3. ⛔ PRIORIDADE MÁXIMA: JAMAIS inclua alimentos que o aluno informou que não come, tem alergia, intolerância ou restrição. Analise CUIDADOSAMENTE os campos de restrições alimentares, alimentos proibidos e condições de saúde. Se o aluno disse que NÃO COME um alimento, esse alimento NÃO PODE aparecer no plano em nenhuma refeição, nem como substituto.
 4. Analise o estado mental (sono, estresse, humor) para ajustar o plano
 5. Considere o nível de atividade física e gasto calórico
 6. Respeite o objetivo calórico (déficit, bulking, manutenção, recomposição)
 7. Retorne APENAS o JSON válido no formato especificado
+8. Antes de finalizar, revise CADA alimento e verifique se ele viola alguma restrição listada. Se violar, SUBSTITUA.
+${forbiddenSection}
 
 FORMATO DE SAÍDA (JSON):
 {
@@ -217,6 +245,7 @@ ${previousDiets.length > 0
 
 ## OBJETIVO SELECIONADO: ${goal_type || "manutenção"}
 ${goal_hint ? `## INSTRUÇÃO ADICIONAL DO NUTRICIONISTA\n${goal_hint}` : ""}
+${forbiddenFoods.length > 0 ? `\n## ⛔ LEMBRETE FINAL: NÃO INCLUA ESTES ALIMENTOS NO PLANO:\n${forbiddenFoods.map(f => `❌ ${f}`).join("\n")}\nVerifique cada alimento antes de incluir.` : ""}
 
 Gere o plano agora. Responda APENAS com o JSON válido.`;
 
