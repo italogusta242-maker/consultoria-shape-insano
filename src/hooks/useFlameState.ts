@@ -107,7 +107,7 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
       return { state: initialState, streak: initialStreak, adherence };
     },
     enabled: !!user,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 30 * 1000, // 30s — allow quick refresh after habits/workouts
   });
 
   // Subscribe to realtime changes on flame_status

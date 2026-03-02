@@ -511,10 +511,13 @@ const Treinos = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workout-history"] });
+      queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
       // Motor 1: Immediately check and update flame
       if (user) {
         import("@/lib/flameMotor").then(({ checkAndUpdateFlame }) => {
-          checkAndUpdateFlame(user.id);
+          checkAndUpdateFlame(user.id).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
+          });
         });
       }
     },
