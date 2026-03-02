@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ArrowLeft, Leaf, Clock, Flame, Check, AlertTriangle, ChevronDown, ChevronUp, ArrowLeftRight, MessageSquare, Target } from "lucide-react";
+import { ArrowLeft, Leaf, Clock, Flame, Check, AlertTriangle, ChevronDown, ChevronUp, ArrowLeftRight, MessageSquare, Target, Repeat2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { getToday } from "@/lib/dateUtils";
@@ -25,7 +25,6 @@ interface FoodSubstitute {
 interface ParsedFood {
   name: string;
   portion: string;
-  /** All substitutes (new multi-format + legacy single) */
   substitutes: FoodSubstitute[];
 }
 
@@ -37,6 +36,12 @@ interface ParsedMeal {
   calories: number;
   macros: { protein: number; carbs: number; fats: number };
   notes: string;
+}
+
+/** A main meal with its alternative options grouped */
+interface GroupedMeal {
+  main: ParsedMeal;
+  alternatives: ParsedMeal[];
 }
 
 const GoalDescriptionCard = ({ description }: { description: string }) => {
@@ -72,6 +77,14 @@ const GoalDescriptionCard = ({ description }: { description: string }) => {
   );
 };
 
+/** Detect "Opção 2/3/4" alternative meals */
+const isAlternativeMeal = (name: string) => /[–\-]\s*Op[çc][ãa]o\s*[2-9]/i.test(name);
+
+/** Extract base meal name from an alternative (e.g. "08:00 – Café da manhã – Opção 2" → "Café da manhã") */
+const getBaseMealName = (name: string): string => {
+  return name.replace(/\s*[–\-]\s*Op[çc][ãa]o\s*[2-9].*/i, "").trim();
+};
+
 const Dieta = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -94,41 +107,30 @@ const Dieta = () => {
     enabled: !!user,
   });
 
-  const meals: ParsedMeal[] = useMemo(() => {
+  const allMeals: ParsedMeal[] = useMemo(() => {
     if (!dietPlan?.meals) return [];
     try {
       const raw = dietPlan.meals as any[];
       return raw.map((meal: any, idx: number) => {
         const mealId = meal.id || `m${idx + 1}`;
 
-        // New format (DietPlanEditor): { name, time, foods: [{name, quantity, unit, substitute}], notes, macros }
         if (meal.foods !== undefined) {
           const foods: ParsedFood[] = (meal.foods as any[])
             .filter((f: any) => f.name)
             .map((f: any) => {
-              // Merge substitutes array + legacy single substitute
               const subs: FoodSubstitute[] = f.substitutes ?? [];
               if (f.substitute && !subs.length) subs.push(f.substitute);
-
-              // Use displayPortion if available (household measures), fallback to raw
               let portion = f.displayPortion || "";
               if (!portion) {
                 portion = f.quantity
                   ? (String(f.quantity).match(/[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/)
                     ? String(f.quantity)
-                    : f.unit
-                      ? `${f.quantity} ${f.unit}`
-                      : `${f.quantity}g`)
+                    : f.unit ? `${f.quantity} ${f.unit}` : `${f.quantity}g`)
                   : (f.portion || "");
               }
-
-              return {
-                name: f.name,
-                portion,
-                substitutes: subs,
-              };
+              return { name: f.name, portion, substitutes: subs };
             });
-          // Compute macros from meal.macros if available, otherwise sum from foods
+
           let mealCalories = meal.macros?.calories || 0;
           let mealProtein = meal.macros?.protein || 0;
           let mealCarbs = meal.macros?.carbs || 0;
@@ -147,39 +149,26 @@ const Dieta = () => {
           }
 
           return {
-            id: mealId,
-            time: meal.time || "",
-            label: meal.name || `Refeição ${idx + 1}`,
-            foods,
+            id: mealId, time: meal.time || "",
+            label: meal.name || `Refeição ${idx + 1}`, foods,
             calories: Math.round(mealCalories),
-            macros: {
-              protein: Math.round(mealProtein),
-              carbs: Math.round(mealCarbs),
-              fats: Math.round(mealFat),
-            },
+            macros: { protein: Math.round(mealProtein), carbs: Math.round(mealCarbs), fats: Math.round(mealFat) },
             notes: meal.notes || "",
           };
         }
 
-        // Legacy format: { label, time, options: [{items, calories, macros}] }
+        // Legacy format
         const opt = meal.options?.[0] || {};
         const items: string[] = opt.items || [];
         const foods: ParsedFood[] = items.map((item: string, i: number) => ({
-          name: item,
-          portion: "",
+          name: item, portion: "",
           substitutes: opt.substitutes?.[i] ? [opt.substitutes[i]] : [],
         }));
         return {
-          id: mealId,
-          time: meal.time || "",
-          label: meal.label || meal.name || `Refeição ${idx + 1}`,
-          foods,
+          id: mealId, time: meal.time || "",
+          label: meal.label || meal.name || `Refeição ${idx + 1}`, foods,
           calories: opt.calories || 0,
-          macros: {
-            protein: opt.macros?.protein || 0,
-            carbs: opt.macros?.carbs || 0,
-            fats: opt.macros?.fats || 0,
-          },
+          macros: { protein: opt.macros?.protein || 0, carbs: opt.macros?.carbs || 0, fats: opt.macros?.fats || 0 },
           notes: "",
         };
       });
@@ -188,31 +177,69 @@ const Dieta = () => {
     }
   }, [dietPlan]);
 
+  // Group alternatives under their parent meal
+  const groupedMeals: GroupedMeal[] = useMemo(() => {
+    const groups: GroupedMeal[] = [];
+    const usedIndices = new Set<number>();
+
+    allMeals.forEach((meal, idx) => {
+      if (usedIndices.has(idx)) return;
+      if (isAlternativeMeal(meal.label)) return; // Will be picked up by parent
+
+      const baseName = getBaseMealName(meal.label);
+      const alternatives: ParsedMeal[] = [];
+
+      // Find all alternatives for this meal
+      allMeals.forEach((other, otherIdx) => {
+        if (otherIdx === idx || usedIndices.has(otherIdx)) return;
+        if (!isAlternativeMeal(other.label)) return;
+        const otherBase = getBaseMealName(other.label);
+        // Match by base name (ignoring time prefix)
+        const cleanBase = baseName.replace(/^\d{1,2}:\d{2}\s*[–\-]\s*/, "").trim().toLowerCase();
+        const cleanOther = otherBase.replace(/^\d{1,2}:\d{2}\s*[–\-]\s*/, "").trim().toLowerCase();
+        if (cleanBase === cleanOther) {
+          alternatives.push(other);
+          usedIndices.add(otherIdx);
+        }
+      });
+
+      usedIndices.add(idx);
+      groups.push({ main: meal, alternatives });
+    });
+
+    // Add any orphaned alternatives that didn't match
+    allMeals.forEach((meal, idx) => {
+      if (!usedIndices.has(idx)) {
+        groups.push({ main: meal, alternatives: [] });
+      }
+    });
+
+    return groups;
+  }, [allMeals]);
+
+  const mainMeals = groupedMeals.map(g => g.main);
+
   const { completedMeals, toggleMeal: toggleMealInDb } = useDailyHabits();
 
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
-  const [showSubstitute, setShowSubstitute] = useState<string | null>(null); // "mealId-foodIdx"
-
-  /** Detect "Opção 2/3/4" alternative meals that should NOT count in totals */
-  const isAlternativeMeal = (name: string) => /[–\-]\s*Op[çc][ãa]o\s*[2-9]/i.test(name);
+  const [showSubstitute, setShowSubstitute] = useState<string | null>(null);
+  const [showAlternatives, setShowAlternatives] = useState<string | null>(null);
+  // Track which alternative the user selected for each meal
+  const [selectedAlternative, setSelectedAlternative] = useState<Record<string, number>>({});
 
   const totalMacros = useMemo(() => {
-    return meals.reduce(
-      (acc, meal) => {
-        if (isAlternativeMeal(meal.label)) return acc;
-        return {
-          cal: acc.cal + meal.calories,
-          prot: acc.prot + meal.macros.protein,
-          carb: acc.carb + meal.macros.carbs,
-          fat: acc.fat + meal.macros.fats,
-        };
-      },
+    return mainMeals.reduce(
+      (acc, meal) => ({
+        cal: acc.cal + meal.calories,
+        prot: acc.prot + meal.macros.protein,
+        carb: acc.carb + meal.macros.carbs,
+        fat: acc.fat + meal.macros.fats,
+      }),
       { cal: 0, prot: 0, carb: 0, fat: 0 }
     );
-  }, [meals]);
+  }, [mainMeals]);
 
-  // No diet plan state
-  if (!isLoading && meals.length === 0) {
+  if (!isLoading && allMeals.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 max-w-lg mx-auto">
         <div className="flex items-center gap-3 mb-6 pt-2">
@@ -220,7 +247,7 @@ const Dieta = () => {
             <ArrowLeft size={24} />
           </button>
           <div className="flex items-center gap-2">
-            <Leaf size={20} className="text-green-400" />
+            <Leaf size={20} className="text-primary" />
             <span className="font-cinzel font-bold text-foreground">PLANO ALIMENTAR</span>
           </div>
         </div>
@@ -238,13 +265,13 @@ const Dieta = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 max-w-lg mx-auto">
+    <div className="min-h-screen bg-background p-4 max-w-lg mx-auto pb-24">
       <div className="flex items-center gap-3 mb-6 pt-2">
         <button onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
           <ArrowLeft size={24} />
         </button>
         <div className="flex items-center gap-2">
-          <Leaf size={20} className="text-green-400" />
+          <Leaf size={20} className="text-primary" />
           <span className="font-cinzel font-bold text-foreground">PLANO ALIMENTAR</span>
         </div>
       </div>
@@ -256,9 +283,9 @@ const Dieta = () => {
           <div className="grid grid-cols-4 gap-3 text-center">
             {[
               { label: "Calorias", value: totalMacros.cal, unit: "kcal", color: "text-accent" },
-              { label: "Proteína", value: totalMacros.prot, unit: "g", color: "text-red-500" },
-              { label: "Carbs", value: totalMacros.carb, unit: "g", color: "text-blue-400" },
-              { label: "Gordura", value: totalMacros.fat, unit: "g", color: "text-amber-400" },
+              { label: "Proteína", value: totalMacros.prot, unit: "g", color: "text-destructive" },
+              { label: "Carbs", value: totalMacros.carb, unit: "g", color: "text-primary" },
+              { label: "Gordura", value: totalMacros.fat, unit: "g", color: "text-accent" },
             ].map((m) => (
               <div key={m.label}>
                 <p className={`font-cinzel text-lg font-bold ${m.color}`}>{m.value}</p>
@@ -270,84 +297,168 @@ const Dieta = () => {
         </CardContent>
       </Card>
 
-      {/* Goal description - expandable */}
       {dietPlan?.goal_description && (
         <GoalDescriptionCard description={dietPlan.goal_description} />
       )}
 
-      {/* Refeição counter - exclude alternatives */}
-      {(() => {
-        const mainMeals = meals.filter(m => !isAlternativeMeal(m.label));
-        const completedMain = mainMeals.filter(m => completedMeals.has(m.id));
-        return (
-          <div className="flex items-center justify-between mb-3 px-1">
-            <p className="text-xs text-muted-foreground">Refeições feitas</p>
-            <p className="text-sm font-bold text-foreground">{completedMain.length} / {mainMeals.length}</p>
-          </div>
-        );
-      })()}
+      {/* Meal counter */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <p className="text-xs text-muted-foreground">Refeições feitas</p>
+        <p className="text-sm font-bold text-foreground">
+          {mainMeals.filter(m => completedMeals.has(m.id)).length} / {mainMeals.length}
+        </p>
+      </div>
       <div className="flex gap-1.5 mb-4 px-1">
-        {meals.map((meal) => (
+        {mainMeals.map((meal) => (
           <div
             key={meal.id}
             className="h-1.5 flex-1 rounded-full transition-all"
             style={{
-              background: completedMeals.has(meal.id) ? "hsl(140, 60%, 45%)" : "hsl(var(--secondary))",
+              background: completedMeals.has(meal.id) ? "hsl(var(--primary))" : "hsl(var(--secondary))",
             }}
           />
         ))}
       </div>
 
-      {/* Refeições */}
+      {/* Meals */}
       <div className="space-y-2">
-        {meals.map((meal) => {
+        {groupedMeals.map((group) => {
+          const { main: meal, alternatives } = group;
+          const hasAlternatives = alternatives.length > 0;
           const isCompleted = completedMeals.has(meal.id);
           const isExpanded = expandedMeal === meal.id;
+          const isAltOpen = showAlternatives === meal.id;
+          const selectedAltIdx = selectedAlternative[meal.id];
+          const displayMeal = selectedAltIdx !== undefined ? alternatives[selectedAltIdx] : meal;
 
           return (
             <div key={meal.id} className="rounded-xl border border-border bg-card overflow-hidden transition-all">
-              {/* Collapsed header row */}
-              <button
-                onClick={() => setExpandedMeal(isExpanded ? null : meal.id)}
-                className="w-full flex items-center gap-3 p-4 text-left"
-              >
+              {/* Header row */}
+              <div className="flex items-center gap-3 p-4">
                 {/* Check-in button */}
                 <div
                   role="button"
-                  onClick={(e) => { e.stopPropagation(); toggleMealInDb(meal.id, meals.filter(m => !isAlternativeMeal(m.label)).length); }}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                  onClick={() => toggleMealInDb(meal.id, mainMeals.length)}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                     isCompleted
-                      ? "bg-green-600/20 border border-green-500/40"
+                      ? "bg-primary/20 border border-primary/40"
                       : "bg-secondary border border-border"
                   }`}
                 >
                   {isCompleted ? (
-                    <Check size={14} className="text-green-400" />
+                    <Check size={14} className="text-primary" />
                   ) : (
                     <Leaf size={14} className="text-muted-foreground" />
                   )}
                 </div>
 
-                {/* Meal info */}
-                <div className="flex-1 min-w-0">
+                {/* Meal info - clickable to expand */}
+                <button
+                  onClick={() => setExpandedMeal(isExpanded ? null : meal.id)}
+                  className="flex-1 min-w-0 text-left"
+                >
                   <p className={`font-cinzel text-sm font-bold truncate ${isCompleted ? "text-foreground/60 line-through" : "text-foreground"}`}>
-                    {meal.time ? `${meal.time} - ` : ""}{meal.label}
+                    {meal.time ? `${meal.time} – ` : ""}{meal.label.replace(/\s*[–\-]\s*Op[çc][ãa]o\s*\d+.*/i, "")}
                   </p>
-                  {isAlternativeMeal(meal.label) && (
-                    <span className="text-[9px] text-blue-400 font-medium">Opção alternativa</span>
+                  {selectedAltIdx !== undefined && (
+                    <span className="text-[9px] text-accent font-medium">Usando opção {selectedAltIdx + 2}</span>
                   )}
-                </div>
+                </button>
+
+                {/* Alternative swap button */}
+                {hasAlternatives && (
+                  <button
+                    onClick={() => setShowAlternatives(isAltOpen ? null : meal.id)}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                      isAltOpen ? "bg-accent/20 border border-accent/40" : "bg-secondary/60 border border-border/50"
+                    }`}
+                    title={`${alternatives.length} opção(ões) alternativa(s)`}
+                  >
+                    <Repeat2 size={15} className={isAltOpen ? "text-accent" : "text-muted-foreground"} />
+                  </button>
+                )}
 
                 {/* Chevron */}
-                <motion.div
-                  animate={{ rotate: isExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <ChevronDown size={18} className="text-muted-foreground" />
-                </motion.div>
-              </button>
+                <button onClick={() => setExpandedMeal(isExpanded ? null : meal.id)}>
+                  <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.3 }}>
+                    <ChevronDown size={18} className="text-muted-foreground" />
+                  </motion.div>
+                </button>
+              </div>
 
-              {/* Expanded content */}
+              {/* Alternative selector dropdown */}
+              <AnimatePresence>
+                {isAltOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 pb-3 space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Escolha a opção:</p>
+                      
+                      {/* Original meal option */}
+                      <button
+                        onClick={() => {
+                          const next = { ...selectedAlternative };
+                          delete next[meal.id];
+                          setSelectedAlternative(next);
+                          setShowAlternatives(null);
+                        }}
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
+                          selectedAltIdx === undefined
+                            ? "border-accent/50 bg-accent/10"
+                            : "border-border/50 bg-secondary/30 hover:bg-secondary/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-foreground">Opção 1 (Principal)</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {meal.calories} kcal · P: {meal.macros.protein}g · C: {meal.macros.carbs}g · G: {meal.macros.fats}g
+                            </p>
+                          </div>
+                          {selectedAltIdx === undefined && (
+                            <Check size={14} className="text-accent shrink-0" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Alternative options */}
+                      {alternatives.map((alt, altIdx) => (
+                        <button
+                          key={alt.id}
+                          onClick={() => {
+                            setSelectedAlternative({ ...selectedAlternative, [meal.id]: altIdx });
+                            setShowAlternatives(null);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            selectedAltIdx === altIdx
+                              ? "border-accent/50 bg-accent/10"
+                              : "border-border/50 bg-secondary/30 hover:bg-secondary/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-bold text-foreground">Opção {altIdx + 2}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {alt.calories} kcal · P: {alt.macros.protein}g · C: {alt.macros.carbs}g · G: {alt.macros.fats}g
+                              </p>
+                            </div>
+                            {selectedAltIdx === altIdx && (
+                              <Check size={14} className="text-accent shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Expanded content - shows the selected meal (main or alternative) */}
               <AnimatePresence>
                 {isExpanded && (
                   <motion.div
@@ -360,15 +471,15 @@ const Dieta = () => {
                     <div className="px-4 pb-4 space-y-2">
                       {/* Macros summary */}
                       <div className="flex gap-3 text-[10px] text-muted-foreground pb-2 border-b border-border/50">
-                        <span className="text-accent font-semibold">{meal.calories} kcal</span>
-                        <span>P: {meal.macros.protein}g</span>
-                        <span>C: {meal.macros.carbs}g</span>
-                        <span>G: {meal.macros.fats}g</span>
+                        <span className="text-accent font-semibold">{displayMeal.calories} kcal</span>
+                        <span>P: {displayMeal.macros.protein}g</span>
+                        <span>C: {displayMeal.macros.carbs}g</span>
+                        <span>G: {displayMeal.macros.fats}g</span>
                       </div>
 
                       {/* Food items */}
-                      {meal.foods.map((food, foodIdx) => {
-                        const subKey = `${meal.id}-${foodIdx}`;
+                      {displayMeal.foods.map((food, foodIdx) => {
+                        const subKey = `${displayMeal.id}-${foodIdx}`;
                         const hasSubs = food.substitutes.length > 0;
                         const isSubOpen = showSubstitute === subKey;
 
@@ -385,7 +496,7 @@ const Dieta = () => {
                                   className="flex items-center gap-1.5 mt-2 text-xs text-accent hover:text-accent/80 transition-colors bg-accent/10 rounded-md px-2.5 py-1.5"
                                 >
                                   <ArrowLeftRight size={12} />
-                                  Ver opções de substituição ({food.substitutes.length})
+                                  Ver substituições ({food.substitutes.length})
                                 </button>
                                 <AnimatePresence>
                                   {isSubOpen && (
@@ -422,13 +533,13 @@ const Dieta = () => {
                         );
                       })}
 
-                      {/* Nutritionist notes */}
-                      {meal.notes && (
+                      {/* Notes */}
+                      {displayMeal.notes && (
                         <div className="rounded-lg bg-accent/5 border border-accent/20 p-3 flex gap-2">
                           <MessageSquare size={14} className="text-accent shrink-0 mt-0.5" />
                           <div>
                             <p className="text-[10px] uppercase tracking-wider text-accent font-bold mb-0.5">Observação:</p>
-                            <p className="text-xs text-muted-foreground">{meal.notes}</p>
+                            <p className="text-xs text-muted-foreground">{displayMeal.notes}</p>
                           </div>
                         </div>
                       )}
