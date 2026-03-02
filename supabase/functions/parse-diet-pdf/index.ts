@@ -138,7 +138,7 @@ Se algum valor estiver 0, ESTIME usando a TBCA/TACO`;
       },
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 16000,
+        maxOutputTokens: 65536,
         responseMimeType: "application/json",
       },
     };
@@ -156,11 +156,44 @@ Se algum valor estiver 0, ESTIME usando a TBCA/TACO`;
     }
 
     const geminiData = await geminiRes.json();
+    
+    // Check if response was truncated
+    const finishReason = geminiData?.candidates?.[0]?.finishReason;
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error("Empty response from Gemini");
 
-    const cleanJson = rawText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const plan = JSON.parse(cleanJson);
+    let cleanJson = rawText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    
+    // Try to repair truncated JSON
+    let plan: any;
+    try {
+      plan = JSON.parse(cleanJson);
+    } catch (parseErr) {
+      console.warn("JSON parse failed, attempting repair. finishReason:", finishReason);
+      // Try to close open structures
+      let repaired = cleanJson;
+      // Count open/close braces and brackets
+      const openBraces = (repaired.match(/{/g) || []).length;
+      const closeBraces = (repaired.match(/}/g) || []).length;
+      const openBrackets = (repaired.match(/\[/g) || []).length;
+      const closeBrackets = (repaired.match(/\]/g) || []).length;
+      
+      // Remove trailing incomplete key-value or comma
+      repaired = repaired.replace(/,\s*"[^"]*"?\s*:?\s*[^,\]\}]*$/, "");
+      repaired = repaired.replace(/,\s*$/, "");
+      
+      // Close missing brackets and braces
+      for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += "]";
+      for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
+      
+      try {
+        plan = JSON.parse(repaired);
+        console.log("JSON repaired successfully");
+      } catch (repairErr) {
+        console.error("JSON repair also failed:", repairErr);
+        throw new Error("O PDF gerou uma resposta muito longa. Tente um PDF menor ou com menos refeições.");
+      }
+    }
 
     // === POST-PROCESSING: Fix missing macros and portions ===
     let fixedCount = 0;
