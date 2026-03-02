@@ -1,0 +1,28 @@
+INFO:     Will watch for changes in these directories: ['/Users/Lucas/Downloads/consultoria-shape-insano-main/asaas-backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [46706] using StatReload
+INFO:     Started server process [46708]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:51685 - "OPTIONS /api/v1/payments HTTP/1.1" 200 OK
+2026-02-22 20:50:24,728 [INFO] Nova ordem de faturamento | Ref: invite_1771804224691 | Tipo: PIX
+2026-02-22 20:50:25,571 [INFO] HTTP Request: GET https://api.asaas.com/v3/customers?cpfCnpj=04549968109 "HTTP/1.1 401 "
+2026-02-22 20:50:25,574 [ERROR] Erro na API Asaas [401]: {"errors":[{"code":"invalid_access_token","description":"A chave de API fornecida é inválida"}]}
+INFO:     127.0.0.1:51685 - "POST /api/v1/payments HTTP/1.1" 401 Unauthorized
+2026-02-22 20:50:54,846 [INFO] Nova ordem de faturamento | Ref: invite_1771804254796 | Tipo: PIX
+2026-02-22 20:50:55,188 [INFO] HTTP Request: GET https://api.asaas.com/v3/customers?cpfCnpj=04549968109 "HTTP/1.1 401 "
+2026-02-22 20:50:55,190 [ERROR] Erro na API Asaas [401]: {"errors":[{"code":"invalid_access_token","description":"A chave de API fornecida é inválida"}]}
+INFO:     127.0.0.1:51689 - "POST /api/v1/payments HTTP/1.1" 401 Unauthorized
+2026-02-22 20:51:01,968 [INFO] Nova ordem de faturamento | Ref: invite_1771804261958 | Tipo: PIX
+2026-02-22 20:51:02,230 [INFO] HTTP Request: GET https://api.asaas.com/v3/customers?cpfCnpj=04549968109 "HTTP/1.1 401 "
+2026-02-22 20:51:02,232 [ERROR] Erro na API Asaas [401]: {"errors":[{"code":"invalid_access_token","description":"A chave de API fornecida é inválida"}]}
+INFO:     127.0.0.1:51692 - "POST /api/v1/payments HTTP/1.1" 401 Unauthorized
+2026-02-22 20:51:08,925 [INFO] Nova ordem de faturamento | Ref: invite_1771804268909 | Tipo: PIX
+2026-02-22 20:51:09,441 [INFO] HTTP Request: GET https://api.asaas.com/v3/customers?cpfCnpj=04549968109 "HTTP/1.1 401 "
+2026-02-22 20:51:09,443 [ERROR] Erro na API Asaas [401]: {"errors":[{"code":"invalid_access_token","description":"A chave de API fornecida é inválida"}]}
+INFO:     127.0.0.1:51696 - "POST /api/v1/payments HTTP/1.1" 401 Unauthorized
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [46708]
+INFO:     Stopping reloader process [46706]

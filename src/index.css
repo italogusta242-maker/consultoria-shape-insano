@@ -1,0 +1,243 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 2%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 25 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
+
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+
+    --accent: 25 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 25 100% 50%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 25 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 25 100% 50%;
+
+    /* Custom INSANO tokens — new palette */
+    --gold: 42 96% 51%;
+    --gold-glow: 42 100% 58%;
+    --crimson: 25 100% 50%;
+    --crimson-glow: 25 100% 58%;
+    --obsidian: 0 0% 2%;
+    --marble: 0 0% 7%;
+    --marble-light: 0 0% 12%;
+
+    /* Dishonor / Chama Extinta tokens */
+    --dishonor-bg: 260 20% 6%;
+    --dishonor-card: 260 15% 10%;
+    --dishonor-border: 260 12% 18%;
+    --dishonor-muted: 260 8% 35%;
+    --dishonor-accent: 270 40% 45%;
+    --dishonor-glow: 270 50% 55%;
+    --dishonor-alert: 0 70% 45%;
+    --dishonor-frost: 220 30% 50%;
+
+    /* Truce / Trégua tokens */
+    --truce-bg: 210 25% 7%;
+    --truce-card: 210 20% 11%;
+    --truce-border: 210 18% 20%;
+    --truce-muted: 210 15% 40%;
+    --truce-accent: 210 60% 50%;
+    --truce-glow: 200 70% 55%;
+    --truce-frost: 200 40% 60%;
+
+    /* Forja glass tokens */
+    --glass-bg: 0 0% 100% / 0.04;
+    --glass-border: 0 0% 100% / 0.08;
+    --glass-highlight: 0 0% 100% / 0.12;
+    --forja-teal: 170 80% 45%;
+    --forja-teal-glow: 170 90% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Sora', sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+  }
+
+  h1 {
+    font-family: 'Sora', sans-serif;
+    font-size: 45px;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-family: 'Sora', sans-serif;
+    font-size: 25px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-family: 'Sora', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  p, span, div {
+    line-height: 1.5;
+  }
+}
+
+@layer utilities {
+  .font-cinzel {
+    font-family: 'Sora', sans-serif;
+  }
+
+  .text-1 {
+    font-size: 18px;
+    font-weight: 400;
+  }
+
+  .text-2 {
+    font-size: 16px;
+    font-weight: 400;
+  }
+
+  .text-gold {
+    color: hsl(var(--gold));
+  }
+
+  .bg-gold {
+    background-color: hsl(var(--gold));
+  }
+
+  .text-crimson {
+    color: hsl(var(--crimson));
+  }
+
+  .bg-crimson {
+    background-color: hsl(var(--crimson));
+  }
+
+  .bg-obsidian {
+    background-color: hsl(var(--obsidian));
+  }
+
+  .bg-marble {
+    background-color: hsl(var(--marble));
+  }
+
+  .bg-marble-light {
+    background-color: hsl(var(--marble-light));
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, hsl(var(--gold)), hsl(var(--gold-glow)));
+  }
+
+  .crimson-gradient {
+    background: linear-gradient(135deg, hsl(var(--crimson)), hsl(var(--crimson-glow)));
+  }
+
+  .gold-text-gradient {
+    background: linear-gradient(135deg, hsl(var(--crimson)), hsl(var(--gold)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gold-shadow {
+    box-shadow: 0 0 20px hsl(var(--gold) / 0.3), 0 0 60px hsl(var(--gold) / 0.1);
+  }
+
+  .crimson-shadow {
+    box-shadow: 0 0 20px hsl(var(--crimson) / 0.3), 0 0 60px hsl(var(--crimson) / 0.1);
+  }
+
+  .marble-texture {
+    background-image: 
+      radial-gradient(ellipse at 20% 50%, hsl(0 0% 10% / 0.5) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, hsl(0 0% 8% / 0.3) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 80%, hsl(0 0% 9% / 0.4) 0%, transparent 50%);
+  }
+
+  .grayscale-mode {
+    filter: grayscale(100%) brightness(0.7);
+    transition: filter 1s ease-in-out;
+  }
+}
+
+/* Pulse glow animation */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px hsl(var(--crimson) / 0.3); }
+  50% { box-shadow: 0 0 30px hsl(var(--crimson) / 0.6), 0 0 60px hsl(var(--crimson) / 0.2); }
+}
+
+@keyframes flame-flicker {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  25% { opacity: 0.9; transform: scale(1.02); }
+  50% { opacity: 1; transform: scale(0.98); }
+  75% { opacity: 0.95; transform: scale(1.01); }
+}
+
+@keyframes gold-particle {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-100px) scale(0); opacity: 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-flame {
+  animation: flame-flicker 3s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes loading-bar {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 2s ease-in-out infinite;
+}

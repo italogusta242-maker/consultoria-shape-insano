@@ -1,0 +1,57 @@
+# CASOS DE USO — SHAPE INSANO
+
+Este documento apresenta a lista completa de Casos de Uso (Use Cases) do sistema Shape Insano, segmentados pelos papéis e portais dos usuários, baseado na arquitetura e documentação de requisitos atuais.
+
+---
+
+## 1. Ator: Aluno (Portal Coliseu - Rota: /)
+- UC-AL-01: Realizar Onboarding e Preencher Anamnese Completa (12 etapas).
+- UC-AL-02: Visualizar Dashboard Principal (Progresso da Chama de Honra e Indicadores de Consistência).
+- UC-AL-03: Realizar Check-in Diário de Estado Mental (Mood e Stress).
+- UC-AL-04: Consultar Plano de Treino Atual e Histórico.
+- UC-AL-05: Executar Treino e Registrar Volume (Séries, Cargas e Cronômetro em Tempo Real).
+- UC-AL-06: Consultar Plano Alimentar e Metas de Refeições/Macros.
+- UC-AL-07: Registrar Adesão Diária de Refeições e Consumo de Água.
+- UC-AL-08: Enviar Mensagens de Texto/Mídia em Tempo Real para seu Especialista no Chat.
+- UC-AL-09: Preencher Formulário de Reavaliação Mensal (Fotos e Métricas de Progresso).
+- UC-AL-10: Editar Dados Pessoais do Perfil.
+
+## 2. Ator: Especialista — Nutricionista/Educador Físico (Portal Forja - Rota: /especialista)
+- UC-ES-01: Cada profissional consegue ver o perfil do aluno, mas ao entrar na anamnese, visualiza apenas os dados de sua área de necessidade. Dados pessoais ou de outra área de formação aparecem borrados (blur), estabelecendo uma rigorosa política de acesso restrito.
+- UC-ES-02: Navegar e Filtrar sua Lista de Alunos (Ativos e Pendentes).
+- UC-ES-03: Visualizar o Perfil/Anamnese do Aluno em formato Split-View (com restrições de visibilidade aplicadas).
+- UC-ES-04: Criar ou Editar Planos de Treino (Grupos Musculares, Exercícios, Séries e Cargas).
+- UC-ES-05: Criar ou Editar Planos Alimentares (Refeições, Alimentos e Cálculo de Macros).
+- UC-ES-06: Solicitar Solicitação Extra de Nova Anamnese para Alunos.
+- UC-ES-07: Gerenciar e Responder Dúvidas dos Alunos via Chat.
+- UC-ES-08: Adicionar ou Editar Itens Nutricionais no Banco de Alimentos Global.
+- UC-ES-09: Criar e Gerenciar Templates Reutilizáveis de Dieta e Treino.
+- UC-ES-10: Visualizar Gráficos de Evolução (Fotos e Peso) e Adesão Diária do Aluno.
+
+## 3. Ator: Administrador (Portal Quartel General - Rota: /admin)
+- UC-AD-01: Dashboard Global (Root) de acesso irrestrito a todas as métricas gerais de profissionais (Personal, Nutricionista, Closer, CS). Monitoramento do acompanhamento: quantidade de alunos associados, treinos montados (diário e mensal), acompanhamento de conversas pendentes/não respondidas, edições e acessos. Monitoramento de metas do Closer e métricas de uso do CS em relação às metas (quantidade e porcentagem).
+- UC-AD-02: Buscar, Visualizar ou Editar Dados de Qualquer Usuário do Sistema.
+- UC-AD-03: Cadastramento de Novo Profissional de forma facilitada. Inserção de acessos, dados pessoais e seleção da respectiva área de atuação.
+- UC-AD-04: Administrador possui permissão para aprovar acesso e fazer vínculo manual entre Aluno e Especialista, porém a ação primária e responsabilidade principal recai sobre o Closer.
+- UC-AD-05: Monitorar e Auditar Conversas do Chat do Sistema.
+- UC-AD-06: Acessar Relatórios de Faturamento, Retenção e Comportamento Operacional.
+
+## 4. Ator: Closer / Vendas (Portal Closer - Rota: /closer)
+- UC-CL-01: Visualizar Painel de Alunos com filtros de busca por riscos, retenção e novos alunos. Dashboard individualizado para melhor análise de cada status de aluno.
+- UC-CL-02: Visualizar Painel de Profissionais com filtro de alunos associados a cada um, métrica de conversas não respondidas e alunos com treinos desatualizados/atualizados. Métrica de visualização diária com opção de filtro mensal.
+- UC-CL-03: Dashboard de Alertas/Inatividade que metrifica alunos que passam mais de 3 dias sem entrar na plataforma ou que não atualizam seus hábitos diários (treino, água, alimentação, sono). Ao clicar no alerta, deve abrir o perfil do aluno com o alerta correspondente do enquadramento do risco.
+- UC-CL-04: Aprovar Acesso de Novos Alunos e Fazer o Vínculo Manual entre Aluno e Especialista (Trabalho Operacional Principal do Closer).
+- UC-CL-05: Gerar Novo Token Único ou Link de Convite do Plano para um Lead.
+
+## 5. Ator: Customer Success (Portal CS - Rota: /cs)
+- UC-CS-01: Acompanhar Lista Geral de Alunos, Filtrando por Risco de Retenção ou Alertas de Queda de Streaks.
+- UC-CS-02: Acompanhar e Visualizar Lista de Profissionais Ativos (SLA e Desempenho do Serviço).
+- UC-CS-03: Analisar Indicadores Comportamentais dos Alunos Antes de Ligar ou Acionar o Cliente.
+
+---
+
+## 6. Processos de Sistema (Eventos e Edge Functions/Triggers)
+- UC-SYS-01: Processamento Automático de Pagamento (Asaas Webhook) para a Ativação de Usuário.
+- UC-SYS-02: Acionar Cron Diário "Daily-Flame" para Verificar Streaks e Penalizar (Decrementar) Chamas Ociosas.
+- UC-SYS-03: Disparo de Push Notifications baseados em Inatividade, Metas Cumpridas ou Novas Mensagens de Chat.
+- UC-SYS-04: Acionar Cron Semanal de Planos Vencidos ("Check-Stale-Plans") para Alertar Especialistas.

@@ -1,0 +1,2 @@
+ALTER TABLE public.student_specialists DROP CONSTRAINT student_specialists_specialty_check;
+ALTER TABLE public.student_specialists ADD CONSTRAINT student_specialists_specialty_check CHECK (specialty = ANY (ARRAY['personal'::text, 'nutricionista'::text, 'preparador'::text, 'psicologo'::text]));

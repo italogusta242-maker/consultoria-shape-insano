@@ -1,0 +1,1 @@
+ALTER TABLE subscription_plans ADD COLUMN specialist_limitation text NOT NULL DEFAULT 'nenhum';

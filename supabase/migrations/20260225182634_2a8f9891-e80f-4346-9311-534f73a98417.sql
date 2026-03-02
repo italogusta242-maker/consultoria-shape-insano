@@ -1,0 +1,1 @@
+ALTER TABLE invites ADD COLUMN subscription_plan_id uuid REFERENCES subscription_plans(id);

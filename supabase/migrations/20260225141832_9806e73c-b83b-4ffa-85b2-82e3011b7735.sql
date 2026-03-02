@@ -1,0 +1,1 @@
+ALTER TABLE public.diet_plans ADD COLUMN goal_description TEXT DEFAULT NULL;

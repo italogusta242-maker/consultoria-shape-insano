@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_food_database_name ON public.food_database (name);
