@@ -823,15 +823,6 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
                   <History size={14} /> Histórico
                 </Button>
               )}
-              <Button
-                size="sm"
-                onClick={generateWithAI}
-                disabled={aiGenerating || !selectedStudent}
-                className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
-              >
-                {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                {aiGenerating ? "Gerando..." : "Gerar com IA"}
-              </Button>
               <input
                 ref={pdfInputRef}
                 type="file"
@@ -848,6 +839,15 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
               >
                 {pdfParsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
                 {pdfParsing ? "Lendo PDF..." : "Importar PDF"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={generateWithAI}
+                disabled={aiGenerating || !selectedStudent}
+                className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
+              >
+                {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {aiGenerating ? "Gerando..." : "Gerar com IA"}
               </Button>
             </div>
 
