@@ -177,9 +177,28 @@ ${specialistStyle}
 6. ⛔ **NÚMERO DE REFEIÇÕES:** RESPEITE o número de refeições informado pelo aluno. Se ele faz 3 refeições, gere EXATAMENTE 3. NÃO invente refeições extras.
 7. **Preferências:** Respeite os horários e preferências de refeições do aluno.
 8. Considere o estado mental (sono, estresse, humor) e nível de atividade para ajustar o plano.
-9. Cada alimento deve ter quantidade em gramas (unit: "g") e cada refeição deve incluir substitutos.
-10. Retorne APENAS o JSON válido no formato especificado.
+9. **PORÇÕES:** Cada alimento DEVE ter a porção em MEDIDA CASEIRA + GRAMAS no formato "X [medida] ou Yg" (ex: "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g", "2 fatias ou 60g"). NUNCA coloque apenas gramas.
+10. **SUBSTITUTOS REAIS:** Cada alimento principal DEVE ter 1-3 substitutos nutricionalmente equivalentes. Substitutos devem ser alimentos DIFERENTES mas com macros similares (ex: arroz → batata inglesa, frango → tilápia, feijão carioca → feijão preto).
+11. Retorne APENAS o JSON válido no formato especificado.
 ${forbiddenSection}${mealCountRule}${mealScheduleInfo}
+
+[EXEMPLO DE REFERÊNCIA - QUALIDADE ESPERADA]
+Este é um exemplo REAL de plano aprovado por nutricionista. USE como referência de QUALIDADE, nível de detalhe e formato de porções:
+
+Café da Manhã (08:00):
+- Pão francês: 1 unidade (50g) → substitutos: Pão de forma 2 fatias (50g), Cuscuz de milho 1 pedaço grande (200g), Tapioca 3 colheres de sopa rasas (45g)
+- Ovo de galinha: 3 unidades (150g) → substitutos: Frango desfiado 60g, Queijo mussarela 2 fatias (30g)
+- Iogurte natural: 1 unidade (100g)
+- Fruta de preferência: 1 unidade grande (100g)
+
+Almoço:
+- Arroz branco: 4 colheres de arroz cheias (180g) → substitutos: Batata inglesa 9 col sopa (217g), Mandioca 5 col sopa (176g)
+- Feijão carioca: 2 conchas rasas (160g) → substitutos: Feijão preto 2 conchas rasas (160g), Grão de bico 2 conchas rasas (160g)
+- Filé de frango grelhado: 1 fatia média (110g) → substitutos: Carne (alcatra, patinho) grelhada 1 fatia (110g), Tilápia 1 unidade (113g)
+- Verduras: 3 colheres de servir cheias (120g)
+- Salada: À vontade
+
+OBSERVE: porções sempre em medida caseira + gramas, substitutos práticos e equivalentes, alimentos 100% brasileiros.
 
 [OUTPUT FORMAT]
 Retorne um JSON com esta estrutura EXATA:
@@ -189,37 +208,35 @@ Retorne um JSON com esta estrutura EXATA:
   "goal_description": "Resumo estratégico: 2-3 linhas explicando POR QUE essa dieta vai funcionar para a rotina específica deste aluno. Inclua distribuição de macros totais diários (ex: Proteína Xg | Carbs Yg | Gordura Zg | Total Wkcal).",
   "meals": [
     {
-      "name": "Nome da Refeição - HH:MM",
+      "name": "Nome da Refeição",
       "time": "HH:MM",
       "foods": [
         {
           "name": "Nome do alimento",
-          "quantity": "150",
-          "unit": "g",
-          "substitutes": [
-            {
-              "name": "Substituto direto",
-              "quantity": "120",
-              "unit": "g",
-              "portion": "120",
-              "calories": 180,
-              "protein": 10,
-              "carbs": 20,
-              "fat": 5
-            }
-          ]
+          "portion": "medida caseira ou Xg",
+          "calories": 150,
+          "protein": 10,
+          "carbs": 20,
+          "fat": 5,
+          "substitute": {
+            "name": "Substituto equivalente",
+            "portion": "medida caseira ou Xg",
+            "calories": 145,
+            "protein": 9,
+            "carbs": 21,
+            "fat": 4
+          }
         }
-      ],
-      "notes": "Dica prática ou observação estratégica da refeição",
-      "macros": {
-        "protein": 30,
-        "carbs": 40,
-        "fat": 15,
-        "calories": 415
-      }
+      ]
     }
   ]
-}`;
+}
+
+IMPORTANTE sobre o formato:
+- "portion" deve ser string com medida caseira + gramas: "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g"
+- "substitute" é um OBJETO ÚNICO (não array) com o substituto mais relevante, ou null se não houver
+- Macros são números (não strings)
+- NÃO inclua campos extras como "quantity", "unit", "macros", "notes" nas refeições`;
 
     const userPrompt = `Gere um plano alimentar personalizado para este aluno:
 
