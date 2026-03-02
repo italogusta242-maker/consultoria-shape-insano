@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Save, Apple, Clock, ChevronDown, ChevronUp, FolderOpen, Eye, AlertTriangle, ArrowLeftRight, Flame, TrendingUp, Scale, RefreshCw, History, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Trash2, Save, Apple, Clock, ChevronDown, ChevronUp, FolderOpen, Eye, AlertTriangle, ArrowLeftRight, Flame, TrendingUp, Scale, RefreshCw, History, Sparkles, Loader2, FileUp } from "lucide-react";
+import { useRef } from "react";
 import type { DietGoal } from "@/types/diet";
 import FoodAutocomplete from "./FoodAutocomplete";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -219,6 +220,8 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
   const [previewOpen, setPreviewOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [draftRestored, setDraftRestored] = useState(false);
 
   // Auto-save draft
@@ -261,6 +264,56 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
       toast.error(err.message || "Erro ao gerar plano com IA");
     } finally {
       setAiGenerating(false);
+    }
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast.error("Envie apenas arquivos PDF");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("O arquivo deve ter no máximo 10MB");
+      return;
+    }
+    setPdfParsing(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Não autenticado");
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/parse-diet-pdf`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (!res.ok || result.error) throw new Error(result.error || "Erro ao processar PDF");
+
+      const plan = result.plan;
+      if (plan.title) setTitle(plan.title);
+      if (plan.goal) setGoal(plan.goal as DietGoal);
+      if (plan.meals?.length) {
+        setMeals(normalizeMeals(plan.meals));
+        setExpandedMeal(0);
+      }
+
+      toast.success("Plano importado do PDF! Revise e ajuste antes de salvar.");
+    } catch (err: any) {
+      console.error("PDF parse error:", err);
+      toast.error(err.message || "Erro ao processar PDF");
+    } finally {
+      setPdfParsing(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
     }
   };
 
@@ -778,6 +831,23 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
               >
                 {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 {aiGenerating ? "Gerando..." : "Gerar com IA"}
+              </Button>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={handlePdfUpload}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => pdfInputRef.current?.click()}
+                disabled={pdfParsing}
+                className="gap-1.5 border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))]"
+              >
+                {pdfParsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
+                {pdfParsing ? "Lendo PDF..." : "Importar PDF"}
               </Button>
             </div>
 
