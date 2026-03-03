@@ -1,87 +1,51 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toLocalDate } from "@/lib/dateUtils";
-import { useEffect } from "react";
 
 export type FlameState = "normal" | "ativa" | "tregua" | "extinta";
 
-interface FlameResult {
+export interface FlameResult {
   state: FlameState;
   streak: number;
-  /** Adherence percentage based on training days vs expected */
+  /** Adherence percentage based on 4 pillars (0-100) */
   adherence: number;
 }
 
 /**
- * Chama de Honra — Reads persistent state from `flame_status` table.
- * Falls back to calculating state if no record exists yet.
+ * Chama de Honra — Optimistic-first architecture.
  *
- * Motor 1 (Immediate): Called when user finishes workout or completes diet.
- * Motor 2 (Midnight Judge): Cron job at 03:00 UTC (00:00 BRT) demotes inactive users.
+ * This hook is READ-ONLY from the DB perspective. It fetches the initial state
+ * once and then relies entirely on optimistic updates via `optimisticFlameUpdate`.
  *
- * Day approval rule (50/50):
- * - Training day: approved if user trained OR completed ≥50% of diet meals
- * - Rest day: approved if user completed ≥50% of diet meals
+ * NO Realtime listener — it was causing race conditions that overwrote optimistic state.
+ * NO adherence recalculation on every fetch — adherence is managed optimistically.
+ *
+ * The DB is the source of truth for state/streak (via flameMotor.checkAndUpdateFlame),
+ * but the UI always shows the optimistic value first.
+ *
+ * staleTime = 5 minutes: prevents refetches on window focus / remount from
+ * destroying the optimistic cache.
  */
 export function useFlameState(): FlameResult & { isLoading: boolean } {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["flame-state", user?.id],
     queryFn: async (): Promise<FlameResult> => {
       if (!user) return { state: "normal", streak: 0, adherence: 0 };
 
-      // Try to read from flame_status table first
+      // Read flame_status from DB
       const { data: flameStatus } = await supabase
         .from("flame_status")
         .select("*")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      // Calculate adherence (last 7 days)
+      // Calculate adherence from DB (only on initial load / manual refresh)
       const adherence = await calculateAdherence(user.id);
 
       if (flameStatus) {
-        // Check if user did something TODAY that should reactivate flame (Motor 1)
-        const todayApproved = await isDayApproved(user.id, toLocalDate(new Date()));
-        
-        if (todayApproved && (flameStatus.state === "tregua" || flameStatus.state === "extinta" || flameStatus.state === "normal")) {
-          // Immediately reactivate flame
-          const newStreak = flameStatus.state === "extinta" ? 1 : flameStatus.streak + 1;
-          const todayStr = toLocalDate(new Date());
-          
-          await supabase
-            .from("flame_status")
-            .update({ 
-              state: "ativa", 
-              streak: newStreak, 
-              last_approved_date: todayStr,
-              updated_at: new Date().toISOString()
-            })
-            .eq("user_id", user.id);
-          
-          return { state: "ativa", streak: newStreak, adherence };
-        }
-
-        // If ativa but today already approved, increment streak if not already done today
-        if (todayApproved && flameStatus.state === "ativa" && flameStatus.last_approved_date !== toLocalDate(new Date())) {
-          const newStreak = flameStatus.streak + 1;
-          const todayStr = toLocalDate(new Date());
-          
-          await supabase
-            .from("flame_status")
-            .update({ 
-              streak: newStreak, 
-              last_approved_date: todayStr,
-              updated_at: new Date().toISOString()
-            })
-            .eq("user_id", user.id);
-          
-          return { state: "ativa", streak: newStreak, adherence };
-        }
-
         return {
           state: flameStatus.state as FlameState,
           streak: flameStatus.streak,
@@ -89,7 +53,7 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
         };
       }
 
-      // No flame_status record yet — bootstrap it
+      // No record yet — bootstrap
       const todayApproved = await isDayApproved(user.id, toLocalDate(new Date()));
       const initialState: FlameState = todayApproved ? "ativa" : "normal";
       const initialStreak = todayApproved ? 1 : 0;
@@ -107,33 +71,11 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
       return { state: initialState, streak: initialStreak, adherence };
     },
     enabled: !!user,
-    staleTime: 30 * 1000, // 30s — allow quick refresh after habits/workouts
+    staleTime: 5 * 60 * 1000, // 5 minutes — optimistic updates handle the UI
+    gcTime: 10 * 60 * 1000,
   });
 
-  // Subscribe to realtime changes on flame_status
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel(`flame-status-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "flame_status",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["flame-state", user.id] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, queryClient]);
+  // NO Realtime listener — optimistic updates are the source of truth for UI
 
   return {
     state: data?.state ?? "normal",
@@ -145,13 +87,8 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
 
 /**
  * Check if a day is "approved" for the flame system.
- * A day is approved if user did at least one of:
- * 1. Completed a workout (on training days)
- * 2. Completed ≥50% of diet plan meals
- * On rest days, only diet counts.
  */
 async function isDayApproved(userId: string, dateStr: string): Promise<boolean> {
-  // Check if user trained on this date
   const { data: workouts } = await supabase
     .from("workouts")
     .select("id")
@@ -163,7 +100,6 @@ async function isDayApproved(userId: string, dateStr: string): Promise<boolean> 
 
   if (workouts && workouts.length > 0) return true;
 
-  // Check diet compliance (50% of meals)
   const { data: habits } = await supabase
     .from("daily_habits")
     .select("completed_meals")
@@ -172,7 +108,6 @@ async function isDayApproved(userId: string, dateStr: string): Promise<boolean> 
     .maybeSingle();
 
   if (habits?.completed_meals) {
-    // Get total meals from active diet plan
     const { data: dietPlan } = await supabase
       .from("diet_plans")
       .select("meals")
@@ -186,8 +121,7 @@ async function isDayApproved(userId: string, dateStr: string): Promise<boolean> 
       const totalMeals = Array.isArray(dietPlan.meals) ? (dietPlan.meals as any[]).length : 0;
       if (totalMeals > 0) {
         const completedCount = habits.completed_meals.length;
-        const percentage = completedCount / totalMeals;
-        if (percentage >= 0.5) return true;
+        if (completedCount / totalMeals >= 0.5) return true;
       }
     }
   }
@@ -197,36 +131,42 @@ async function isDayApproved(userId: string, dateStr: string): Promise<boolean> 
 
 /**
  * Calculate today's adherence percentage based on 4 pillars:
- * - Treino: 40 pts (completed a workout today)
- * - Dieta: 40 pts (proportional to completed meals / total meals)
- * - Água: 10 pts (proportional to water intake / 2.5L goal)
- * - Sono: 10 pts (logged sleep today)
+ * - Treino: 40 pts | Dieta: 40 pts | Água: 10 pts | Sono: 10 pts
  */
 async function calculateAdherence(userId: string): Promise<number> {
   const todayStr = toLocalDate(new Date());
   let score = 0;
 
-  // Treino (40 pts) — check if user trained today
-  const { data: workouts } = await supabase
-    .from("workouts")
-    .select("id")
-    .eq("user_id", userId)
-    .not("finished_at", "is", null)
-    .gte("finished_at", `${todayStr}T00:00:00`)
-    .lt("finished_at", `${todayStr}T23:59:59.999`)
-    .limit(1);
+  const [workoutsRes, habitsRes, checkinRes] = await Promise.all([
+    supabase
+      .from("workouts")
+      .select("id")
+      .eq("user_id", userId)
+      .not("finished_at", "is", null)
+      .gte("finished_at", `${todayStr}T00:00:00`)
+      .lt("finished_at", `${todayStr}T23:59:59.999`)
+      .limit(1),
+    supabase
+      .from("daily_habits")
+      .select("completed_meals, water_liters")
+      .eq("user_id", userId)
+      .eq("date", todayStr)
+      .maybeSingle(),
+    supabase
+      .from("psych_checkins")
+      .select("sleep_hours")
+      .eq("user_id", userId)
+      .gte("created_at", `${todayStr}T00:00:00`)
+      .lt("created_at", `${todayStr}T23:59:59.999`)
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  if (workouts && workouts.length > 0) score += 40;
+  // Treino (40 pts)
+  if (workoutsRes.data && workoutsRes.data.length > 0) score += 40;
 
-  // Get daily habits for today
-  const { data: habits } = await supabase
-    .from("daily_habits")
-    .select("completed_meals, water_liters")
-    .eq("user_id", userId)
-    .eq("date", todayStr)
-    .maybeSingle();
-
-  // Dieta (40 pts) — proportional to meals completed
+  // Dieta (40 pts)
+  const habits = habitsRes.data;
   if (habits?.completed_meals) {
     const { data: dietPlan } = await supabase
       .from("diet_plans")
@@ -246,23 +186,15 @@ async function calculateAdherence(userId: string): Promise<number> {
     }
   }
 
-  // Água (10 pts) — proportional to water intake (goal: 2.5L)
+  // Água (10 pts)
   if (habits?.water_liters) {
-    const waterRatio = Math.min(Number(habits.water_liters) / 2.5, 1);
-    score += Math.round(waterRatio * 10);
+    score += Math.round(Math.min(Number(habits.water_liters) / 2.5, 1) * 10);
   }
 
-  // Sono (10 pts) — check if user logged sleep today
-  const { data: checkin } = await supabase
-    .from("psych_checkins")
-    .select("sleep_hours")
-    .eq("user_id", userId)
-    .gte("created_at", `${todayStr}T00:00:00`)
-    .lt("created_at", `${todayStr}T23:59:59.999`)
-    .limit(1)
-    .maybeSingle();
-
-  if (checkin?.sleep_hours && Number(checkin.sleep_hours) > 0) score += 10;
+  // Sono (10 pts)
+  if (checkinRes.data?.sleep_hours && Number(checkinRes.data.sleep_hours) > 0) {
+    score += 10;
+  }
 
   return score;
 }

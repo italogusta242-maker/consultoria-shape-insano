@@ -514,12 +514,11 @@ const Treinos = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workout-history"] });
-      // Instant flame: workout = +40 adherence, force ativa (SYNC - no dynamic import!)
+      // Optimistic flame: instant UI update (SYNC, no DB wait)
       if (user) {
         optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
-        checkAndUpdateFlame(user.id).then(() => {
-          queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-        });
+        // Background: persist to DB, NO cache invalidation
+        checkAndUpdateFlame(user.id);
       }
     },
   });

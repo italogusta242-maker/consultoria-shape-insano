@@ -52,14 +52,12 @@ export function useDailyHabits(date?: string) {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["daily-habits", user?.id, targetDate] });
-      queryClient.invalidateQueries({ queryKey: ["daily-habits-range"] });
-      // DON'T invalidate flame-state here — the optimistic update already set it.
-      // Instead, let the DB motor update flame_status, THEN refresh.
+      // DO NOT invalidate daily-habits or flame-state here!
+      // The optimistic updates already set the correct values.
+      // Just let the flame motor update the DB in the background.
       if (user) {
-        checkAndUpdateFlame(user.id).then(() => {
-          queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-        });
+        checkAndUpdateFlame(user.id);
+        // No invalidateQueries — optimistic state is king
       }
     },
   });
@@ -72,10 +70,10 @@ export function useDailyHabits(date?: string) {
       water_liters: clamped,
     };
 
-    // Optimistic: update today's habits
+    // 1. Optimistic: update today's habits (water bar)
     queryClient.setQueryData(["daily-habits", user?.id, targetDate], () => newHabit);
 
-    // Optimistic: also update habits range so useRealPerformance recalculates instantly
+    // 2. Optimistic: update habits range (performance bar)
     queryClient.setQueryData<DailyHabit[]>(
       ["daily-habits-range", user?.id, 7],
       (old) => {
@@ -90,12 +88,14 @@ export function useDailyHabits(date?: string) {
       }
     );
 
-    // Optimistic flame: water is 10pts proportional to 2.5L goal
+    // 3. Optimistic flame: water = 10pts proportional to 2.5L goal (chama bar)
     if (user) {
       const oldScore = Math.round(Math.min(oldWater / 2.5, 1) * 10);
       const newScore = Math.round(Math.min(clamped / 2.5, 1) * 10);
       optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: newScore - oldScore });
     }
+
+    // 4. Persist to DB (background, no cache invalidation)
     upsertHabits.mutate({
       water_liters: clamped,
       completed_meals: habits?.completed_meals || [],
@@ -109,7 +109,7 @@ export function useDailyHabits(date?: string) {
       ? current.filter((id) => id !== mealId)
       : [...current, mealId];
 
-    // Optimistic update: today's habits
+    // 1. Optimistic: today's habits (meal checkmarks)
     queryClient.setQueryData(
       ["daily-habits", user?.id, targetDate],
       (old: DailyHabit | null) => ({
@@ -118,7 +118,7 @@ export function useDailyHabits(date?: string) {
       })
     );
 
-    // Optimistic update: habits range (so useRealPerformance recalculates)
+    // 2. Optimistic: habits range (performance bar)
     queryClient.setQueryData<DailyHabit[]>(
       ["daily-habits-range", user?.id, 7],
       (old) => {
@@ -133,7 +133,7 @@ export function useDailyHabits(date?: string) {
       }
     );
 
-    // Optimistic flame: each meal toggle changes adherence proportionally
+    // 3. Optimistic flame (chama bar)
     if (user) {
       const delta = isRemoving ? -5 : 5;
       optimisticFlameUpdate(queryClient, user.id, {
@@ -141,11 +141,13 @@ export function useDailyHabits(date?: string) {
         forceActive: !isRemoving && next.length >= 1,
       });
 
-      // Motivational notification (10% chance on 50% or 100% diet)
+      // Motivational notification (10% chance)
       if (!isRemoving && totalMeals && totalMeals > 0) {
         onMealToggle(user.id, next.length, totalMeals, true);
       }
     }
+
+    // 4. Persist to DB (background, no cache invalidation)
     upsertHabits.mutate({
       water_liters: habits?.water_liters || 0,
       completed_meals: next,
