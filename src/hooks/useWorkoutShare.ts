@@ -22,34 +22,37 @@ export function useWorkoutShare() {
 
       if (!blob) throw new Error("Failed to generate image");
 
-      // Tenta copiar para a área de transferência primeiro
-      try {
-        await navigator.clipboard.write([
-          new ClipboardItem({ "image/png": blob }),
-        ]);
-      } catch {
-        // Silently ignore if clipboard not supported
-      }
-
       const file = new File([blob], "treino-shape-insano.png", { type: "image/png" });
 
+      // Try native share first (works best on mobile)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: "Treino Concluído",
           text: "Mais um dia de vitória no Shape Insano Pro! 🔥",
         });
-      } else {
-        // Fallback: download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "treino-shape-insano.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        return;
       }
+
+      // Desktop: try clipboard then fallback to download
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+        // If clipboard worked, also download as backup
+      } catch {
+        // Clipboard not supported (iOS Safari, etc.) — just download
+      }
+
+      // Fallback: always download the file
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "treino-shape-insano.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error: any) {
       // User cancelled share is not an error
       if (error?.name !== "AbortError") {
