@@ -858,7 +858,7 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
               />
             </div>
 
-            <div className="flex gap-2 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex gap-2 sm:flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
