@@ -654,10 +654,12 @@ const Dashboard = () => {
                   mood: result.mentalState === "energizado" ? 5 : result.mentalState === "focado" ? 4 : result.mentalState === "neutro" ? 3 : result.mentalState === "cansado" ? 2 : 1,
                   stress: result.mentalState === "desanimado" ? 5 : result.mentalState === "cansado" ? 4 : 3,
                 });
+                // REGRA 1+2: Cancel flame queries, then inject optimistic update
+                await queryClient.cancelQueries({ queryKey: ["flame-state", user.id] });
+                optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
+                // Safe to invalidate checkin caches (not flame-related)
                 queryClient.invalidateQueries({ queryKey: ["today-checkin"] });
                 queryClient.invalidateQueries({ queryKey: ["last30-checkins"] });
-                // Instant flame update: sleep = +10 adherence (SYNC)
-                optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
               } catch (e) {
                 console.error("Failed to save check-in:", e);
               }
@@ -954,9 +956,12 @@ const Dashboard = () => {
                 mood: result.mentalState === "energizado" ? 5 : result.mentalState === "focado" ? 4 : result.mentalState === "neutro" ? 3 : result.mentalState === "cansado" ? 2 : 1,
                 stress: result.mentalState === "desanimado" ? 5 : result.mentalState === "cansado" ? 4 : 3,
               });
+              // REGRA 1+2: Cancel flame queries, then inject optimistic update
+              await queryClient.cancelQueries({ queryKey: ["flame-state", user.id] });
+              optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
+              // Safe to invalidate checkin caches (not flame-related)
               queryClient.invalidateQueries({ queryKey: ["today-checkin"] });
               queryClient.invalidateQueries({ queryKey: ["last30-checkins"] });
-              optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 10 });
             } catch (e) {
               console.error("Failed to save check-in:", e);
             }

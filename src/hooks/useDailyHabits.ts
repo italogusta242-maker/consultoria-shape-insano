@@ -50,16 +50,37 @@ export function useDailyHabits(date?: string) {
         .upsert(payload, { onConflict: "user_id,date" });
 
       if (error) throw error;
+
+      // Background: persist flame state to DB (no cache invalidation)
+      await checkAndUpdateFlame(user.id);
     },
-    onSuccess: () => {
-      // DO NOT invalidate daily-habits or flame-state here!
-      // The optimistic updates already set the correct values.
-      // Just let the flame motor update the DB in the background.
-      if (user) {
-        checkAndUpdateFlame(user.id);
-        // No invalidateQueries — optimistic state is king
+    onMutate: async () => {
+      // REGRA 1: Cancel in-flight queries to prevent cache overwrites
+      await queryClient.cancelQueries({ queryKey: ["flame-state", user?.id] });
+      await queryClient.cancelQueries({ queryKey: ["daily-habits", user?.id, targetDate] });
+      await queryClient.cancelQueries({ queryKey: ["daily-habits-range", user?.id, 7] });
+
+      // REGRA 2: Save previous state for rollback
+      const previousFlame = queryClient.getQueryData(["flame-state", user?.id]);
+      const previousHabits = queryClient.getQueryData(["daily-habits", user?.id, targetDate]);
+      const previousRange = queryClient.getQueryData(["daily-habits-range", user?.id, 7]);
+
+      return { previousFlame, previousHabits, previousRange };
+    },
+    onError: (_err, _vars, context) => {
+      // REGRA 3: Rollback on failure
+      if (context?.previousFlame) {
+        queryClient.setQueryData(["flame-state", user?.id], context.previousFlame);
+      }
+      if (context?.previousHabits) {
+        queryClient.setQueryData(["daily-habits", user?.id, targetDate], context.previousHabits);
+      }
+      if (context?.previousRange) {
+        queryClient.setQueryData(["daily-habits-range", user?.id, 7], context.previousRange);
       }
     },
+    // REGRA 4: NO invalidateQueries here — optimistic state is king
+    onSuccess: () => {},
   });
 
   const setWater = (liters: number) => {
