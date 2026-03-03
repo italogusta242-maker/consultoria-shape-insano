@@ -677,10 +677,12 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
         ...m,
         foods: m.foods.map(f => {
           const resolved = resolvePortioning(f);
-          // If AI set a rich displayPortion and resolvePortioning returned empty, preserve it
-          const finalDisplayPortion = resolved.displayPortion || (f as any).displayPortion || (f as any).portion || "";
+          // Prefer rich displayPortion (with letters like "1 Unidade(s) (50g)") over simple "50g"
+          const richPortion = (f as any).displayPortion || (f as any).portion || "";
+          const hasRichText = typeof richPortion === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(richPortion);
+          const finalDisplayPortion = hasRichText ? richPortion : (resolved.displayPortion || richPortion || "");
           // Preserve the original portion string (from AI/PDF) so it can be re-parsed on load
-          const originalPortion = (f as any).displayPortion || (f as any).portion || "";
+          const originalPortion = richPortion || resolved.displayPortion || "";
           return {
             name: f.name,
             portion: originalPortion,
