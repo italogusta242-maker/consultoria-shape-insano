@@ -512,12 +512,31 @@ const Treinos = () => {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workout-history"] });
-      // Optimistic flame: instant UI update (SYNC, no DB wait)
+    onMutate: async () => {
+      // REGRA 1: Cancel in-flight queries
+      if (user) {
+        await queryClient.cancelQueries({ queryKey: ["flame-state", user.id] });
+        await queryClient.cancelQueries({ queryKey: ["workout-history"] });
+      }
+      const previousFlame = user ? queryClient.getQueryData(["flame-state", user.id]) : null;
+
+      // REGRA 2: Optimistic flame update (instant, before DB)
       if (user) {
         optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
-        // Background: persist to DB, NO cache invalidation
+      }
+      return { previousFlame };
+    },
+    onError: (_err, _vars, context) => {
+      // REGRA 3: Rollback
+      if (context?.previousFlame && user) {
+        queryClient.setQueryData(["flame-state", user.id], context.previousFlame);
+      }
+    },
+    onSuccess: () => {
+      // REGRA 4: NO invalidateQueries for flame — only workout-history is safe
+      queryClient.invalidateQueries({ queryKey: ["workout-history"] });
+      // Background: persist flame to DB
+      if (user) {
         checkAndUpdateFlame(user.id);
       }
     },
