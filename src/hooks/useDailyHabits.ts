@@ -133,9 +133,11 @@ export function useDailyHabits(date?: string) {
       }
     );
 
-    // 3. Optimistic flame (chama bar)
+    // 3. Optimistic flame (chama bar) — proportional to total meals (40pts max)
     if (user) {
-      const delta = isRemoving ? -5 : 5;
+      const mealCount = totalMeals && totalMeals > 0 ? totalMeals : 6;
+      const perMealDelta = Math.round(40 / mealCount);
+      const delta = isRemoving ? -perMealDelta : perMealDelta;
       optimisticFlameUpdate(queryClient, user.id, {
         adherenceDelta: delta,
         forceActive: !isRemoving && next.length >= 1,
