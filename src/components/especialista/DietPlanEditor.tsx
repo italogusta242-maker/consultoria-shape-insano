@@ -33,6 +33,7 @@ interface SubstituteItem {
   portion: string;
   quantity?: string;
   unit?: string;
+  displayPortion?: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -172,10 +173,32 @@ function calculateMacros(baseMacros: { protein: number; carbs: number; fat: numb
 function normalizeMeals(raw: any[]): Meal[] {
   return (raw ?? []).map((m: any) => {
     const foods = (m.foods ?? []).map((f: any) => {
-      const substitutes: SubstituteItem[] = f.substitutes ?? [];
+      const substitutes: SubstituteItem[] = (f.substitutes ?? []).map((s: any) => {
+        // Preserve AI-generated portion as displayPortion for substitutes
+        if (!s.displayPortion && s.portion && typeof s.portion === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(s.portion)) {
+          s.displayPortion = s.portion;
+        }
+        return s;
+      });
       // Migrate legacy single substitute
       if (f.substitute && !f.substitutes?.length) {
-        substitutes.push(f.substitute);
+        const legacySub = { ...f.substitute };
+        if (!legacySub.displayPortion && legacySub.portion && typeof legacySub.portion === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(legacySub.portion)) {
+          legacySub.displayPortion = legacySub.portion;
+        }
+        substitutes.push(legacySub);
+      }
+      // If food comes from AI with "portion" but no displayPortion/quantity, preserve it
+      if (!f.displayPortion && !f.quantity && f.portion && typeof f.portion === "string" && f.portion.trim()) {
+        f.displayPortion = f.portion;
+        // Try to extract quantity and unit from portion string for the editor
+        const portionStr = f.portion;
+        // Match patterns like "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g"
+        const gramsMatch = portionStr.match(/(\d+(?:[.,]\d+)?)\s*g\s*$/i) || portionStr.match(/\((\d+(?:[.,]\d+)?)g\)/i) || portionStr.match(/ou\s+(\d+(?:[.,]\d+)?)\s*g/i);
+        if (gramsMatch) {
+          f.quantity = gramsMatch[1];
+          f.unit = "g";
+        }
       }
       return { ...f, substitutes, substitute: undefined };
     });
@@ -639,24 +662,38 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
         ...m,
         foods: m.foods.map(f => {
           const resolved = resolvePortioning(f);
+          // If AI set a rich displayPortion and resolvePortioning returned empty, preserve it
+          const finalDisplayPortion = resolved.displayPortion || (f as any).displayPortion || "";
           return {
             name: f.name,
             quantity: f.quantity,
             unit: f.unit,
             quantityInGrams: resolved.quantityInGrams,
-            displayPortion: resolved.displayPortion,
+            displayPortion: finalDisplayPortion,
             substitute: undefined, // remove legacy field
             substitutes: (f.substitutes || []).map(s => {
               const qty = parseFloat(s.quantity || s.portion || "0") || 0;
               const unit = s.unit || "g";
-              let displayPortion = `${qty}${unit}`;
-              if (unit !== "g" && unit !== "ml") {
-                const measure = (s.measures || []).find(m => m.description === unit);
-                if (measure) {
-                  const grams = Math.round(qty * measure.gram_equivalent * 10) / 10;
-                  displayPortion = `${qty} ${unit} ou ${grams}g`;
+              // If substitute already has a rich displayPortion from AI (contains letters), keep it
+              let displayPortion = s.displayPortion || "";
+              if (!displayPortion || displayPortion === `${qty}g` || displayPortion === `${qty}${unit}`) {
+                // Recompute only if not already set by AI
+                if (unit !== "g" && unit !== "ml") {
+                  const measure = (s.measures || []).find(m => m.description === unit);
+                  if (measure) {
+                    const grams = Math.round(qty * measure.gram_equivalent * 10) / 10;
+                    displayPortion = `${qty} ${unit} ou ${grams}g`;
+                  } else {
+                    displayPortion = `${qty} ${unit}`;
+                  }
                 } else {
-                  displayPortion = `${qty} ${unit}`;
+                  // Check if portion has richer text (e.g. "2 Unidade(s) ou 40g")
+                  const portionText = s.portion || "";
+                  if (typeof portionText === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(portionText)) {
+                    displayPortion = portionText;
+                  } else {
+                    displayPortion = qty ? `${qty}${unit}` : "";
+                  }
                 }
               }
               return {
