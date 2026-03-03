@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getToday } from "@/lib/dateUtils";
 import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
+import { checkAndUpdateFlame } from "@/lib/flameMotor";
 import { onMealToggle } from "@/lib/coachNotifications";
 
 export interface DailyHabit {
@@ -53,15 +54,11 @@ export function useDailyHabits(date?: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["daily-habits", user?.id, targetDate] });
       queryClient.invalidateQueries({ queryKey: ["daily-habits-range"] });
-      // Invalidate flame state so adherence recalculates immediately
-      queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-      // Motor 1: Check if meal completion triggers flame reactivation
+      // DON'T invalidate flame-state here — the optimistic update already set it.
+      // Instead, let the DB motor update flame_status, THEN refresh.
       if (user) {
-        import("@/lib/flameMotor").then(({ checkAndUpdateFlame }) => {
-          checkAndUpdateFlame(user.id).then(() => {
-            // Re-invalidate after motor updates flame_status
-            queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-          });
+        checkAndUpdateFlame(user.id).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
         });
       }
     },
@@ -70,14 +67,29 @@ export function useDailyHabits(date?: string) {
   const setWater = (liters: number) => {
     const clamped = Math.max(0, Math.min(10, liters));
     const oldWater = habits?.water_liters ?? 0;
-    // Optimistic UI update
-    queryClient.setQueryData(
-      ["daily-habits", user?.id, targetDate],
-      (old: DailyHabit | null) => ({
-        ...(old || { id: "", user_id: user?.id || "", date: targetDate, completed_meals: [] }),
-        water_liters: clamped,
-      })
+    const newHabit = {
+      ...(habits || { id: "", user_id: user?.id || "", date: targetDate, completed_meals: [] as string[] }),
+      water_liters: clamped,
+    };
+
+    // Optimistic: update today's habits
+    queryClient.setQueryData(["daily-habits", user?.id, targetDate], () => newHabit);
+
+    // Optimistic: also update habits range so useRealPerformance recalculates instantly
+    queryClient.setQueryData<DailyHabit[]>(
+      ["daily-habits-range", user?.id, 7],
+      (old) => {
+        if (!old) return [newHabit as DailyHabit];
+        const idx = old.findIndex((h) => h.date === targetDate);
+        if (idx >= 0) {
+          const copy = [...old];
+          copy[idx] = { ...copy[idx], water_liters: clamped };
+          return copy;
+        }
+        return [...old, newHabit as DailyHabit];
+      }
     );
+
     // Optimistic flame: water is 10pts proportional to 2.5L goal
     if (user) {
       const oldScore = Math.round(Math.min(oldWater / 2.5, 1) * 10);
@@ -97,7 +109,7 @@ export function useDailyHabits(date?: string) {
       ? current.filter((id) => id !== mealId)
       : [...current, mealId];
 
-    // Optimistic update
+    // Optimistic update: today's habits
     queryClient.setQueryData(
       ["daily-habits", user?.id, targetDate],
       (old: DailyHabit | null) => ({
@@ -105,9 +117,24 @@ export function useDailyHabits(date?: string) {
         completed_meals: next,
       })
     );
+
+    // Optimistic update: habits range (so useRealPerformance recalculates)
+    queryClient.setQueryData<DailyHabit[]>(
+      ["daily-habits-range", user?.id, 7],
+      (old) => {
+        if (!old) return [];
+        const idx = old.findIndex((h) => h.date === targetDate);
+        if (idx >= 0) {
+          const copy = [...old];
+          copy[idx] = { ...copy[idx], completed_meals: next };
+          return copy;
+        }
+        return old;
+      }
+    );
+
     // Optimistic flame: each meal toggle changes adherence proportionally
     if (user) {
-      // We don't know totalMeals here precisely, estimate ~5 pts per meal toggle (40pts / ~8 meals)
       const delta = isRemoving ? -5 : 5;
       optimisticFlameUpdate(queryClient, user.id, {
         adherenceDelta: delta,
