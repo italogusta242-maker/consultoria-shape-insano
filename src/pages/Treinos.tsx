@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { SFX } from "@/hooks/useSoundEffects";
+import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
+import { checkAndUpdateFlame } from "@/lib/flameMotor";
 import { onWorkoutStart, onWorkoutFinish } from "@/lib/coachNotifications";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -512,15 +514,11 @@ const Treinos = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workout-history"] });
-      // Instant flame: workout = +40 adherence, force ativa
+      // Instant flame: workout = +40 adherence, force ativa (SYNC - no dynamic import!)
       if (user) {
-        import("@/lib/flameOptimistic").then(({ optimisticFlameUpdate }) => {
-          optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
-        });
-        import("@/lib/flameMotor").then(({ checkAndUpdateFlame }) => {
-          checkAndUpdateFlame(user.id).then(() => {
-            queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
-          });
+        optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
+        checkAndUpdateFlame(user.id).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["flame-state", user?.id] });
         });
       }
     },
