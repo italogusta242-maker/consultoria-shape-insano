@@ -59,13 +59,15 @@ export function useDailyHabits(date?: string) {
       await queryClient.cancelQueries({ queryKey: ["flame-state", user?.id] });
       await queryClient.cancelQueries({ queryKey: ["daily-habits", user?.id, targetDate] });
       await queryClient.cancelQueries({ queryKey: ["daily-habits-range", user?.id, 7] });
+      await queryClient.cancelQueries({ queryKey: ["daily-habits-range", user?.id, 30] });
 
       // REGRA 2: Save previous state for rollback
       const previousFlame = queryClient.getQueryData(["flame-state", user?.id]);
       const previousHabits = queryClient.getQueryData(["daily-habits", user?.id, targetDate]);
-      const previousRange = queryClient.getQueryData(["daily-habits-range", user?.id, 7]);
+      const previousRange7 = queryClient.getQueryData(["daily-habits-range", user?.id, 7]);
+      const previousRange30 = queryClient.getQueryData(["daily-habits-range", user?.id, 30]);
 
-      return { previousFlame, previousHabits, previousRange };
+      return { previousFlame, previousHabits, previousRange7, previousRange30 };
     },
     onError: (_err, _vars, context) => {
       // REGRA 3: Rollback on failure
@@ -75,8 +77,11 @@ export function useDailyHabits(date?: string) {
       if (context?.previousHabits) {
         queryClient.setQueryData(["daily-habits", user?.id, targetDate], context.previousHabits);
       }
-      if (context?.previousRange) {
-        queryClient.setQueryData(["daily-habits-range", user?.id, 7], context.previousRange);
+      if (context?.previousRange7) {
+        queryClient.setQueryData(["daily-habits-range", user?.id, 7], context.previousRange7);
+      }
+      if (context?.previousRange30) {
+        queryClient.setQueryData(["daily-habits-range", user?.id, 30], context.previousRange30);
       }
     },
     // REGRA 4: NO invalidateQueries here — optimistic state is king
@@ -94,20 +99,22 @@ export function useDailyHabits(date?: string) {
     // 1. Optimistic: update today's habits (water bar)
     queryClient.setQueryData(["daily-habits", user?.id, targetDate], () => newHabit);
 
-    // 2. Optimistic: update habits range (performance bar)
-    queryClient.setQueryData<DailyHabit[]>(
-      ["daily-habits-range", user?.id, 7],
-      (old) => {
-        if (!old) return [newHabit as DailyHabit];
-        const idx = old.findIndex((h) => h.date === targetDate);
-        if (idx >= 0) {
-          const copy = [...old];
-          copy[idx] = { ...copy[idx], water_liters: clamped };
-          return copy;
+    // 2. Optimistic: update ALL habits range caches (performance uses 30, chart uses 7)
+    for (const rangeDays of [7, 30]) {
+      queryClient.setQueryData<DailyHabit[]>(
+        ["daily-habits-range", user?.id, rangeDays],
+        (old) => {
+          if (!old) return [newHabit as DailyHabit];
+          const idx = old.findIndex((h) => h.date === targetDate);
+          if (idx >= 0) {
+            const copy = [...old];
+            copy[idx] = { ...copy[idx], water_liters: clamped };
+            return copy;
+          }
+          return [...old, newHabit as DailyHabit];
         }
-        return [...old, newHabit as DailyHabit];
-      }
-    );
+      );
+    }
 
     // 3. Optimistic flame: water = 10pts proportional to 2.5L goal (chama bar)
     if (user) {
@@ -139,20 +146,22 @@ export function useDailyHabits(date?: string) {
       })
     );
 
-    // 2. Optimistic: habits range (performance bar)
-    queryClient.setQueryData<DailyHabit[]>(
-      ["daily-habits-range", user?.id, 7],
-      (old) => {
-        if (!old) return [];
-        const idx = old.findIndex((h) => h.date === targetDate);
-        if (idx >= 0) {
-          const copy = [...old];
-          copy[idx] = { ...copy[idx], completed_meals: next };
-          return copy;
+    // 2. Optimistic: update ALL habits range caches (performance uses 30, chart uses 7)
+    for (const rangeDays of [7, 30]) {
+      queryClient.setQueryData<DailyHabit[]>(
+        ["daily-habits-range", user?.id, rangeDays],
+        (old) => {
+          if (!old) return [];
+          const idx = old.findIndex((h) => h.date === targetDate);
+          if (idx >= 0) {
+            const copy = [...old];
+            copy[idx] = { ...copy[idx], completed_meals: next };
+            return copy;
+          }
+          return old;
         }
-        return old;
-      }
-    );
+      );
+    }
 
     // 3. Optimistic flame (chama bar) — proportional to total meals (40pts max)
     if (user) {
