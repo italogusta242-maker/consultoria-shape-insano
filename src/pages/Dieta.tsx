@@ -121,13 +121,17 @@ const Dieta = () => {
               const subs: FoodSubstitute[] = f.substitutes ?? [];
               if (f.substitute && !subs.length) subs.push(f.substitute);
               let portion = f.displayPortion || "";
+              // Filter out corrupted "0 undefined" values
+              if (portion === "0 undefined" || portion === "0undefined") portion = "";
               if (!portion) {
                 portion = f.quantity
                   ? (String(f.quantity).match(/[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/)
                     ? String(f.quantity)
-                    : f.unit ? `${f.quantity} ${f.unit}` : `${f.quantity}g`)
+                    : f.unit && f.unit !== "undefined" ? `${f.quantity} ${f.unit}` : `${f.quantity}g`)
                   : (f.portion || "");
               }
+              // Final safety: don't show "0g" or empty-ish portions
+              if (portion === "0g" || portion === "0 g") portion = "";
               return { name: f.name, portion, substitutes: subs };
             });
 

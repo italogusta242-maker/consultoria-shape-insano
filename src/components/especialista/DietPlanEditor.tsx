@@ -112,15 +112,15 @@ const UNITS = ["g", "ml"];
 /** Compute quantityInGrams and displayPortion based on unit, quantity, and measures */
 function resolvePortioning(food: FoodItem): { quantityInGrams: number; displayPortion: string } {
   const qty = parseFloat(food.quantity) || 0;
-  if (food.unit === "g") return { quantityInGrams: qty, displayPortion: `${qty}g` };
-  if (food.unit === "ml") return { quantityInGrams: qty, displayPortion: `${qty}ml` };
+  if (!food.unit || food.unit === "g") return { quantityInGrams: qty, displayPortion: qty ? `${qty}g` : "" };
+  if (food.unit === "ml") return { quantityInGrams: qty, displayPortion: qty ? `${qty}ml` : "" };
   // Household measure
   const measure = (food.measures || []).find(m => m.description === food.unit);
   if (measure) {
     const grams = Math.round(qty * measure.gram_equivalent * 10) / 10;
     return { quantityInGrams: grams, displayPortion: `${qty} ${food.unit} ou ${grams}g` };
   }
-  return { quantityInGrams: qty, displayPortion: `${qty} ${food.unit}` };
+  return { quantityInGrams: qty, displayPortion: qty ? `${qty} ${food.unit}` : "" };
 }
 
 /** Parse portion string from food_database into quantity + unit. */
