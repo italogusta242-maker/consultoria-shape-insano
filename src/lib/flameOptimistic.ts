@@ -13,7 +13,7 @@ interface FlameData {
 export function optimisticFlameUpdate(
   queryClient: QueryClient,
   userId: string,
-  delta: { adherenceDelta?: number; forceActive?: boolean }
+  delta: { adherenceDelta?: number; forceActive?: boolean; streakIncrement?: boolean }
 ) {
   queryClient.setQueryData<FlameData>(
     ["flame-state", userId],
@@ -22,6 +22,15 @@ export function optimisticFlameUpdate(
       
       const newAdherence = Math.min(100, Math.max(0, old.adherence + (delta.adherenceDelta ?? 0)));
       
+      // Streak increment: when a new day is approved (e.g. workout finished)
+      if (delta.streakIncrement) {
+        return {
+          state: "ativa",
+          streak: old.state === "extinta" || old.state === "normal" ? 1 : old.streak + 1,
+          adherence: newAdherence,
+        };
+      }
+
       if (delta.forceActive && old.state !== "ativa") {
         return {
           state: "ativa",

@@ -522,7 +522,7 @@ const Treinos = () => {
 
       // REGRA 2: Optimistic flame update (instant, before DB)
       if (user) {
-        optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true });
+        optimisticFlameUpdate(queryClient, user.id, { adherenceDelta: 40, forceActive: true, streakIncrement: true });
       }
       return { previousFlame };
     },
