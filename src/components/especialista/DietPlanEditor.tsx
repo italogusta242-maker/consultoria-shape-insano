@@ -178,6 +178,14 @@ function normalizeMeals(raw: any[]): Meal[] {
         if (!s.displayPortion && s.portion && typeof s.portion === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(s.portion)) {
           s.displayPortion = s.portion;
         }
+        // Extract quantity+unit from portion if missing
+        if (!s.quantity && s.portion && typeof s.portion === "string") {
+          const parenM = s.portion.match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+          const ouM = s.portion.match(/ou\s+(\d+(?:[.,]\d+)?)\s*(g|ml)/i);
+          const endM = s.portion.match(/(\d+(?:[.,]\d+)?)\s*(g|ml)\s*$/i);
+          const m = parenM || ouM || endM;
+          if (m) { s.quantity = m[1].replace(",", "."); s.unit = m[2].toLowerCase(); }
+        }
         return s;
       });
       // Migrate legacy single substitute
@@ -188,17 +196,24 @@ function normalizeMeals(raw: any[]): Meal[] {
         }
         substitutes.push(legacySub);
       }
-      // If food comes from AI with "portion" but no displayPortion/quantity, preserve it
-      if (!f.displayPortion && !f.quantity && f.portion && typeof f.portion === "string" && f.portion.trim()) {
-        f.displayPortion = f.portion;
-        // Try to extract quantity and unit from portion string for the editor
+      // If food comes from AI/PDF with "portion" but no quantity, extract quantity+unit for the editor
+      if (!f.quantity && f.portion && typeof f.portion === "string" && f.portion.trim()) {
+        if (!f.displayPortion) f.displayPortion = f.portion;
         const portionStr = f.portion;
-        // Match patterns like "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g"
-        const gramsMatch = portionStr.match(/(\d+(?:[.,]\d+)?)\s*g\s*$/i) || portionStr.match(/\((\d+(?:[.,]\d+)?)g\)/i) || portionStr.match(/ou\s+(\d+(?:[.,]\d+)?)\s*g/i);
-        if (gramsMatch) {
-          f.quantity = gramsMatch[1];
-          f.unit = "g";
+        // Try to extract grams or ml from parentheses: "(50g)", "(240ml)"
+        const parenMatch = portionStr.match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/i);
+        // Or trailing: "ou 50g", "ou 240ml"
+        const ouMatch = portionStr.match(/ou\s+(\d+(?:[.,]\d+)?)\s*(g|ml)/i);
+        // Or end of string: "50g", "240ml"
+        const endMatch = portionStr.match(/(\d+(?:[.,]\d+)?)\s*(g|ml)\s*$/i);
+        const match = parenMatch || ouMatch || endMatch;
+        if (match) {
+          f.quantity = match[1].replace(",", ".");
+          f.unit = match[2].toLowerCase();
         }
+      } else if (f.quantity && !f.displayPortion && f.portion && typeof f.portion === "string" && /[a-zA-ZáàâãéèêíïóôõöúçÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ]/.test(f.portion)) {
+        // Already has quantity but missing displayPortion — preserve rich portion text
+        f.displayPortion = f.portion;
       }
       return { ...f, substitutes, substitute: undefined };
     });
