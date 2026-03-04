@@ -246,10 +246,65 @@ ${objective_hint ? `## INSTRUÇÃO ADICIONAL DO ESPECIALISTA\n${objective_hint}`
 
 Gere o plano agora. Responda APENAS com o JSON válido.`;
 
-    // Build Gemini content parts - include PDF if available
+    // RAG: Retrieve relevant knowledge base context
+    let ragContext = "";
+    try {
+      // Build a query embedding from the student context
+      const ragQuery = `treino ${anamnese?.objetivo || ""} ${anamnese?.experiencia_treino || ""} ${assessment?.prioridades_fisicas || ""} ${objective_hint || ""}`.trim();
+      
+      if (ragQuery.length > 10) {
+        // Generate embedding for the query
+        const embResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "models/text-embedding-004",
+              content: { parts: [{ text: ragQuery }] },
+              taskType: "RETRIEVAL_QUERY",
+            }),
+          }
+        );
+
+        if (embResponse.ok) {
+          const embData = await embResponse.json();
+          const queryEmbedding = embData.embedding?.values;
+
+          if (queryEmbedding) {
+            // Search for relevant chunks
+            const { data: matchedDocs, error: matchErr } = await supabaseAdmin.rpc("match_documents", {
+              query_embedding: JSON.stringify(queryEmbedding),
+              match_count: 8,
+              match_threshold: 0.5,
+              filter_specialist_id: specialistId,
+            });
+
+            if (!matchErr && matchedDocs && matchedDocs.length > 0) {
+              ragContext = `\n\n## BASE DE CONHECIMENTO DO ESPECIALISTA (use como diretriz principal)
+Utilize o contexto abaixo como sua principal diretriz e base de conhecimento para fundamentar suas decisões de prescrição.
+Os trechos a seguir foram extraídos do material de referência do especialista:
+
+${matchedDocs.map((doc: any, i: number) => `### Referência ${i + 1} (relevância: ${(doc.similarity * 100).toFixed(0)}%)\n${doc.content}`).join("\n\n")}
+
+FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
+              console.log(`RAG: injected ${matchedDocs.length} knowledge chunks (best similarity: ${(matchedDocs[0].similarity * 100).toFixed(0)}%)`);
+            } else {
+              console.log("RAG: no matching documents found", matchErr?.message);
+            }
+          }
+        } else {
+          console.warn("RAG embedding generation failed:", embResponse.status);
+        }
+      }
+    } catch (ragErr) {
+      console.warn("RAG retrieval failed, proceeding without knowledge context:", ragErr);
+    }
+
+    // Build Gemini content parts
     const contentParts: any[] = [];
 
-    // Try to download knowledge base PDF
+    // Try to download knowledge base PDF (legacy support)
     const pdfPath = aiPrefs?.knowledge_base_pdf_path;
     if (pdfPath) {
       try {
@@ -281,8 +336,8 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
       }
     }
 
-    // Add text prompt
-    contentParts.push({ text: systemPrompt + "\n\n" + userPrompt });
+    // Add text prompt with RAG context injected
+    contentParts.push({ text: systemPrompt + ragContext + "\n\n" + userPrompt });
 
     // Call Gemini API
     const geminiRes = await fetch(
