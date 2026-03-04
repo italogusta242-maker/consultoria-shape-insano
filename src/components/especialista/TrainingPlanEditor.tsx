@@ -56,11 +56,16 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const queryClient = useQueryClient();
   const isEditing = !!editingPlan;
 
-  // ===== ZUSTAND: Global state that survives unmount =====
-  const { draft, setDraft, patchDraft, clearDraft } = useWorkoutDraftStore();
+  // ===== ZUSTAND: Global state keyed by student_id =====
+  const { getDraft, setDraft, patchDraft, clearDraft } = useWorkoutDraftStore();
 
-  // Derive local values from store (single source of truth)
-  const selectedStudent = draft?.selectedStudent ?? "";
+  // Local state for selected student (not part of per-student draft)
+  const [selectedStudent, setSelectedStudent] = useState(
+    editingPlan?.user_id ?? preSelectedStudent ?? ""
+  );
+
+  // Derive values from per-student draft (single source of truth)
+  const draft = selectedStudent ? getDraft(selectedStudent) : null;
   const title = draft?.title ?? "Plano Personalizado";
   const totalSessions = draft?.totalSessions ?? 50;
   const groups = draft?.groups ?? [];
@@ -68,14 +73,13 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const pontosMelhoria = draft?.pontosMelhoria ?? "";
   const objetivoMesociclo = draft?.objetivoMesociclo ?? "";
 
-  // Helper setters that patch the store
-  const setSelectedStudent = (v: string) => patchDraft({ selectedStudent: v });
-  const setTitle = (v: string) => patchDraft({ title: v });
-  const setTotalSessions = (v: number) => patchDraft({ totalSessions: v });
-  const setGroups = (v: Group[]) => patchDraft({ groups: v });
-  const setAvaliacaoPostural = (v: string) => patchDraft({ avaliacaoPostural: v });
-  const setPontosMelhoria = (v: string) => patchDraft({ pontosMelhoria: v });
-  const setObjetivoMesociclo = (v: string) => patchDraft({ objetivoMesociclo: v });
+  // Helper setters that patch the store for the CURRENT student
+  const setTitle = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { title: v }); };
+  const setTotalSessions = (v: number) => { if (selectedStudent) patchDraft(selectedStudent, { totalSessions: v }); };
+  const setGroups = (v: Group[]) => { if (selectedStudent) patchDraft(selectedStudent, { groups: v }); };
+  const setAvaliacaoPostural = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { avaliacaoPostural: v }); };
+  const setPontosMelhoria = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { pontosMelhoria: v }); };
+  const setObjetivoMesociclo = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { objetivoMesociclo: v }); };
 
   // UI-only local state (doesn't need to survive unmount)
   const [exerciseSelectorOpen, setExerciseSelectorOpen] = useState(false);
@@ -88,16 +92,16 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
-  // Initialize store when opening (only if store is empty)
+  // Initialize store when opening (only if store is empty for this student)
   useEffect(() => {
-    if (!open) return;
+    if (!open || !selectedStudent) return;
 
-    // If store already has data, it's a remount — keep the data intact
-    if (draft && draft.groups.length > 0) return;
+    // If store already has data for this student, it's a remount — keep the data intact
+    const existing = getDraft(selectedStudent);
+    if (existing && existing.groups.length > 0) return;
 
     if (editingPlan) {
-      setDraft({
-        selectedStudent: editingPlan.user_id,
+      setDraft(selectedStudent, {
         title: editingPlan.title,
         totalSessions: editingPlan.total_sessions,
         groups: editingPlan.groups,
@@ -106,8 +110,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
       });
     } else {
-      setDraft({
-        selectedStudent: preSelectedStudent ?? "",
+      setDraft(selectedStudent, {
         title: "Plano Personalizado",
         totalSessions: 50,
         groups: [{ name: "A - Treino A", exercises: [] }],
@@ -116,7 +119,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         objetivoMesociclo: "",
       });
     }
-  }, [open, editingPlan, preSelectedStudent]);
+  }, [open, selectedStudent, editingPlan]);
 
   const generateWithAI = async () => {
     if (!selectedStudent) {
@@ -135,9 +138,8 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       if (data?.error) throw new Error(data.error);
 
       const plan = data.plan;
-      // Write directly to Zustand store — survives unmount
-      setDraft({
-        selectedStudent,
+      // Write directly to Zustand store keyed by student — survives unmount
+      setDraft(selectedStudent, {
         title: plan.title || title,
         totalSessions: plan.total_sessions || totalSessions,
         groups: plan.groups?.length ? plan.groups : groups,
@@ -348,7 +350,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       }
     },
     onSuccess: () => {
-      clearDraft();
+      clearDraft(selectedStudent);
       toast.success(isEditing ? "Plano atualizado!" : "Plano criado!");
       queryClient.invalidateQueries({ queryKey: ["specialist-training-plans"] });
       onClose();

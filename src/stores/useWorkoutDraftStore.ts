@@ -7,7 +7,6 @@ interface Group {
 }
 
 export interface WorkoutDraft {
-  selectedStudent: string;
   title: string;
   totalSessions: number;
   groups: Group[];
@@ -17,20 +16,30 @@ export interface WorkoutDraft {
 }
 
 interface WorkoutDraftStore {
-  draft: WorkoutDraft | null;
-  setDraft: (draft: WorkoutDraft) => void;
-  patchDraft: (partial: Partial<WorkoutDraft>) => void;
-  clearDraft: () => void;
+  drafts: Record<string, WorkoutDraft>;
+  getDraft: (studentId: string) => WorkoutDraft | null;
+  setDraft: (studentId: string, draft: WorkoutDraft) => void;
+  patchDraft: (studentId: string, partial: Partial<WorkoutDraft>) => void;
+  clearDraft: (studentId: string) => void;
 }
 
 export const useWorkoutDraftStore = create<WorkoutDraftStore>((set, get) => ({
-  draft: null,
-  setDraft: (draft) => set({ draft }),
-  patchDraft: (partial) => {
-    const current = get().draft;
+  drafts: {},
+  getDraft: (studentId) => get().drafts[studentId] ?? null,
+  setDraft: (studentId, draft) =>
+    set((state) => ({ drafts: { ...state.drafts, [studentId]: draft } })),
+  patchDraft: (studentId, partial) => {
+    const current = get().drafts[studentId];
     if (current) {
-      set({ draft: { ...current, ...partial } });
+      set((state) => ({
+        drafts: { ...state.drafts, [studentId]: { ...current, ...partial } },
+      }));
     }
   },
-  clearDraft: () => set({ draft: null }),
+  clearDraft: (studentId) =>
+    set((state) => {
+      const newDrafts = { ...state.drafts };
+      delete newDrafts[studentId];
+      return { drafts: newDrafts };
+    }),
 }));
