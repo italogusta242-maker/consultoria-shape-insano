@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useDraftAutoSave, loadDraft } from "@/hooks/useDraftAutoSave";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,13 +55,62 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const queryClient = useQueryClient();
   const isEditing = !!editingPlan;
 
-  const [selectedStudent, setSelectedStudent] = useState("");
-  const [title, setTitle] = useState("Plano Personalizado");
-  const [totalSessions, setTotalSessions] = useState(50);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [avaliacaoPostural, setAvaliacaoPostural] = useState("");
-  const [pontosMelhoria, setPontosMelhoria] = useState("");
-  const [objetivoMesociclo, setObjetivoMesociclo] = useState("");
+  // --- Immediate Sync Draft Persistence ---
+  const DRAFT_KEY = '@invictus:workout_draft';
+
+  const readDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      // Discard drafts older than 24h
+      if (parsed.savedAt && Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(DRAFT_KEY);
+        return null;
+      }
+      return parsed;
+    } catch { return null; }
+  };
+
+  const writeDraft = (data: any) => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
+    } catch { /* storage full */ }
+  };
+
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+  };
+
+  // Lazy initialization from localStorage
+  const [selectedStudent, setSelectedStudent] = useState(() => {
+    const draft = readDraft();
+    return draft?.selectedStudent ?? "";
+  });
+  const [title, setTitle] = useState(() => {
+    const draft = readDraft();
+    return draft?.title ?? "Plano Personalizado";
+  });
+  const [totalSessions, setTotalSessions] = useState(() => {
+    const draft = readDraft();
+    return draft?.totalSessions ?? 50;
+  });
+  const [groups, setGroups] = useState<Group[]>(() => {
+    const draft = readDraft();
+    return draft?.groups ?? [];
+  });
+  const [avaliacaoPostural, setAvaliacaoPostural] = useState(() => {
+    const draft = readDraft();
+    return draft?.avaliacaoPostural ?? "";
+  });
+  const [pontosMelhoria, setPontosMelhoria] = useState(() => {
+    const draft = readDraft();
+    return draft?.pontosMelhoria ?? "";
+  });
+  const [objetivoMesociclo, setObjetivoMesociclo] = useState(() => {
+    const draft = readDraft();
+    return draft?.objetivoMesociclo ?? "";
+  });
   const [exerciseSelectorOpen, setExerciseSelectorOpen] = useState(false);
   const [activeGroupIndex, setActiveGroupIndex] = useState(0);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
@@ -73,16 +121,17 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [draftNotified, setDraftNotified] = useState(false);
 
-  // Auto-save draft to localStorage
-  const draftKey = `training-draft-${editingPlan?.id || selectedStudent || "new"}`;
-  const draftData = useMemo(() => ({
-    selectedStudent, title, totalSessions, groups,
-    avaliacaoPostural, pontosMelhoria, objetivoMesociclo,
-  }), [selectedStudent, title, totalSessions, groups, avaliacaoPostural, pontosMelhoria, objetivoMesociclo]);
-
-  const shouldSaveDraft = (open || embedded) && (groups.length > 0 || title !== "Plano Personalizado");
-  const { clearDraft } = useDraftAutoSave(draftKey, draftData, shouldSaveDraft);
+  // Immediate sync: write to localStorage on every meaningful state change
+  useEffect(() => {
+    if (groups.length > 0 || title !== "Plano Personalizado") {
+      writeDraft({
+        selectedStudent, title, totalSessions, groups,
+        avaliacaoPostural, pontosMelhoria, objetivoMesociclo,
+      });
+    }
+  }, [selectedStudent, title, totalSessions, groups, avaliacaoPostural, pontosMelhoria, objetivoMesociclo]);
 
   const generateWithAI = async () => {
     if (!selectedStudent) {
@@ -101,6 +150,18 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       if (data?.error) throw new Error(data.error);
 
       const plan = data.plan;
+      // IMMEDIATE SYNC: Write to localStorage BEFORE updating React state
+      const draftPayload = {
+        selectedStudent,
+        title: plan.title || title,
+        totalSessions: plan.total_sessions || totalSessions,
+        groups: plan.groups?.length ? plan.groups : groups,
+        avaliacaoPostural: plan.avaliacao_postural || avaliacaoPostural,
+        pontosMelhoria: plan.pontos_melhoria || pontosMelhoria,
+        objetivoMesociclo: plan.objetivo_mesociclo || objetivoMesociclo,
+      };
+      writeDraft(draftPayload);
+
       if (plan.title) setTitle(plan.title);
       if (plan.total_sessions) setTotalSessions(plan.total_sessions);
       if (plan.avaliacao_postural) setAvaliacaoPostural(plan.avaliacao_postural);
@@ -191,17 +252,20 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   useEffect(() => {
     if (open && editingPlan) {
       // Check for draft first
-      const draft = loadDraft<typeof draftData>(draftKey);
-      if (draft && !draftRestored) {
+      const draft = readDraft();
+      if (draft?.groups?.length > 0 && !draftRestored) {
         setDraftRestored(true);
-        setSelectedStudent(draft.data.selectedStudent);
-        setTitle(draft.data.title);
-        setTotalSessions(draft.data.totalSessions);
-        setGroups(draft.data.groups);
-        setAvaliacaoPostural(draft.data.avaliacaoPostural);
-        setPontosMelhoria(draft.data.pontosMelhoria);
-        setObjetivoMesociclo(draft.data.objetivoMesociclo);
-        toast.info("Rascunho recuperado! Seus dados não foram perdidos.", { duration: 5000 });
+        setSelectedStudent(draft.selectedStudent);
+        setTitle(draft.title);
+        setTotalSessions(draft.totalSessions);
+        setGroups(draft.groups);
+        setAvaliacaoPostural(draft.avaliacaoPostural || "");
+        setPontosMelhoria(draft.pontosMelhoria || "");
+        setObjetivoMesociclo(draft.objetivoMesociclo || "");
+        if (!draftNotified) {
+          setDraftNotified(true);
+          toast.info("Rascunho recuperado! Seus dados não foram perdidos.", { duration: 5000 });
+        }
         return;
       }
       setSelectedStudent(editingPlan.user_id);
@@ -213,18 +277,20 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       setObjetivoMesociclo(editingPlan.objetivo_mesociclo || "");
     } else if (open && !editingPlan) {
       // Check for draft
-      const newDraftKey = `training-draft-${preSelectedStudent || "new"}`;
-      const draft = loadDraft<typeof draftData>(newDraftKey);
-      if (draft && !draftRestored) {
+      const draft = readDraft();
+      if (draft?.groups?.length > 0 && !draftRestored) {
         setDraftRestored(true);
-        setSelectedStudent(draft.data.selectedStudent);
-        setTitle(draft.data.title);
-        setTotalSessions(draft.data.totalSessions);
-        setGroups(draft.data.groups);
-        setAvaliacaoPostural(draft.data.avaliacaoPostural);
-        setPontosMelhoria(draft.data.pontosMelhoria);
-        setObjetivoMesociclo(draft.data.objetivoMesociclo);
-        toast.info("Rascunho recuperado! Seus dados não foram perdidos.", { duration: 5000 });
+        setSelectedStudent(draft.selectedStudent);
+        setTitle(draft.title);
+        setTotalSessions(draft.totalSessions);
+        setGroups(draft.groups);
+        setAvaliacaoPostural(draft.avaliacaoPostural || "");
+        setPontosMelhoria(draft.pontosMelhoria || "");
+        setObjetivoMesociclo(draft.objetivoMesociclo || "");
+        if (!draftNotified) {
+          setDraftNotified(true);
+          toast.info("Rascunho recuperado! Seus dados não foram perdidos.", { duration: 5000 });
+        }
         return;
       }
       setSelectedStudent(preSelectedStudent ?? "");
@@ -235,7 +301,10 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       setPontosMelhoria("");
       setObjetivoMesociclo("");
     }
-    if (!open) setDraftRestored(false);
+    if (!open) {
+      setDraftRestored(false);
+      setDraftNotified(false);
+    }
   }, [open, editingPlan, preSelectedStudent]);
 
   const addGroup = () => {
