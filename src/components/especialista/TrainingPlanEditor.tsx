@@ -70,6 +70,8 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [previewOpen, setPreviewOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiLogId, setAiLogId] = useState<string | null>(null);
+  const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
 
   // Auto-save draft to localStorage
@@ -105,12 +107,29 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       if (plan.objetivo_mesociclo) setObjetivoMesociclo(plan.objetivo_mesociclo);
       if (plan.groups?.length) setGroups(plan.groups);
 
+      // Store log_id for feedback
+      if (data.log_id) {
+        setAiLogId(data.log_id);
+        setAiFeedbackGiven(null);
+      }
+
       toast.success("Plano gerado pela IA! Revise e ajuste antes de salvar.");
     } catch (err: any) {
       console.error("AI generation error:", err);
       toast.error(err.message || "Erro ao gerar plano com IA");
     } finally {
       setAiGenerating(false);
+    }
+  };
+
+  const sendAiFeedback = async (feedback: "like" | "dislike") => {
+    if (!aiLogId) return;
+    setAiFeedbackGiven(feedback);
+    try {
+      await supabase.from("ai_generation_logs").update({ feedback }).eq("id", aiLogId);
+      toast.success(feedback === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado.");
+    } catch (err) {
+      console.error("Feedback error:", err);
     }
   };
 
@@ -445,6 +464,31 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
                   {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                   {aiGenerating ? "Gerando..." : "Gerar com IA"}
                 </Button>
+                {aiLogId && !aiFeedbackGiven && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendAiFeedback("like")}
+                      className="gap-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
+                    >
+                      👍 Bom
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendAiFeedback("dislike")}
+                      className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    >
+                      👎 Ajustar
+                    </Button>
+                  </>
+                )}
+                {aiFeedbackGiven && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    {aiFeedbackGiven === "like" ? "👍" : "👎"} Feedback enviado
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

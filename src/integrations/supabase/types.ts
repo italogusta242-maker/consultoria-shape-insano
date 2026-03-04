@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_generation_logs: {
+        Row: {
+          created_at: string
+          feedback: string | null
+          generated_content: Json
+          id: string
+          latency_ms: number | null
+          prompt_context: string | null
+          specialist_id: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          feedback?: string | null
+          generated_content?: Json
+          id?: string
+          latency_ms?: number | null
+          prompt_context?: string | null
+          specialist_id: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          feedback?: string | null
+          generated_content?: Json
+          id?: string
+          latency_ms?: number | null
+          prompt_context?: string | null
+          specialist_id?: string
+          student_id?: string
+        }
+        Relationships: []
+      }
       ai_knowledge_base: {
         Row: {
           content: string

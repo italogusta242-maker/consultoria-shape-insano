@@ -33,6 +33,7 @@ serve(async (req) => {
     }
     const specialistId = claimsData.claims.sub;
 
+    const startTime = Date.now();
     const { student_id, objective_hint } = await req.json();
     if (!student_id) throw new Error("student_id is required");
 
@@ -48,6 +49,8 @@ serve(async (req) => {
       trainingPlansRes,
       exerciseLibRes,
       aiPrefsRes,
+      aiPrefsRes,
+      likedLogsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("nome, peso, altura, sexo, nascimento, meta_peso, body_fat").eq("id", student_id).single(),
       supabase.from("anamnese").select("*").eq("user_id", student_id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -59,6 +62,7 @@ serve(async (req) => {
       supabase.from("training_plans").select("title, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo, created_at").eq("user_id", student_id).order("created_at", { ascending: false }).limit(3),
       supabase.from("exercise_library").select("id, name, muscle_group, equipment, default_sets, default_reps, level, category, secondary_muscles, video_id").limit(1000),
       supabase.from("specialist_ai_preferences").select("*").eq("specialist_id", specialistId).maybeSingle(),
+      supabase.from("ai_generation_logs").select("generated_content").eq("specialist_id", specialistId).eq("feedback", "like").order("created_at", { ascending: false }).limit(2),
     ]);
 
     const profile = profileRes.data;
@@ -71,6 +75,19 @@ serve(async (req) => {
     const previousPlans = trainingPlansRes.data ?? [];
     const exerciseLib = exerciseLibRes.data ?? [];
     const aiPrefs = aiPrefsRes.data as any;
+    const likedLogs = likedLogsRes.data ?? [];
+
+    // Build RLHF gold standard examples
+    let rlhfContext = "";
+    if (likedLogs.length > 0) {
+      rlhfContext = `\n\n## EXEMPLOS DE TREINOS PERFEITOS (PADRÃO OURO)
+Analise os exemplos perfeitos abaixo para entender o formato exato, a distribuição de volume e o estilo de periodização que o especialista prefere. Molde sua nova resposta seguindo este mesmo padrão de excelência.
+
+${likedLogs.map((log: any, i: number) => `### Exemplo Aprovado ${i + 1}\n${JSON.stringify(log.generated_content, null, 2)}`).join("\n\n")}
+
+FIM DOS EXEMPLOS — siga este padrão de qualidade.`;
+      console.log(`RLHF: injected ${likedLogs.length} liked examples as gold standard`);
+    }
 
     // Compute analytics
     const avgEffort = workouts.length > 0
@@ -337,7 +354,7 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
     }
 
     // Add text prompt with RAG context injected
-    contentParts.push({ text: systemPrompt + ragContext + "\n\n" + userPrompt });
+    contentParts.push({ text: systemPrompt + ragContext + rlhfContext + "\n\n" + userPrompt });
 
     // Call Gemini API
     const geminiRes = await fetch(
@@ -463,7 +480,25 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
 
     console.log(`Exercise validation: ${resolved} resolved, ${hallucinated} hallucinated out of ${resolved + hallucinated} total`);
 
-    return new Response(JSON.stringify({ plan: planJson, _meta: { resolved, hallucinated } }), {
+    // Log the generation for RLHF feedback loop
+    const latencyMs = Date.now() - startTime;
+    let logId: string | null = null;
+    try {
+      const promptSummary = `Student: ${profile?.nome || student_id} | Objective: ${anamnese?.objetivo || objective_hint || "N/A"}`;
+      const { data: logData } = await supabaseAdmin.from("ai_generation_logs").insert({
+        specialist_id: specialistId,
+        student_id: student_id,
+        prompt_context: promptSummary,
+        generated_content: planJson,
+        latency_ms: latencyMs,
+      }).select("id").single();
+      logId = logData?.id || null;
+      console.log(`Generation logged: ${logId} (${latencyMs}ms)`);
+    } catch (logErr) {
+      console.warn("Failed to log generation:", logErr);
+    }
+
+    return new Response(JSON.stringify({ plan: planJson, log_id: logId, _meta: { resolved, hallucinated, latency_ms: latencyMs } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
