@@ -161,19 +161,43 @@ FORMATO DE SAÍDA (JSON estrito):
         {
           "exercise_id": "uuid-do-exercicio-do-catalogo",
           "name": "Nome Exato do Exercício (copiado do catálogo)",
-          "sets": 4,
-          "reps": "8-12",
+          "sets": 3,
+          "reps": "6-8",
           "weight": null,
-          "rest": "90s",
+          "rest": "1'30''",
           "videoId": null,
           "setsData": [],
           "freeText": false,
-          "description": "Instruções específicas para este aluno"
+          "description": "Warm-up\n15 reps carga leve\n10 reps carga moderada\n\nFeeder sets\n6 reps\n4 reps\n\nWorking sets\n3 × 6–8 reps\n\nTop set\n1 × 6 reps (RPE 9)"
         }
       ]
     }
   ]
-}`;
+}
+
+REGRAS DO CAMPO "description" (OBRIGATÓRIO para cada exercício):
+O campo "description" deve conter a prescrição completa e detalhada de TODAS as séries do exercício, formatada em blocos separados por linha em branco, seguindo este padrão:
+
+Warm-up (se aplicável)
+[quantidade] reps carga leve
+[quantidade] reps carga moderada
+
+Feeder sets (se aplicável)
+[quantidade] reps
+[quantidade] reps
+
+Working sets (OBRIGATÓRIO — este é o bloco principal)
+[sets] × [reps] reps
+
+Top set (se aplicável ao nível do aluno — NÃO prescreva para iniciantes)
+1 × [reps] reps (RPE [valor])
+
+O campo "sets" deve conter APENAS a quantidade de Working Sets (ex: 3).
+O campo "reps" deve conter APENAS o range de reps dos Working Sets (ex: "6-8").
+
+REGRAS DO CAMPO "rest" (tempo de descanso):
+Use o formato em minutos e segundos: "1'30''" para 1 minuto e 30 segundos, "2'" para 2 minutos, "45''" para 45 segundos.
+NUNCA use o formato "90s" ou "120s". Sempre converta para minutos/segundos.`;
 
     // Build system instruction: env var > specialist custom prompt > default
     const envSystemPrompt = Deno.env.get("SPECIALIST_SYSTEM_PROMPT")?.trim();
@@ -428,18 +452,31 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
 
       planJson.groups = planJson.etapa_5_treino.map((dia: any) => ({
         name: `${dia.dia} - ${dia.foco}`,
-        exercises: (dia.exercicios || []).map((ex: any) => ({
-          exercise_id: ex.exercise_id || null,
-          name: ex.nome || ex.name || "Exercício",
-          sets: typeof ex.sets === "number" ? ex.sets : parseInt(String(ex.sets).match(/\d+/)?.[0] || "3"),
-          reps: ex.reps || "8-12",
-          weight: null,
-          rest: ex.descanso || ex.rest || "90s",
-          videoId: null,
-          setsData: [],
-          freeText: false,
-          description: ex.observacao_metodologica || ex.description || "",
-        })),
+        exercises: (dia.exercicios || []).map((ex: any) => {
+          // Convert rest from "90s" format to "1'30''" format if needed
+          let rest = ex.descanso || ex.rest || "1'30''";
+          const secMatch = rest.match(/^(\d+)s$/);
+          if (secMatch) {
+            const totalSec = parseInt(secMatch[1]);
+            const mins = Math.floor(totalSec / 60);
+            const secs = totalSec % 60;
+            rest = mins > 0
+              ? (secs > 0 ? `${mins}'${secs}''` : `${mins}'`)
+              : `${totalSec}''`;
+          }
+          return {
+            exercise_id: ex.exercise_id || null,
+            name: ex.nome || ex.name || "Exercício",
+            sets: typeof ex.sets === "number" ? ex.sets : parseInt(String(ex.sets).match(/\d+/)?.[0] || "3"),
+            reps: ex.reps || "8-12",
+            weight: null,
+            rest,
+            videoId: null,
+            setsData: [],
+            freeText: false,
+            description: ex.observacao_metodologica || ex.description || "",
+          };
+        }),
       }));
 
       // Clean up etapa fields
@@ -448,6 +485,26 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
       delete planJson.etapa_3_pontos_melhoria;
       delete planJson.etapa_4_mesociclo;
       delete planJson.etapa_5_treino;
+    }
+
+    // Normalize rest format: convert "90s" -> "1'30''" across all exercises
+    if (planJson.groups && Array.isArray(planJson.groups)) {
+      for (const group of planJson.groups) {
+        if (!group.exercises || !Array.isArray(group.exercises)) continue;
+        for (const ex of group.exercises) {
+          if (ex.rest) {
+            const secMatch = ex.rest.match(/^(\d+)s$/);
+            if (secMatch) {
+              const totalSec = parseInt(secMatch[1]);
+              const mins = Math.floor(totalSec / 60);
+              const secs = totalSec % 60;
+              ex.rest = mins > 0
+                ? (secs > 0 ? `${mins}'${secs}''` : `${mins}'`)
+                : `${totalSec}''`;
+            }
+          }
+        }
+      }
     }
 
     // POST-GENERATION VALIDATION: resolve exercise_ids and fix hallucinated names
