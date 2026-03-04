@@ -74,7 +74,7 @@ function extractYouTubeId(url: string): string | null {
 export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string[]>([]);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMuscleGroup, setNewMuscleGroup] = useState("peito");
@@ -128,10 +128,8 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
 
   const toggle = (name: string) => {
     setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
+      if (prev.includes(name)) return prev.filter(n => n !== name);
+      return [...prev, name];
     });
   };
 
@@ -161,9 +159,11 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
   });
 
   const handleConfirm = () => {
+    const exMap = new Map((exercises ?? []).map(ex => [ex.name, ex]));
     const items: ExerciseItem[] = [];
-    for (const ex of exercises ?? []) {
-      if (selected.has(ex.name)) {
+    for (const name of selected) {
+      const ex = exMap.get(name);
+      if (ex) {
         items.push({
           name: ex.name,
           sets: ex.default_sets,
@@ -176,7 +176,7 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
       }
     }
     onAdd(items);
-    setSelected(new Set());
+    setSelected([]);
     onClose();
   };
 
@@ -355,13 +355,13 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
               return (
                 <div key={ex.id} className={cn(
                   "rounded-lg transition-colors",
-                  selected.has(ex.name) ? "bg-[hsl(var(--gold)/0.1)]" : ""
+                  selected.includes(ex.name) ? "bg-[hsl(var(--gold)/0.1)]" : ""
                 )}>
                   <label
                     className="flex items-center gap-3 p-2.5 cursor-pointer hover:bg-[hsl(var(--glass-bg))] rounded-lg"
                   >
                     <Checkbox
-                      checked={selected.has(ex.name)}
+                      checked={selected.includes(ex.name)}
                       onCheckedChange={() => toggle(ex.name)}
                     />
                     <div className="flex-1 min-w-0">
@@ -461,7 +461,7 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-[hsl(var(--glass-border))]">
           <span className="text-xs text-muted-foreground">
-            {selected.size} exercício(s) selecionado(s)
+            {selected.length} exercício(s) selecionado(s)
           </span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose} className="border-[hsl(var(--glass-border))]">
@@ -469,7 +469,7 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
             </Button>
             <Button
               size="sm"
-              disabled={selected.size === 0}
+              disabled={selected.length === 0}
               onClick={handleConfirm}
               className="gold-gradient text-[hsl(var(--obsidian))] font-medium gap-1"
             >
