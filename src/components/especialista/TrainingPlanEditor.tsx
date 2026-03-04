@@ -81,7 +81,8 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     avaliacaoPostural, pontosMelhoria, objetivoMesociclo,
   }), [selectedStudent, title, totalSessions, groups, avaliacaoPostural, pontosMelhoria, objetivoMesociclo]);
 
-  const { clearDraft } = useDraftAutoSave(draftKey, draftData, open && (groups.length > 0 || title !== "Plano Personalizado"));
+  const shouldSaveDraft = (open || embedded) && (groups.length > 0 || title !== "Plano Personalizado");
+  const { clearDraft } = useDraftAutoSave(draftKey, draftData, shouldSaveDraft);
 
   const generateWithAI = async () => {
     if (!selectedStudent) {
