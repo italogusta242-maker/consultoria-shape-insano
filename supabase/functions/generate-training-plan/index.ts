@@ -57,7 +57,7 @@ serve(async (req) => {
       supabase.from("psych_checkins").select("mood, stress, sleep_hours, sleep_quality, notes, created_at").eq("user_id", student_id).order("created_at", { ascending: false }).limit(14),
       supabase.from("flame_status").select("streak, state").eq("user_id", student_id).maybeSingle(),
       supabase.from("training_plans").select("title, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo, created_at").eq("user_id", student_id).order("created_at", { ascending: false }).limit(3),
-      supabase.from("exercise_library").select("name, muscle_group, equipment, default_sets, default_reps, level, category, secondary_muscles").limit(500),
+      supabase.from("exercise_library").select("id, name, muscle_group, equipment, default_sets, default_reps, level, category, secondary_muscles, video_id").limit(1000),
       supabase.from("specialist_ai_preferences").select("*").eq("specialist_id", specialistId).maybeSingle(),
     ]);
 
@@ -110,29 +110,28 @@ ${aiPrefs.example_plans && (aiPrefs.example_plans as any[]).length > 0 ? `- Exem
       ? volumeLimits.map(v => `${v.muscle_group}: ${v.min_sets}-${v.max_sets} séries/semana`).join("\n")
       : "Não definidos";
 
-    // Available exercises
-    const exercisesByGroup: Record<string, string[]> = {};
+    // Build exercise lookup map (id -> exercise) and catalog for prompt
+    const exerciseMap = new Map<string, any>();
+    const exerciseNameMap = new Map<string, any>(); // lowercase name -> exercise
+    const exercisesByGroup: Record<string, { id: string; name: string; equipment: string | null }[]> = {};
     for (const e of exerciseLib) {
+      exerciseMap.set(e.id, e);
+      exerciseNameMap.set(e.name.toLowerCase().trim(), e);
       if (!exercisesByGroup[e.muscle_group]) exercisesByGroup[e.muscle_group] = [];
-      if (exercisesByGroup[e.muscle_group].length < 15) {
-        exercisesByGroup[e.muscle_group].push(e.name);
-      }
+      exercisesByGroup[e.muscle_group].push({ id: e.id, name: e.name, equipment: e.equipment });
     }
 
-    // Use custom system prompt if defined, otherwise use default
-    const customSystemPrompt = aiPrefs?.system_prompt?.trim();
-    const systemPrompt = customSystemPrompt
-      ? `${customSystemPrompt}
+    // Anti-hallucination constraint block (shared by both prompt paths)
+    const antiHallucinationRule = `
+⚠️ RESTRIÇÃO ABSOLUTA — CATÁLOGO FECHADO ⚠️
+Estás ESTRITAMENTE PROIBIDO de inventar, traduzir ou sugerir exercícios que NÃO constem no catálogo fornecido abaixo.
+Para CADA exercício no plano, deves:
+1. Copiar o "name" EXATAMENTE como aparece no catálogo (case-sensitive, sem alterações).
+2. Incluir o campo "exercise_id" com o UUID exato correspondente do catálogo.
+Se não encontrares um exercício adequado no catálogo, escolhe a alternativa mais próxima que EXISTA. NUNCA inventes nomes.`;
 
-${specialistStyle}
-
-REGRAS TÉCNICAS OBRIGATÓRIAS:
-1. Use APENAS exercícios da biblioteca disponível (listada abaixo)
-2. Respeite os limites de volume por grupo muscular quando definidos
-3. Considere lesões, limitações e equipamentos disponíveis da anamnese
-4. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
-
-FORMATO DE SAÍDA (JSON):
+    const jsonSchema = `
+FORMATO DE SAÍDA (JSON estrito):
 {
   "title": "Nome do Plano",
   "total_sessions": 50,
@@ -144,46 +143,8 @@ FORMATO DE SAÍDA (JSON):
       "name": "A - Peito e Tríceps",
       "exercises": [
         {
-          "name": "Nome Exato do Exercício (da biblioteca)",
-          "sets": 4,
-          "reps": "8-12",
-          "weight": null,
-          "rest": "90s",
-          "videoId": null,
-          "setsData": [],
-          "freeText": false,
-          "description": "Instruções específicas para este aluno"
-        }
-      ]
-    }
-  ]
-}`
-      : `Você é um assistente de prescrição de treinos de musculação/preparação física. 
-Gere planos de treino profissionais, detalhados e individualizados.
-
-${specialistStyle}
-
-REGRAS IMPORTANTES:
-1. Use APENAS exercícios da biblioteca disponível (listada abaixo)
-2. Respeite os limites de volume por grupo muscular quando definidos
-3. Considere lesões, limitações e equipamentos disponíveis da anamnese
-4. Analise o histórico de treinos e feedback do aluno para progressão adequada
-5. Considere o estado mental (sono, estresse, humor) para ajustar intensidade
-6. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
-
-FORMATO DE SAÍDA (JSON):
-{
-  "title": "Nome do Plano",
-  "total_sessions": 50,
-  "avaliacao_postural": "Texto da avaliação postural baseada nos dados",
-  "pontos_melhoria": "Grupos musculares e aspectos a melhorar",
-  "objetivo_mesociclo": "Objetivo principal deste ciclo",
-  "groups": [
-    {
-      "name": "A - Peito e Tríceps",
-      "exercises": [
-        {
-          "name": "Nome Exato do Exercício (da biblioteca)",
+          "exercise_id": "uuid-do-exercicio-do-catalogo",
+          "name": "Nome Exato do Exercício (copiado do catálogo)",
           "sets": 4,
           "reps": "8-12",
           "weight": null,
@@ -198,6 +159,37 @@ FORMATO DE SAÍDA (JSON):
   ]
 }`;
 
+    const customSystemPrompt = aiPrefs?.system_prompt?.trim();
+    const systemPrompt = customSystemPrompt
+      ? `${customSystemPrompt}
+
+${specialistStyle}
+
+${antiHallucinationRule}
+
+REGRAS TÉCNICAS OBRIGATÓRIAS:
+1. Use APENAS exercícios do catálogo (com exercise_id obrigatório)
+2. Respeite os limites de volume por grupo muscular quando definidos
+3. Considere lesões, limitações e equipamentos disponíveis da anamnese
+4. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
+
+${jsonSchema}`
+      : `Você é um assistente de prescrição de treinos de musculação/preparação física. 
+Gere planos de treino profissionais, detalhados e individualizados.
+
+${specialistStyle}
+
+${antiHallucinationRule}
+
+REGRAS IMPORTANTES:
+1. Use APENAS exercícios do catálogo (com exercise_id obrigatório)
+2. Respeite os limites de volume por grupo muscular quando definidos
+3. Considere lesões, limitações e equipamentos disponíveis da anamnese
+4. Analise o histórico de treinos e feedback do aluno para progressão adequada
+5. Considere o estado mental (sono, estresse, humor) para ajustar intensidade
+6. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
+
+${jsonSchema}`;
     const userPrompt = `Gere um plano de treino personalizado para este aluno:
 
 ## PERFIL DO ALUNO
@@ -247,8 +239,8 @@ ${previousPlans.length > 0
   ? previousPlans.map(p => `- "${p.title}" | Objetivo: ${p.objetivo_mesociclo || "N/A"} | Grupos: ${(p.groups as any[])?.length || 0}`).join("\n")
   : "Nenhum plano anterior"}
 
-## EXERCÍCIOS DISPONÍVEIS NA BIBLIOTECA (use APENAS estes nomes)
-${Object.entries(exercisesByGroup).map(([group, exs]) => `### ${group}\n${exs.join(", ")}`).join("\n\n")}
+## CATÁLOGO DE EXERCÍCIOS (use APENAS estes — inclua o exercise_id no output)
+${Object.entries(exercisesByGroup).map(([group, exs]) => `### ${group}\n${exs.map(e => `- [${e.id}] ${e.name}${e.equipment ? ` (${e.equipment})` : ""}`).join("\n")}`).join("\n\n")}
 
 ${objective_hint ? `## INSTRUÇÃO ADICIONAL DO ESPECIALISTA\n${objective_hint}` : ""}
 
@@ -356,7 +348,67 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
       }
     }
 
-    return new Response(JSON.stringify({ plan: planJson }), {
+    // POST-GENERATION VALIDATION: resolve exercise_ids and fix hallucinated names
+    let hallucinated = 0;
+    let resolved = 0;
+    if (planJson.groups && Array.isArray(planJson.groups)) {
+      for (const group of planJson.groups) {
+        if (!group.exercises || !Array.isArray(group.exercises)) continue;
+        for (const ex of group.exercises) {
+          // Case 1: exercise_id provided — validate it exists
+          if (ex.exercise_id && exerciseMap.has(ex.exercise_id)) {
+            const real = exerciseMap.get(ex.exercise_id)!;
+            ex.name = real.name; // force correct name
+            ex.videoId = real.video_id || null;
+            resolved++;
+            continue;
+          }
+
+          // Case 2: try to match by name (fuzzy)
+          const nameKey = (ex.name || "").toLowerCase().trim();
+          if (exerciseNameMap.has(nameKey)) {
+            const real = exerciseNameMap.get(nameKey)!;
+            ex.exercise_id = real.id;
+            ex.name = real.name;
+            ex.videoId = real.video_id || null;
+            resolved++;
+            continue;
+          }
+
+          // Case 3: partial match — find best candidate
+          let bestMatch: any = null;
+          let bestScore = 0;
+          for (const [libName, libEx] of exerciseNameMap.entries()) {
+            // Simple substring matching
+            if (nameKey.includes(libName) || libName.includes(nameKey)) {
+              const score = libName.length;
+              if (score > bestScore) {
+                bestScore = score;
+                bestMatch = libEx;
+              }
+            }
+          }
+
+          if (bestMatch) {
+            console.warn(`Fuzzy matched "${ex.name}" -> "${bestMatch.name}" (${bestMatch.id})`);
+            ex.exercise_id = bestMatch.id;
+            ex.name = bestMatch.name;
+            ex.videoId = bestMatch.video_id || null;
+            resolved++;
+          } else {
+            // Hallucinated exercise — flag it but don't remove
+            console.warn(`HALLUCINATED exercise: "${ex.name}" — no match in library`);
+            ex.exercise_id = null;
+            ex.freeText = true; // mark as free text so frontend knows
+            hallucinated++;
+          }
+        }
+      }
+    }
+
+    console.log(`Exercise validation: ${resolved} resolved, ${hallucinated} hallucinated out of ${resolved + hallucinated} total`);
+
+    return new Response(JSON.stringify({ plan: planJson, _meta: { resolved, hallucinated } }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
