@@ -49,7 +49,6 @@ serve(async (req) => {
       trainingPlansRes,
       exerciseLibRes,
       aiPrefsRes,
-      aiPrefsRes,
       likedLogsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("nome, peso, altura, sexo, nascimento, meta_peso, body_fat").eq("id", student_id).single(),
