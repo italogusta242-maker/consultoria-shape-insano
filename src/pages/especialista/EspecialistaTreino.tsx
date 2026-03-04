@@ -131,7 +131,12 @@ const EspecialistaTreino = () => {
         studentName: nameMap.get(p.user_id) ?? "Aluno",
         totalSessions: p.total_sessions,
         groupsCount: Array.isArray(p.groups) ? p.groups.length : 0,
-        groups: Array.isArray(p.groups) ? p.groups : [],
+        groups: Array.isArray(p.groups) ? (p.groups as any[]).map((g: any) => ({
+          ...g,
+          exercises: Array.isArray(g.exercises) 
+            ? [...g.exercises].sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+            : [],
+        })) : [],
       }));
     },
     enabled: !!user && studentIds.length > 0,

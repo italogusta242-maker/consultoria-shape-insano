@@ -467,10 +467,12 @@ const Treinos = () => {
   const workoutGroups: WorkoutGroup[] = plan?.groups
     ? (plan.groups as unknown as WorkoutGroup[]).map(g => ({
       ...g,
-      exercises: g.exercises.map(ex => ({
-        ...ex,
-        videoId: ex.videoId || findVideoByKeywords(ex.name) || undefined,
-      })),
+      exercises: [...g.exercises]
+        .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+        .map(ex => ({
+          ...ex,
+          videoId: ex.videoId || findVideoByKeywords(ex.name) || undefined,
+        })),
     }))
     : fallbackGroups;
   const totalSessions = plan?.total_sessions ?? 50;

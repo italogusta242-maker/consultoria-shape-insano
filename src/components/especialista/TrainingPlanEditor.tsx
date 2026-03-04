@@ -296,12 +296,18 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       if (!studentId) throw new Error("Selecione um aluno");
       if (!objetivoMesociclo.trim()) throw new Error("Preencha o objetivo do mesociclo");
 
+      // Inject order_index to preserve exercise order
+      const groupsWithOrder = groups.map(g => ({
+        ...g,
+        exercises: g.exercises.map((ex, idx) => ({ ...ex, order_index: idx })),
+      }));
+
       if (isEditing && editingPlan) {
         const { error } = await supabase
           .from("training_plans")
           .update({
             title,
-            groups: groups as any,
+            groups: groupsWithOrder as any,
             total_sessions: totalSessions,
             specialist_id: user.id,
             avaliacao_postural: avaliacaoPostural || null,
@@ -323,7 +329,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           user_id: studentId,
           specialist_id: user.id,
           title,
-          groups: groups as any,
+          groups: groupsWithOrder as any,
           total_sessions: totalSessions,
           avaliacao_postural: avaliacaoPostural || null,
           pontos_melhoria: pontosMelhoria || null,
