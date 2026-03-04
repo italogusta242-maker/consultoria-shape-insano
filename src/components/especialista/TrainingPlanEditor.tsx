@@ -454,6 +454,41 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
                 </div>
               </div>
 
+              {/* RLHF Feedback Banner */}
+              {aiLogId && !aiFeedbackGiven && (
+                <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-purple-400" />
+                    <span className="text-xs text-purple-300 font-medium">O treino gerado pela IA ficou bom?</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendAiFeedback("like")}
+                      className="gap-1 border-green-500/30 text-green-400 hover:bg-green-500/10 h-8"
+                    >
+                      👍 Bom
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendAiFeedback("dislike")}
+                      className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 h-8"
+                    >
+                      👎 Ajustar
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {aiFeedbackGiven && (
+                <div className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-2.5 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {aiFeedbackGiven === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado. Vamos melhorar!"}
+                  </span>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
@@ -464,31 +499,6 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
                   {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                   {aiGenerating ? "Gerando..." : "Gerar com IA"}
                 </Button>
-                {aiLogId && !aiFeedbackGiven && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => sendAiFeedback("like")}
-                      className="gap-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
-                    >
-                      👍 Bom
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => sendAiFeedback("dislike")}
-                      className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
-                    >
-                      👎 Ajustar
-                    </Button>
-                  </>
-                )}
-                {aiFeedbackGiven && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    {aiFeedbackGiven === "like" ? "👍" : "👎"} Feedback enviado
-                  </span>
-                )}
                 <Button
                   variant="outline"
                   size="sm"
