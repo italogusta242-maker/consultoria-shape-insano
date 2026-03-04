@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Brain, Sparkles, Dumbbell, Target, Repeat, BookOpen, Upload, FileText, Trash2, ScrollText } from "lucide-react";
+import { Save, Brain, Sparkles, Dumbbell, Target, Repeat, BookOpen, Upload, FileText, Trash2, ScrollText, Database, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const FIELDS = [
@@ -57,6 +57,30 @@ const FIELDS = [
   },
 ] as const;
 
+function KnowledgeBaseStats({ specialistId }: { specialistId?: string }) {
+  const { data: stats } = useQuery({
+    queryKey: ["kb-stats", specialistId],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("ai_knowledge_base" as any)
+        .select("*", { count: "exact", head: true })
+        .eq("specialist_id", specialistId!);
+      return count ?? 0;
+    },
+    enabled: !!specialistId,
+  });
+
+  if (!stats) return null;
+
+  return (
+    <div className="flex items-center gap-2 p-2 rounded-lg bg-accent/10 border border-accent/20">
+      <Database size={14} className="text-accent" />
+      <span className="text-xs text-foreground font-medium">{stats} blocos vetorizados</span>
+      <span className="text-[10px] text-muted-foreground">na base de conhecimento</span>
+    </div>
+  );
+}
+
 export default function EspecialistaIA() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -87,6 +111,8 @@ export default function EspecialistaIA() {
   });
 
   const [uploading, setUploading] = useState(false);
+  const [processingKB, setProcessingKB] = useState(false);
+  const textFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (prefs) {
@@ -238,13 +264,82 @@ export default function EspecialistaIA() {
         </Card>
       </motion.div>
 
-      {/* Knowledge Base PDF Upload */}
+      {/* Knowledge Base RAG Upload */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
         <Card className="border-accent/30 bg-[hsl(var(--glass-bg))]">
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="flex items-center gap-2 text-sm font-medium">
-              <FileText size={16} className="text-accent" />
-              Base de Conhecimento (PDF)
+              <Database size={16} className="text-accent" />
+              Base de Conhecimento (RAG)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-[10px] text-muted-foreground mb-3">
+              Envie um arquivo TXT ou MD com seu material de referência (livro, protocolo, apostila). 
+              O sistema vai dividir em blocos, vetorizar e buscar automaticamente os trechos mais relevantes ao gerar treinos.
+            </p>
+
+            <KnowledgeBaseStats specialistId={user?.id} />
+
+            <input
+              ref={textFileInputRef}
+              type="file"
+              accept=".txt,.md,.text"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) {
+                  toast.error("O arquivo deve ter no máximo 5MB.");
+                  return;
+                }
+                setProcessingKB(true);
+                try {
+                  const content = await file.text();
+                  const { data, error } = await supabase.functions.invoke("process-knowledge-document", {
+                    body: { content, clear_existing: true },
+                  });
+                  if (error) throw error;
+                  if (data?.error) throw new Error(data.error);
+                  toast.success(`Base de conhecimento processada! ${data.chunks_processed} blocos vetorizados.`);
+                  queryClient.invalidateQueries({ queryKey: ["kb-stats"] });
+                } catch (err: any) {
+                  toast.error(err.message || "Erro ao processar documento");
+                } finally {
+                  setProcessingKB(false);
+                  if (textFileInputRef.current) textFileInputRef.current.value = "";
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              className="w-full gap-2 border-dashed border-[hsl(var(--glass-border))] mt-3"
+              onClick={() => textFileInputRef.current?.click()}
+              disabled={processingKB}
+            >
+              {processingKB ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Processando... (pode levar até 2 min)
+                </>
+              ) : (
+                <>
+                  <Upload size={16} />
+                  Enviar arquivo TXT/MD
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Legacy PDF Upload */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <Card className="border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))]">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <FileText size={16} className="text-muted-foreground" />
+              <span className="text-muted-foreground">PDF de Referência (legado)</span>
               {form.knowledge_base_pdf_path && (
                 <span className="text-[10px] text-emerald-400 ml-auto">✓ Enviado</span>
               )}
@@ -252,15 +347,15 @@ export default function EspecialistaIA() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <p className="text-[10px] text-muted-foreground mb-3">
-              Envie um PDF de referência (livro, protocolo, apostila). A IA vai ler o conteúdo e usar como base para gerar treinos.
+              PDF enviado diretamente ao Gemini. Funciona, mas o RAG acima é mais preciso e eficiente.
             </p>
 
             {form.knowledge_base_pdf_path ? (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-accent/10 border border-accent/20">
-                <FileText size={20} className="text-accent shrink-0" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
+                <FileText size={20} className="text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-foreground truncate">knowledge-base.pdf</p>
-                  <p className="text-[10px] text-muted-foreground">PDF ativo — será usado na geração</p>
+                  <p className="text-[10px] text-muted-foreground">PDF ativo</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -282,11 +377,12 @@ export default function EspecialistaIA() {
                 />
                 <Button
                   variant="outline"
-                  className="w-full gap-2 border-dashed border-[hsl(var(--glass-border))]"
+                  size="sm"
+                  className="gap-2 border-dashed border-[hsl(var(--glass-border))]"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                 >
-                  <Upload size={16} />
+                  <Upload size={14} />
                   {uploading ? "Enviando..." : "Selecionar PDF"}
                 </Button>
               </div>
