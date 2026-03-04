@@ -1134,10 +1134,12 @@ export type Database = {
           example_plans: Json | null
           exercise_preferences: string | null
           id: string
+          knowledge_base_pdf_path: string | null
           notes: string | null
           periodization_style: string | null
           preferred_methods: string | null
           specialist_id: string
+          system_prompt: string | null
           training_philosophy: string | null
           updated_at: string
           volume_preferences: string | null
@@ -1147,10 +1149,12 @@ export type Database = {
           example_plans?: Json | null
           exercise_preferences?: string | null
           id?: string
+          knowledge_base_pdf_path?: string | null
           notes?: string | null
           periodization_style?: string | null
           preferred_methods?: string | null
           specialist_id: string
+          system_prompt?: string | null
           training_philosophy?: string | null
           updated_at?: string
           volume_preferences?: string | null
@@ -1160,10 +1164,12 @@ export type Database = {
           example_plans?: Json | null
           exercise_preferences?: string | null
           id?: string
+          knowledge_base_pdf_path?: string | null
           notes?: string | null
           periodization_style?: string | null
           preferred_methods?: string | null
           specialist_id?: string
+          system_prompt?: string | null
           training_philosophy?: string | null
           updated_at?: string
           volume_preferences?: string | null
