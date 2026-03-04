@@ -19,9 +19,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } },
     });
+    // Service role client for storage downloads
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
@@ -67,7 +70,7 @@ serve(async (req) => {
     const flame = flameRes.data;
     const previousPlans = trainingPlansRes.data ?? [];
     const exerciseLib = exerciseLibRes.data ?? [];
-    const aiPrefs = aiPrefsRes.data;
+    const aiPrefs = aiPrefsRes.data as any;
 
     // Compute analytics
     const avgEffort = workouts.length > 0
@@ -108,7 +111,6 @@ ${aiPrefs.example_plans && (aiPrefs.example_plans as any[]).length > 0 ? `- Exem
       : "Não definidos";
 
     // Available exercises
-    const muscleGroups = [...new Set(exerciseLib.map(e => e.muscle_group))];
     const exercisesByGroup: Record<string, string[]> = {};
     for (const e of exerciseLib) {
       if (!exercisesByGroup[e.muscle_group]) exercisesByGroup[e.muscle_group] = [];
@@ -117,7 +119,46 @@ ${aiPrefs.example_plans && (aiPrefs.example_plans as any[]).length > 0 ? `- Exem
       }
     }
 
-    const systemPrompt = `Você é um assistente de prescrição de treinos de musculação/preparação física. 
+    // Use custom system prompt if defined, otherwise use default
+    const customSystemPrompt = aiPrefs?.system_prompt?.trim();
+    const systemPrompt = customSystemPrompt
+      ? `${customSystemPrompt}
+
+${specialistStyle}
+
+REGRAS TÉCNICAS OBRIGATÓRIAS:
+1. Use APENAS exercícios da biblioteca disponível (listada abaixo)
+2. Respeite os limites de volume por grupo muscular quando definidos
+3. Considere lesões, limitações e equipamentos disponíveis da anamnese
+4. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
+
+FORMATO DE SAÍDA (JSON):
+{
+  "title": "Nome do Plano",
+  "total_sessions": 50,
+  "avaliacao_postural": "Texto da avaliação postural baseada nos dados",
+  "pontos_melhoria": "Grupos musculares e aspectos a melhorar",
+  "objetivo_mesociclo": "Objetivo principal deste ciclo",
+  "groups": [
+    {
+      "name": "A - Peito e Tríceps",
+      "exercises": [
+        {
+          "name": "Nome Exato do Exercício (da biblioteca)",
+          "sets": 4,
+          "reps": "8-12",
+          "weight": null,
+          "rest": "90s",
+          "videoId": null,
+          "setsData": [],
+          "freeText": false,
+          "description": "Instruções específicas para este aluno"
+        }
+      ]
+    }
+  ]
+}`
+      : `Você é um assistente de prescrição de treinos de musculação/preparação física. 
 Gere planos de treino profissionais, detalhados e individualizados.
 
 ${specialistStyle}
@@ -213,6 +254,44 @@ ${objective_hint ? `## INSTRUÇÃO ADICIONAL DO ESPECIALISTA\n${objective_hint}`
 
 Gere o plano agora. Responda APENAS com o JSON válido.`;
 
+    // Build Gemini content parts - include PDF if available
+    const contentParts: any[] = [];
+
+    // Try to download knowledge base PDF
+    const pdfPath = aiPrefs?.knowledge_base_pdf_path;
+    if (pdfPath) {
+      try {
+        const { data: pdfData, error: pdfError } = await supabaseAdmin.storage
+          .from("ai-knowledge")
+          .download(pdfPath);
+
+        if (!pdfError && pdfData) {
+          const arrayBuffer = await pdfData.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const base64 = btoa(binary);
+
+          contentParts.push({
+            inline_data: {
+              mime_type: "application/pdf",
+              data: base64,
+            },
+          });
+          console.log("Knowledge base PDF injected successfully");
+        } else {
+          console.warn("Could not download knowledge PDF:", pdfError?.message);
+        }
+      } catch (pdfErr) {
+        console.warn("PDF download failed, proceeding without it:", pdfErr);
+      }
+    }
+
+    // Add text prompt
+    contentParts.push({ text: systemPrompt + "\n\n" + userPrompt });
+
     // Call Gemini API
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
@@ -221,7 +300,7 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
-            { role: "user", parts: [{ text: systemPrompt + "\n\n" + userPrompt }] },
+            { role: "user", parts: contentParts },
           ],
           generationConfig: {
             temperature: 0.7,
@@ -256,15 +335,12 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
     // Parse JSON - handle markdown code blocks and extra text
     let planJson;
     try {
-      // Try direct parse first (responseMimeType=application/json should return clean JSON)
       planJson = JSON.parse(rawText);
     } catch {
       try {
-        // Strip markdown fences
         const cleaned = rawText.replace(/```(?:json)?\n?/g, "").replace(/```\n?/g, "").trim();
         planJson = JSON.parse(cleaned);
       } catch {
-        // Try to extract JSON object from mixed text
         const jsonMatch = rawText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           try {
