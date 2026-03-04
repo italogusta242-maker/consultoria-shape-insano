@@ -175,35 +175,28 @@ FORMATO DE SAÍDA (JSON estrito):
   ]
 }`;
 
+    // Build system instruction: env var > specialist custom prompt > default
+    const envSystemPrompt = Deno.env.get("SPECIALIST_SYSTEM_PROMPT")?.trim();
     const customSystemPrompt = aiPrefs?.system_prompt?.trim();
-    const systemPrompt = customSystemPrompt
-      ? `${customSystemPrompt}
+
+    const baseSystemPrompt = envSystemPrompt
+      || customSystemPrompt
+      || `Você é um assistente de prescrição de treinos de musculação/preparação física. 
+Gere planos de treino profissionais, detalhados e individualizados.`;
+
+    const systemInstruction = `${baseSystemPrompt}
 
 ${specialistStyle}
 
 ${antiHallucinationRule}
 
 REGRAS TÉCNICAS OBRIGATÓRIAS:
-1. Use APENAS exercícios do catálogo (com exercise_id obrigatório)
-2. Respeite os limites de volume por grupo muscular quando definidos
-3. Considere lesões, limitações e equipamentos disponíveis da anamnese
-4. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
-
-${jsonSchema}`
-      : `Você é um assistente de prescrição de treinos de musculação/preparação física. 
-Gere planos de treino profissionais, detalhados e individualizados.
-
-${specialistStyle}
-
-${antiHallucinationRule}
-
-REGRAS IMPORTANTES:
-1. Use APENAS exercícios do catálogo (com exercise_id obrigatório)
-2. Respeite os limites de volume por grupo muscular quando definidos
-3. Considere lesões, limitações e equipamentos disponíveis da anamnese
-4. Analise o histórico de treinos e feedback do aluno para progressão adequada
-5. Considere o estado mental (sono, estresse, humor) para ajustar intensidade
-6. Retorne APENAS o JSON válido no formato especificado, sem texto adicional
+1. Use APENAS exercícios do catálogo (com exercise_id obrigatório).
+2. Respeite os limites de volume por grupo muscular quando definidos.
+3. Considere lesões, limitações e equipamentos disponíveis da anamnese.
+4. Analise o histórico de treinos e feedback do aluno para progressão adequada.
+5. Considere o estado mental (sono, estresse, humor) para ajustar intensidade.
+6. Retorne APENAS o JSON válido no formato especificado, sem texto adicional.
 
 ${jsonSchema}`;
     const userPrompt = `Gere um plano de treino personalizado para este aluno:
@@ -353,15 +346,18 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
     }
 
     // Add text prompt with RAG context injected
-    contentParts.push({ text: systemPrompt + ragContext + rlhfContext + "\n\n" + userPrompt });
+    contentParts.push({ text: ragContext + rlhfContext + "\n\n" + userPrompt });
 
-    // Call Gemini API
+    // Call Gemini API with systemInstruction
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemInstruction }],
+          },
           contents: [
             { role: "user", parts: contentParts },
           ],
@@ -417,6 +413,41 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
           throw new Error("Falha ao interpretar resposta da IA. Tente novamente.");
         }
       }
+    }
+
+    // MAP etapa-based schema to frontend format if needed
+    if (planJson.etapa_5_treino && !planJson.groups) {
+      console.log("Mapping etapa-based schema to frontend format");
+      planJson.avaliacao_postural = planJson.etapa_2_analise_postural || planJson.avaliacao_postural || null;
+      planJson.pontos_melhoria = Array.isArray(planJson.etapa_3_pontos_melhoria)
+        ? planJson.etapa_3_pontos_melhoria.join("; ")
+        : planJson.pontos_melhoria || null;
+      planJson.objetivo_mesociclo = planJson.etapa_4_mesociclo?.diretriz || planJson.objetivo_mesociclo || null;
+      planJson.title = planJson.title || `Mesociclo ${planJson.etapa_4_mesociclo?.duracao || "4 semanas"}`;
+      planJson.total_sessions = planJson.total_sessions || 50;
+
+      planJson.groups = planJson.etapa_5_treino.map((dia: any) => ({
+        name: `${dia.dia} - ${dia.foco}`,
+        exercises: (dia.exercicios || []).map((ex: any) => ({
+          exercise_id: ex.exercise_id || null,
+          name: ex.nome || ex.name || "Exercício",
+          sets: typeof ex.sets === "number" ? ex.sets : parseInt(String(ex.sets).match(/\d+/)?.[0] || "3"),
+          reps: ex.reps || "8-12",
+          weight: null,
+          rest: ex.descanso || ex.rest || "90s",
+          videoId: null,
+          setsData: [],
+          freeText: false,
+          description: ex.observacao_metodologica || ex.description || "",
+        })),
+      }));
+
+      // Clean up etapa fields
+      delete planJson.etapa_1_analise_anamnese;
+      delete planJson.etapa_2_analise_postural;
+      delete planJson.etapa_3_pontos_melhoria;
+      delete planJson.etapa_4_mesociclo;
+      delete planJson.etapa_5_treino;
     }
 
     // POST-GENERATION VALIDATION: resolve exercise_ids and fix hallucinated names
