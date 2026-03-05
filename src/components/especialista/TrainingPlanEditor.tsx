@@ -163,15 +163,34 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     }
   };
 
-  const sendAiFeedback = async (feedback: "like" | "dislike") => {
+  const [dislikeModalOpen, setDislikeModalOpen] = useState(false);
+  const [dislikeReason, setDislikeReason] = useState("");
+  const [dislikeSubmitting, setDislikeSubmitting] = useState(false);
+
+  const sendAiFeedback = async (feedback: "like" | "dislike", reason?: string) => {
     if (!aiLogId) return;
     setAiFeedbackGiven(feedback);
     try {
-      await supabase.from("ai_generation_logs").update({ feedback }).eq("id", aiLogId);
-      toast.success(feedback === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado.");
+      const updatePayload: Record<string, string> = { feedback };
+      if (reason) updatePayload.dislike_reason = reason;
+      await supabase.from("ai_generation_logs").update(updatePayload).eq("id", aiLogId);
+      toast.success(feedback === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado. Vamos melhorar!");
     } catch (err) {
       console.error("Feedback error:", err);
     }
+  };
+
+  const handleDislikeClick = () => {
+    setDislikeReason("");
+    setDislikeModalOpen(true);
+  };
+
+  const handleDislikeSubmit = async () => {
+    setDislikeSubmitting(true);
+    await sendAiFeedback("dislike", dislikeReason.trim() || undefined);
+    setDislikeModalOpen(false);
+    setDislikeReason("");
+    setDislikeSubmitting(false);
   };
 
   // Fetch exercise library for GIF previews
@@ -464,7 +483,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => sendAiFeedback("dislike")}
+                      onClick={handleDislikeClick}
                       className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 h-8"
                     >
                       👎 Ajustar
@@ -825,6 +844,35 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           setObjetivoMesociclo(v.objetivo_mesociclo || "");
         }}
       />
+
+      {/* Dislike Reason Modal */}
+      <Dialog open={dislikeModalOpen} onOpenChange={setDislikeModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>O que deu errado neste treino?</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={dislikeReason}
+            onChange={(e) => setDislikeReason(e.target.value)}
+            placeholder="Ex: Volume muito alto para posterior, faltou exercício de core, progressão inadequada..."
+            className="min-h-[120px] resize-none"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setDislikeModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleDislikeSubmit}
+              disabled={dislikeSubmitting}
+              className="gap-1.5"
+            >
+              {dislikeSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
+              Enviar Feedback
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
