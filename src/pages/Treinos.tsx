@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SetInputPicker from "@/components/training/SetInputPicker";
 import { Progress } from "@/components/ui/progress";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from "@/components/ui/drawer";
+
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -389,8 +389,6 @@ const Treinos = () => {
   const { shareWorkout, isSharing } = useWorkoutShare();
   const { state: flameState, streak } = useFlameState();
 
-  // Swap exercise state
-  const [swapData, setSwapData] = useState<{ exIdx: number; oldName: string; pattern: string | null } | null>(null);
 
   // Timer computed from startedAt (survives tab changes)
   const [timer, setTimer] = useState(() => {
@@ -1183,19 +1181,6 @@ const Treinos = () => {
                     {!isFreeText && <p className="text-xs text-muted-foreground">{doneCount}/{ex.setsData.length} séries</p>}
                   </div>
                   
-                  {!allDone && !isFreeText && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Open swap drawer -> find movement pattern
-                        const libData = exerciseLibMap.get(ex.name.toLowerCase());
-                        setSwapData({ exIdx, oldName: ex.name, pattern: libData?.movement_pattern || null });
-                      }}
-                      className="w-10 h-10 rounded-lg bg-secondary/80 border border-border/50 flex items-center justify-center shrink-0 hover:border-primary/50 transition-colors"
-                    >
-                      <RefreshCw size={14} className="text-primary" />
-                    </button>
-                  )}
 
                   <div className={`w-7 h-7 rounded-lg bg-secondary/80 border border-border/50 flex items-center justify-center transition-transform duration-300 shrink-0 ${isExpanded ? "rotate-180" : ""}`}>
                     <ChevronDown size={14} className="text-muted-foreground" />
@@ -1434,64 +1419,6 @@ const Treinos = () => {
             }}
           />
         )}
-        
-        {/* Swap Exercise Drawer */}
-        <Drawer open={!!swapData} onOpenChange={(v) => !v && setSwapData(null)}>
-          <DrawerContent className="bg-card border-border">
-            <DrawerHeader>
-              <DrawerTitle className="font-cinzel text-center text-foreground">Trocar Exercício</DrawerTitle>
-            </DrawerHeader>
-            <div className="p-4 pb-12 overflow-y-auto max-h-[60vh]">
-              {!swapData?.pattern ? (
-                <div className="text-center text-muted-foreground py-6 flex flex-col items-center">
-                  <AlertTriangle size={32} className="mb-2 text-muted-foreground/50" />
-                  <p className="text-sm">Nenhuma equivalência configurada para este exercício.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground mb-4">Selecione uma alternativa focada no mesmo padrão de movimento.</p>
-                  {exerciseLibrary
-                    .filter(e => e.movement_pattern === swapData.pattern && e.name !== swapData.oldName)
-                    .map((sub, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          if (swapData) {
-                            const updated = [...exercises];
-                            const ex = updated[swapData.exIdx];
-                            ex.name = sub.name;
-                            (ex as any).gif_url = sub.gif_url;
-                            (ex as any).instructions = sub.instructions;
-                            // Attempt to preserve sets/reps logic but reset actuals to allow clean tracking if desired (or keep them)
-                            setExercises(updated);
-                            toast.success(`Substituído por ${sub.name}!`, { icon: "🔄" });
-                            setSwapData(null);
-                          }
-                        }}
-                        className="w-full text-left bg-secondary/50 hover:bg-secondary border border-border rounded-xl p-3 flex items-center gap-3 transition-colors"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0">
-                          {sub.gif_url ? (
-                            <img src={sub.gif_url} alt="" className="w-8 h-8 object-contain rounded-md" />
-                          ) : (
-                            <Dumbbell size={16} className="text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-foreground">{sub.name}</p>
-                          <p className="text-xs text-muted-foreground">{sub.equipment || "Padrão"}</p>
-                        </div>
-                        <ChevronDown size={14} className="text-muted-foreground -rotate-90" />
-                      </button>
-                    ))}
-                    {exerciseLibrary.filter(e => e.movement_pattern === swapData.pattern && e.name !== swapData.oldName).length === 0 && (
-                      <p className="text-xs text-center text-muted-foreground">Nenhuma alternativa encontrada.</p>
-                    )}
-                </div>
-              )}
-            </div>
-          </DrawerContent>
-        </Drawer>
       </div>
     );
   }
