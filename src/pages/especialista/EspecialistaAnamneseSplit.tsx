@@ -263,13 +263,18 @@ const EspecialistaAnamneseSplit = () => {
     return "—";
   };
 
-  /** Combines a main field with its "outro" counterpart */
+  /** Combines a main field with its "outro/desc" counterpart */
   const extraValWithOther = (mainKey: string, otherKey: string, fallbackField?: string): string => {
     const main = extraVal(mainKey, fallbackField);
     const other = extras[otherKey];
     const otherStr = other != null && other !== "" ? String(other) : "";
 
-    if (main !== "—" && /outro/i.test(main) && otherStr) {
+    if (main !== "—" && otherStr) {
+      // If the main string is literally just "Outros" or "Outras" or "Sim", 
+      // replace it or format it nicely. Otherwise, append it.
+      if (/^(outr[oa]s?|sim)$/i.test(main.trim())) {
+        return otherStr; // Display just the specification
+      }
       return `${main}: ${otherStr}`;
     }
     if (main === "—" && otherStr) return otherStr;
@@ -304,11 +309,10 @@ const EspecialistaAnamneseSplit = () => {
                 <button
                   key={a.id}
                   onClick={() => setSelectedAnamneseIdx(idx)}
-                  className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                    isSelected
-                      ? "bg-primary text-primary-foreground shadow-md"
-                      : "bg-card border border-border text-foreground/80 hover:text-foreground hover:border-primary/50"
-                  }`}
+                  className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold transition-colors ${isSelected
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "bg-card border border-border text-foreground/80 hover:text-foreground hover:border-primary/50"
+                    }`}
                 >
                   {label}
                   {idx === 0 && <span className="ml-1 text-[11px] font-normal opacity-80">(atual)</span>}
@@ -587,7 +591,7 @@ const EspecialistaAnamneseSplit = () => {
             open={true}
             onClose={handlePlanCreated}
             students={studentOptions}
-            editingPlan={editingPlan ?? (existingDietPlan ? {
+            editingPlan={editingPlan || (existingDietPlan ? {
               id: existingDietPlan.id,
               title: existingDietPlan.title,
               user_id: studentId!,
@@ -601,12 +605,15 @@ const EspecialistaAnamneseSplit = () => {
             open={true}
             onClose={handlePlanCreated}
             students={studentOptions}
-            editingPlan={editingPlan ?? (existingTrainingPlan ? {
+            editingPlan={editingPlan || (existingTrainingPlan ? {
               id: existingTrainingPlan.id,
               title: existingTrainingPlan.title,
               user_id: studentId!,
               groups: Array.isArray(existingTrainingPlan.groups) ? existingTrainingPlan.groups : [],
               total_sessions: existingTrainingPlan.total_sessions,
+              avaliacao_postural: existingTrainingPlan.avaliacao_postural,
+              pontos_melhoria: existingTrainingPlan.pontos_melhoria,
+              objetivo_mesociclo: existingTrainingPlan.objetivo_mesociclo,
             } : null)}
             embedded
             preSelectedStudent={studentId}

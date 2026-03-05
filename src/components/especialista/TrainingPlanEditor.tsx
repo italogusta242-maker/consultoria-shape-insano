@@ -92,14 +92,11 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
-  // Initialize store when opening (only if store is empty for this student)
+  // Initialize store when opening
   useEffect(() => {
     if (!open || !selectedStudent) return;
 
-    // If store already has data for this student, it's a remount — keep the data intact
-    const existing = getDraft(selectedStudent);
-    if (existing && existing.groups.length > 0) return;
-
+    // If we are editing an existing plan, force the store to sync with DB data
     if (editingPlan) {
       setDraft(selectedStudent, {
         title: editingPlan.title,
@@ -109,16 +106,22 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         pontosMelhoria: editingPlan.pontos_melhoria || "",
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
       });
-    } else {
-      setDraft(selectedStudent, {
-        title: "Plano Personalizado",
-        totalSessions: 50,
-        groups: [{ name: "A - Treino A", exercises: [] }],
-        avaliacaoPostural: "",
-        pontosMelhoria: "",
-        objetivoMesociclo: "",
-      });
+      return;
     }
+
+    // If we are creating a new plan, check if there's already a draft
+    const existing = getDraft(selectedStudent);
+    if (existing && existing.groups.length > 0) return;
+
+    // Otherwise, create an empty draft
+    setDraft(selectedStudent, {
+      title: "Plano Personalizado",
+      totalSessions: 50,
+      groups: [{ name: "A - Treino A", exercises: [] }],
+      avaliacaoPostural: "",
+      pontosMelhoria: "",
+      objetivoMesociclo: "",
+    });
   }, [open, selectedStudent, editingPlan]);
 
   const generateWithAI = async () => {
@@ -367,6 +370,14 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         });
         if (error) throw error;
       }
+
+      // Notificar o aluno
+      await supabase.from("notifications").insert({
+        user_id: studentId,
+        title: isEditing ? "Treino Atualizado" : "Novo Treino Disponível",
+        message: isEditing ? "Seu especialista revisou e atualizou seu treino." : "Seu especialista enviou um novo plano de treino para você!",
+        type: "system",
+      });
     },
     onSuccess: () => {
       clearDraft(selectedStudent);
@@ -396,345 +407,345 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
 
       <ScrollArea className={embedded ? "flex-1" : "h-[calc(90vh-140px)]"}>
         <div className={cn("space-y-5 pb-6", embedded ? "p-4" : "px-6")}>
-              {/* Student + Title */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Aluno</label>
-                  <Select value={selectedStudent} onValueChange={setSelectedStudent} disabled={isEditing}>
-                    <SelectTrigger className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]">
-                      <SelectValue placeholder="Selecione o aluno" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Título do Plano</label>
-                  <Input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
-                  />
-                </div>
-              </div>
-
-              {/* Total sessions */}
-              <div className="max-w-[200px]">
-                <label className="text-xs text-muted-foreground mb-1 block">Total de Sessões</label>
-                <Input
-                  type="number"
-                  value={totalSessions}
-                  onChange={(e) => setTotalSessions(Number(e.target.value))}
-                  className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
-                />
-              </div>
-
-              {/* Análise do Especialista */}
-              <div className="space-y-3 rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-4">
-                <p className="text-xs font-semibold text-foreground font-cinzel">📋 Análise do Especialista</p>
-                <div>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">Avaliação Postural</label>
-                  <Textarea
-                    value={avaliacaoPostural}
-                    onChange={(e) => setAvaliacaoPostural(e.target.value)}
-                    placeholder="Ex: Leve depressão de ombros, encurtamento de isquiotibiais..."
-                    className="min-h-[60px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">Pontos de Melhoria</label>
-                  <Textarea
-                    value={pontosMelhoria}
-                    onChange={(e) => setPontosMelhoria(e.target.value)}
-                    placeholder="Ex: Ênfase em abdômen, dorsais, peitorais..."
-                    className="min-h-[60px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-muted-foreground mb-1 block">Objetivo do Mesociclo <span className="text-primary">*</span></label>
-                  <Textarea
-                    value={objetivoMesociclo}
-                    onChange={(e) => setObjetivoMesociclo(e.target.value)}
-                    placeholder="Ex: Desenvolvimento dos peitorais, fortalecimento do CORE..."
-                    className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* RLHF Feedback Banner */}
-              {aiLogId && !aiFeedbackGiven && (
-                <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="flex items-center gap-2">
-                    <Sparkles size={16} className="text-purple-400" />
-                    <span className="text-xs text-purple-300 font-medium">O treino gerado pela IA ficou bom?</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => sendAiFeedback("like")}
-                      className="gap-1 border-green-500/30 text-green-400 hover:bg-green-500/10 h-8"
-                    >
-                      👍 Bom
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleDislikeClick}
-                      className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 h-8"
-                    >
-                      👎 Ajustar
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {aiFeedbackGiven && (
-                <div className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-2.5 flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {aiFeedbackGiven === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado. Vamos melhorar!"}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  onClick={generateWithAI}
-                  disabled={aiGenerating || !selectedStudent}
-                  className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
-                >
-                  {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {aiGenerating ? "Gerando..." : "Gerar com IA"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTemplateManagerOpen(true)}
-                  className="gap-1.5 border-[hsl(var(--glass-border))]"
-                >
-                  <FolderOpen size={14} /> Templates
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPreviewOpen(true)}
-                  disabled={groups.every(g => g.exercises.length === 0)}
-                  className="gap-1.5 border-[hsl(var(--glass-border))]"
-                >
-                  <Eye size={14} /> Preview do Aluno
-                </Button>
-                {isEditing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setHistoryOpen(true)}
-                    className="gap-1.5 border-[hsl(var(--glass-border))]"
-                  >
-                    <History size={14} /> Histórico
-                  </Button>
-                )}
-              </div>
-
-              {/* Groups */}
-              {groups.map((group, gi) => (
-                <div
-                  key={gi}
-                  className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden"
-                >
-                  {/* Group header */}
-                  <div className="flex items-center justify-between p-3 border-b border-[hsl(var(--glass-border))]">
-                    <Input
-                      value={group.name}
-                      onChange={(e) => updateGroupName(gi, e.target.value)}
-                      className="bg-transparent border-none h-8 text-sm font-medium text-foreground p-0 focus-visible:ring-0"
-                    />
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => addFreeTextToGroup(gi)}
-                        title="Adicionar texto livre"
-                      >
-                        <FileText size={14} className="text-[hsl(var(--gold))]" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => {
-                          setActiveGroupIndex(gi);
-                          setExerciseSelectorOpen(true);
-                        }}
-                        title="Adicionar exercício"
-                      >
-                        <Plus size={14} className="text-[hsl(var(--forja-teal))]" />
-                      </Button>
-                      <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => removeGroup(gi)}
-                          title="Remover grupo"
-                        >
-                          <Trash2 size={14} className="text-destructive" />
-                        </Button>
-                    </div>
-                  </div>
-
-                  {/* Exercises */}
-                  <div className="divide-y divide-[hsl(var(--glass-border))]">
-                    {group.exercises.length === 0 && (
-                      <p className="text-center text-muted-foreground text-xs py-6">
-                        Clique em + para adicionar exercícios
-                      </p>
-                    )}
-                    {group.exercises.map((ex, ei) => (
-                      <div
-                        key={ei}
-                        draggable
-                        onDragStart={() => handleDragStart(gi, ei)}
-                        onDragOver={(e) => handleDragOver(e, ei)}
-                        onDrop={() => handleDrop(gi, ei)}
-                        onDragEnd={handleDragEnd}
-                        className={cn(
-                          "flex items-start gap-2 p-3 cursor-grab active:cursor-grabbing transition-all relative",
-                          dragGroupIdx === gi && dragExIdx === ei && "opacity-40",
-                          dragGroupIdx === gi && dragOverExIdx === ei && dragExIdx !== null && dragExIdx !== ei &&
-                            (ei < dragExIdx
-                              ? "before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px] before:bg-[hsl(var(--forja-teal))] before:rounded-full"
-                              : "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[3px] after:bg-[hsl(var(--forja-teal))] after:rounded-full")
-                        )}
-                      >
-                        <div className="pt-2">
-                          <GripVertical size={14} className="text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 space-y-1.5">
-                          {ex.freeText ? (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <FileText size={14} className="text-[hsl(var(--gold))] shrink-0" />
-                                <span className="text-sm font-medium text-foreground">Texto Livre</span>
-                              </div>
-                              <Textarea
-                                value={ex.description || ""}
-                                onChange={(e) => updateExercise(gi, ei, "description", e.target.value)}
-                                placeholder="Escreva aqui as instruções para o aluno... Ex: Faça uma corrida sprint de 20 min, depois abdominais e repita o ciclo 3 vezes."
-                                className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-y"
-                              />
-                            </>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-2">
-                                {(() => {
-                                  const gifUrl = gifMap.get(ex.name.toLowerCase());
-                                  return gifUrl ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => { e.stopPropagation(); setPreviewGif({ name: ex.name, url: gifUrl }); }}
-                                      className="shrink-0 w-10 h-10 rounded-md overflow-hidden border border-[hsl(var(--glass-border))] hover:border-[hsl(var(--forja-teal))] transition-colors"
-                                    >
-                                      <img src={gifUrl} alt={ex.name} className="w-full h-full object-cover" loading="lazy" />
-                                    </button>
-                                  ) : (
-                                    <Dumbbell size={12} className="text-[hsl(var(--forja-teal))] shrink-0" />
-                                  );
-                                })()}
-                                <span className="text-sm font-medium text-foreground">{ex.name}</span>
-                              </div>
-                              <div className="grid grid-cols-4 gap-2">
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Séries</label>
-                                  <Input
-                                    type="number"
-                                    value={ex.sets}
-                                    onChange={(e) => updateExercise(gi, ei, "sets", Number(e.target.value))}
-                                    className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Reps</label>
-                                  <Input
-                                    value={ex.reps}
-                                    onChange={(e) => updateExercise(gi, ei, "reps", e.target.value)}
-                                    className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Carga (kg)</label>
-                                  <Input
-                                    type="number"
-                                    value={ex.weight ?? ""}
-                                    onChange={(e) => updateExercise(gi, ei, "weight", e.target.value ? Number(e.target.value) : null)}
-                                    placeholder="-"
-                                    className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] text-muted-foreground">Descanso</label>
-                                  <RestTimePicker
-                                    value={ex.rest}
-                                    onChange={(val) => updateExercise(gi, ei, "rest", val)}
-                                  />
-                                </div>
-                              </div>
-                              {/* Descrição / Instruções */}
-                              <div className="mt-1.5">
-                                <label className="text-[10px] text-muted-foreground">Instruções da série</label>
-                                <Textarea
-                                  value={(ex as any).description || ""}
-                                  onChange={(e) => updateExercise(gi, ei, "description", e.target.value)}
-                                  placeholder="Ex: Manter cotovelos colados, subida explosiva..."
-                                  className="min-h-[40px] h-10 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0 mt-1"
-                          onClick={() => removeExercise(gi, ei)}
-                        >
-                          <Trash2 size={12} className="text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {/* Add group */}
-              {groups.length < 6 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={addGroup}
-                  className="w-full gap-1.5 border-dashed border-[hsl(var(--glass-border))]"
-                >
-                  <Plus size={14} /> Adicionar Grupo ({GROUP_LETTERS[groups.length] || "+"})
-                </Button>
-              )}
+          {/* Student + Title */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Aluno</label>
+              <Select value={selectedStudent} onValueChange={setSelectedStudent} disabled={isEditing}>
+                <SelectTrigger className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]">
+                  <SelectValue placeholder="Selecione o aluno" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </ScrollArea>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Título do Plano</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
+              />
+            </div>
+          </div>
 
-          {/* Footer */}
-          <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2", embedded && "border-border")}>
-            <Button variant="outline" onClick={onClose} className="border-[hsl(var(--glass-border))]">
-              Cancelar
+          {/* Total sessions */}
+          <div className="max-w-[200px]">
+            <label className="text-xs text-muted-foreground mb-1 block">Total de Sessões</label>
+            <Input
+              type="number"
+              value={totalSessions}
+              onChange={(e) => setTotalSessions(Number(e.target.value))}
+              className="bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
+            />
+          </div>
+
+          {/* Análise do Especialista */}
+          <div className="space-y-3 rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-4">
+            <p className="text-xs font-semibold text-foreground font-cinzel">📋 Análise do Especialista</p>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Avaliação Postural</label>
+              <Textarea
+                value={avaliacaoPostural}
+                onChange={(e) => setAvaliacaoPostural(e.target.value)}
+                placeholder="Ex: Leve depressão de ombros, encurtamento de isquiotibiais..."
+                className="min-h-[60px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Pontos de Melhoria</label>
+              <Textarea
+                value={pontosMelhoria}
+                onChange={(e) => setPontosMelhoria(e.target.value)}
+                placeholder="Ex: Ênfase em abdômen, dorsais, peitorais..."
+                className="min-h-[60px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Objetivo do Mesociclo <span className="text-primary">*</span></label>
+              <Textarea
+                value={objetivoMesociclo}
+                onChange={(e) => setObjetivoMesociclo(e.target.value)}
+                placeholder="Ex: Desenvolvimento dos peitorais, fortalecimento do CORE..."
+                className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+              />
+            </div>
+          </div>
+
+          {/* RLHF Feedback Banner */}
+          {aiLogId && !aiFeedbackGiven && (
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="text-purple-400" />
+                <span className="text-xs text-purple-300 font-medium">O treino gerado pela IA ficou bom?</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => sendAiFeedback("like")}
+                  className="gap-1 border-green-500/30 text-green-400 hover:bg-green-500/10 h-8"
+                >
+                  👍 Bom
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDislikeClick}
+                  className="gap-1 border-red-500/30 text-red-400 hover:bg-red-500/10 h-8"
+                >
+                  👎 Ajustar
+                </Button>
+              </div>
+            </div>
+          )}
+          {aiFeedbackGiven && (
+            <div className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-2.5 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {aiFeedbackGiven === "like" ? "👍 Feedback salvo! Este treino será usado como referência." : "👎 Feedback registrado. Vamos melhorar!"}
+              </span>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={generateWithAI}
+              disabled={aiGenerating || !selectedStudent}
+              className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
+            >
+              {aiGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {aiGenerating ? "Gerando..." : "Gerar com IA"}
             </Button>
             <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={!selectedStudent || groups.length === 0 || !objetivoMesociclo.trim() || saveMutation.isPending}
-              className="gold-gradient text-[hsl(var(--obsidian))] font-medium gap-1.5"
+              variant="outline"
+              size="sm"
+              onClick={() => setTemplateManagerOpen(true)}
+              className="gap-1.5 border-[hsl(var(--glass-border))]"
             >
-              <Save size={14} /> {isEditing ? "Salvar Alterações" : "Criar Plano"}
+              <FolderOpen size={14} /> Templates
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewOpen(true)}
+              disabled={groups.every(g => g.exercises.length === 0)}
+              className="gap-1.5 border-[hsl(var(--glass-border))]"
+            >
+              <Eye size={14} /> Preview do Aluno
+            </Button>
+            {isEditing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoryOpen(true)}
+                className="gap-1.5 border-[hsl(var(--glass-border))]"
+              >
+                <History size={14} /> Histórico
+              </Button>
+            )}
           </div>
+
+          {/* Groups */}
+          {groups.map((group, gi) => (
+            <div
+              key={gi}
+              className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden"
+            >
+              {/* Group header */}
+              <div className="flex items-center justify-between p-3 border-b border-[hsl(var(--glass-border))]">
+                <Input
+                  value={group.name}
+                  onChange={(e) => updateGroupName(gi, e.target.value)}
+                  className="bg-transparent border-none h-8 text-sm font-medium text-foreground p-0 focus-visible:ring-0"
+                />
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => addFreeTextToGroup(gi)}
+                    title="Adicionar texto livre"
+                  >
+                    <FileText size={14} className="text-[hsl(var(--gold))]" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      setActiveGroupIndex(gi);
+                      setExerciseSelectorOpen(true);
+                    }}
+                    title="Adicionar exercício"
+                  >
+                    <Plus size={14} className="text-[hsl(var(--forja-teal))]" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => removeGroup(gi)}
+                    title="Remover grupo"
+                  >
+                    <Trash2 size={14} className="text-destructive" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Exercises */}
+              <div className="divide-y divide-[hsl(var(--glass-border))]">
+                {group.exercises.length === 0 && (
+                  <p className="text-center text-muted-foreground text-xs py-6">
+                    Clique em + para adicionar exercícios
+                  </p>
+                )}
+                {group.exercises.map((ex, ei) => (
+                  <div
+                    key={ei}
+                    draggable
+                    onDragStart={() => handleDragStart(gi, ei)}
+                    onDragOver={(e) => handleDragOver(e, ei)}
+                    onDrop={() => handleDrop(gi, ei)}
+                    onDragEnd={handleDragEnd}
+                    className={cn(
+                      "flex items-start gap-2 p-3 cursor-grab active:cursor-grabbing transition-all relative",
+                      dragGroupIdx === gi && dragExIdx === ei && "opacity-40",
+                      dragGroupIdx === gi && dragOverExIdx === ei && dragExIdx !== null && dragExIdx !== ei &&
+                      (ei < dragExIdx
+                        ? "before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px] before:bg-[hsl(var(--forja-teal))] before:rounded-full"
+                        : "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[3px] after:bg-[hsl(var(--forja-teal))] after:rounded-full")
+                    )}
+                  >
+                    <div className="pt-2">
+                      <GripVertical size={14} className="text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      {ex.freeText ? (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <FileText size={14} className="text-[hsl(var(--gold))] shrink-0" />
+                            <span className="text-sm font-medium text-foreground">Texto Livre</span>
+                          </div>
+                          <Textarea
+                            value={ex.description || ""}
+                            onChange={(e) => updateExercise(gi, ei, "description", e.target.value)}
+                            placeholder="Escreva aqui as instruções para o aluno... Ex: Faça uma corrida sprint de 20 min, depois abdominais e repita o ciclo 3 vezes."
+                            className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-y"
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const gifUrl = gifMap.get(ex.name.toLowerCase());
+                              return gifUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setPreviewGif({ name: ex.name, url: gifUrl }); }}
+                                  className="shrink-0 w-10 h-10 rounded-md overflow-hidden border border-[hsl(var(--glass-border))] hover:border-[hsl(var(--forja-teal))] transition-colors"
+                                >
+                                  <img src={gifUrl} alt={ex.name} className="w-full h-full object-cover" loading="lazy" />
+                                </button>
+                              ) : (
+                                <Dumbbell size={12} className="text-[hsl(var(--forja-teal))] shrink-0" />
+                              );
+                            })()}
+                            <span className="text-sm font-medium text-foreground">{ex.name}</span>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Séries</label>
+                              <Input
+                                type="number"
+                                value={ex.sets}
+                                onChange={(e) => updateExercise(gi, ei, "sets", Number(e.target.value))}
+                                className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Reps</label>
+                              <Input
+                                value={ex.reps}
+                                onChange={(e) => updateExercise(gi, ei, "reps", e.target.value)}
+                                className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Carga (kg)</label>
+                              <Input
+                                type="number"
+                                value={ex.weight ?? ""}
+                                onChange={(e) => updateExercise(gi, ei, "weight", e.target.value ? Number(e.target.value) : null)}
+                                placeholder="-"
+                                className="h-7 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground">Descanso</label>
+                              <RestTimePicker
+                                value={ex.rest}
+                                onChange={(val) => updateExercise(gi, ei, "rest", val)}
+                              />
+                            </div>
+                          </div>
+                          {/* Descrição / Instruções */}
+                          <div className="mt-1.5">
+                            <label className="text-[10px] text-muted-foreground">Instruções da série</label>
+                            <Textarea
+                              value={(ex as any).description || ""}
+                              onChange={(e) => updateExercise(gi, ei, "description", e.target.value)}
+                              placeholder="Ex: Manter cotovelos colados, subida explosiva..."
+                              className="min-h-[40px] h-10 text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 mt-1"
+                      onClick={() => removeExercise(gi, ei)}
+                    >
+                      <Trash2 size={12} className="text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Add group */}
+          {groups.length < 6 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addGroup}
+              className="w-full gap-1.5 border-dashed border-[hsl(var(--glass-border))]"
+            >
+              <Plus size={14} /> Adicionar Grupo ({GROUP_LETTERS[groups.length] || "+"})
+            </Button>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Footer */}
+      <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2", embedded && "border-border")}>
+        <Button variant="outline" onClick={onClose} className="border-[hsl(var(--glass-border))]">
+          Cancelar
+        </Button>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          disabled={!selectedStudent || groups.length === 0 || !objetivoMesociclo.trim() || saveMutation.isPending}
+          className="gold-gradient text-[hsl(var(--obsidian))] font-medium gap-1.5"
+        >
+          <Save size={14} /> {isEditing ? "Salvar Alterações" : "Criar Plano"}
+        </Button>
+      </div>
     </>
   );
 
@@ -847,7 +858,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
 
       {/* Dislike Reason Modal */}
       <Dialog open={dislikeModalOpen} onOpenChange={setDislikeModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md z-[9999]" style={{ zIndex: 9999 }}>
           <DialogHeader>
             <DialogTitle>O que deu errado neste treino?</DialogTitle>
           </DialogHeader>

@@ -22,6 +22,7 @@ const PHOTO_SLOTS = [
   { key: "costas", label: "Costas" },
   { key: "direito", label: "Lado Direito" },
   { key: "esquerdo", label: "Lado Esquerdo" },
+  { key: "alcance", label: "Teste de Alcançar" },
 ] as const;
 
 export default function LegacyPhotosUpload({ studentId, anamneseId, open, onOpenChange }: Props) {
@@ -103,11 +104,11 @@ export default function LegacyPhotosUpload({ studentId, anamneseId, open, onOpen
             Anexar Fotos Legadas
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            Envie até 4 fotos para esta anamnese. Elas aparecerão na timeline de fotos do aluno.
+            Envie até 5 fotos para esta anamnese. Elas aparecerão na timeline de fotos do aluno.
           </p>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {PHOTO_SLOTS.map((slot) => {
             const hasFile = !!files[slot.key];
             const preview = previews[slot.key];

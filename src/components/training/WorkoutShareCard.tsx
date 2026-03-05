@@ -40,38 +40,7 @@ const WorkoutShareCard = forwardRef<HTMLDivElement, WorkoutShareCardProps>(
           padding: "24px 20px",
         }}
       >
-        {/* TREINO label */}
-        <div
-          style={{
-            fontFamily: "'Sora', sans-serif",
-            fontSize: 13,
-            fontWeight: 800,
-            color: "#ffffff",
-            letterSpacing: "3px",
-            textTransform: "uppercase" as const,
-            marginBottom: 2,
-            textShadow: "0px 2px 4px rgba(0, 0, 0, 0.8)",
-          }}
-        >
-          TREINO
-        </div>
-
-        {/* Workout Name */}
-        <div
-          style={{
-            fontFamily: "'Sora', sans-serif",
-            fontSize: 36,
-            fontWeight: 900,
-            color: "#ffffff",
-            textTransform: "uppercase" as const,
-            lineHeight: 1,
-            marginBottom: 24,
-            textAlign: "center" as const,
-            textShadow: "0px 2px 4px rgba(0, 0, 0, 0.8)",
-          }}
-        >
-          {shortName}
-        </div>
+        {/* Removed workout name section per user request */}
 
         {/* VOLUME label */}
         <div
