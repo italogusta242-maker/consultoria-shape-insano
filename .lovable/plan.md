@@ -1,82 +1,41 @@
 
 
-## Plano: Rastreamento de E-mail (Open/Click Tracking) no Painel do Closer
+# Plano: Exibir campos "Outros" na Anamnese do Especialista
 
-### Contexto
-O Closer gera convites que disparam e-mails de cobrança via Brevo. Atualmente não há rastreamento de abertura/clique. O objetivo é adicionar visibilidade em tempo real do funil de vendas.
+## Problema
+Quando o aluno seleciona "Outros" em campos como objetivo, doenças, alergias, etc., o formulário salva dois campos no `dados_extras`: o campo principal (ex: `objetivo` = "Outros") e o campo de texto livre (ex: `objetivo_outro` = "Ganhar massa magra focando em costas"). A tela do especialista só exibe o campo principal, perdendo a informação detalhada.
 
-### Limitação Importante
-O provedor de e-mail atual é **Brevo** (não Resend). A Brevo suporta webhooks de eventos (`delivered`, `opened`, `click`) que precisam ser configurados no painel da Brevo apontando para uma Edge Function.
+## Campos afetados (pares principal → texto livre)
+| Campo principal | Campo "outro" no JSONB |
+|---|---|
+| `objetivo` | `objetivo_outro` |
+| `doencas` | `doenca_outra` |
+| `alergias` | `alergia_outra` |
+| `suplementos` | `suplemento_outro` |
+| `medicamentos` | `medicamento_outro` |
+| `exercicio_nao_gosta` | `exercicio_nao_gosta_desc` |
+| `historico_familiar` | `historico_familiar_desc` |
+| `maquinas_nao_tem` | `maquina_outra` |
+| `frutas` | `fruta_outra` |
+| `agua` | `agua_outra` |
 
----
+## Solução
 
-### 1. Migração do Banco de Dados (tabela `invites`)
+Arquivo: `src/pages/especialista/EspecialistaAnamneseSplit.tsx`
 
-Adicionar 2 colunas à tabela `invites`:
-- `email_opened_at` (timestamptz, nullable)
-- `payment_link_clicked_at` (timestamptz, nullable)
+1. **Criar helper `extraValWithOther`**: Uma nova função que recebe a chave principal e a chave "outro". Se o valor principal contiver "Outro" (case-insensitive), concatena com o texto livre. Se ambos existirem, exibe `"Outros: texto detalhado"`. Se só o texto livre existir, exibe ele diretamente.
 
-Habilitar Realtime na tabela `invites`:
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.invites;
-```
+2. **Atualizar cada `<Field>` afetado** para usar o novo helper, passando o par de chaves corretas. Exemplo:
+   - `<Field label="Objetivo" value={extraValWithOther("objetivo", "objetivo_outro")} />`
+   - `<Field label="Doenças" value={extraValWithOther("doencas", "doenca_outra")} />`
+   - etc.
 
-O campo `status` já existe e será reutilizado. Os novos estados do funil serão derivados combinando `status`, `payment_status`, `email_opened_at` e `payment_link_clicked_at`.
+3. **Adicionar campos que estão completamente ausentes da UI**: Alguns campos do `dados_extras` (como `influenciador_favorito`, `uso_hormonios`, `frequencia_evacuacao`, `sintomas_digestao`, `escala_bristol`, `faixa_salarial`, `passos_calorias`) nunca são exibidos. Eles serão adicionados nas seções correspondentes.
 
----
+4. **Também exibir campos da tabela `anamnese` direta** que atualmente são ignorados em favor do `dados_extras` (ex: `anamnese.objetivo`, `anamnese.lesoes`, `anamnese.medicamentos`, `anamnese.condicoes_saude`, `anamnese.restricoes_alimentares`, `anamnese.suplementos`, `anamnese.agua_diaria`, `anamnese.sono_horas`, `anamnese.nivel_estresse`, `anamnese.dieta_atual`). A lógica será: exibir o valor do `dados_extras` se disponível, senão fallback para o campo direto da tabela `anamnese`.
 
-### 2. Edge Function: `email-webhook` (Webhook da Brevo)
-
-Nova Edge Function `email-webhook` que:
-- Recebe POST da Brevo com eventos de e-mail
-- Valida a origem (opcional: shared secret)
-- Para evento `opened`: atualiza `email_opened_at = now()` no invite correspondente
-- Para evento `click`: atualiza `payment_link_clicked_at = now()` no invite correspondente
-- A identificação do invite será feita via tag/custom header no e-mail (o `invite_id` será enviado como tag na chamada da Brevo)
-
-**Mudança necessária no envio de e-mail** (`asaas-payments` edge function):
-- Ao enviar o e-mail de cobrança do closer, incluir o `invite_id` como tag nos headers da API Brevo (campo `tags` ou `headers` do payload)
-- Isso permite que o webhook identifique qual invite corresponde ao evento
-
-**Mudança no `_shared/smtp.ts`:**
-- Adicionar suporte a campo opcional `tags` no `EmailOptions` e incluí-lo no payload da Brevo
-
----
-
-### 3. Atualização da UI (CloserDashboard)
-
-Na tabela de convites existente, substituir a coluna "Pagamento" por badges de funil visual:
-
-| Estado | Badge | Cor | Condição |
-|--------|-------|-----|----------|
-| Enviado | ✉️ Enviado | Cinza | `status=pending`, sem `email_opened_at` |
-| Visto | 👀 Visto | Azul | `email_opened_at` preenchido |
-| Checkout | 💳 Checkout | Laranja | `payment_link_clicked_at` preenchido |
-| Pago | ✅ Pago | Verde | `payment_status=paid` |
-
-Adicionar tempo relativo (ex: "há 5 min") abaixo do badge usando `date-fns.formatDistanceToNow`.
-
-**Realtime**: Adicionar subscription no canal `invites` filtrando por `created_by = user.id` para atualizar badges em tempo real sem reload.
-
----
-
-### 4. Configuração Manual Necessária (pelo usuário)
-
-Após implementação, o usuário precisará:
-1. Acessar o painel da Brevo → Settings → Webhooks
-2. Adicionar a URL da Edge Function como endpoint de webhook
-3. Selecionar os eventos `opened` e `click`
-
----
-
-### Arquivos Modificados/Criados
-
-| Arquivo | Ação |
-|---------|------|
-| `supabase/functions/email-webhook/index.ts` | Criar (webhook Brevo) |
-| `supabase/functions/_shared/smtp.ts` | Editar (adicionar tags) |
-| `supabase/functions/asaas-payments/index.ts` | Editar (enviar invite_id como tag) |
-| `supabase/config.toml` | Editar (adicionar `email-webhook` com `verify_jwt = false`) |
-| `src/pages/closer/CloserDashboard.tsx` | Editar (badges de funil + realtime + tempo relativo) |
-| Migração SQL | 2 colunas + realtime |
+## Escopo
+- Apenas `EspecialistaAnamneseSplit.tsx` (componente de renderização)
+- Zero alteração no banco de dados
+- Zero alteração no formulário de onboarding
 
