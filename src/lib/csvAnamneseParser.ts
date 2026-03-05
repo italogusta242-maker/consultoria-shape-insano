@@ -7,16 +7,16 @@
 
 // Column index → field mapping
 const COLUMN_MAP: Record<number, { table: 'profile' | 'anamnese' | 'extras' | 'skip'; field: string }> = {
-  0:  { table: 'skip', field: 'timestamp' },
-  1:  { table: 'profile', field: 'nome' },
-  2:  { table: 'profile', field: 'email' },
-  3:  { table: 'profile', field: 'telefone' },
-  4:  { table: 'profile', field: 'nascimento' },
-  5:  { table: 'profile', field: 'cpf' },
-  6:  { table: 'profile', field: 'cidade_estado' },
-  7:  { table: 'profile', field: 'sexo' },
-  8:  { table: 'profile', field: 'faixa_etaria' },
-  9:  { table: 'profile', field: 'tempo_acompanha' },
+  0: { table: 'skip', field: 'timestamp' },
+  1: { table: 'profile', field: 'nome' },
+  2: { table: 'profile', field: 'email' },
+  3: { table: 'profile', field: 'telefone' },
+  4: { table: 'profile', field: 'nascimento' },
+  5: { table: 'profile', field: 'cpf' },
+  6: { table: 'profile', field: 'cidade_estado' },
+  7: { table: 'profile', field: 'sexo' },
+  8: { table: 'profile', field: 'faixa_etaria' },
+  9: { table: 'profile', field: 'tempo_acompanha' },
   10: { table: 'profile', field: 'altura' },
   11: { table: 'profile', field: 'fatores_escolha' },
   12: { table: 'profile', field: 'peso' },
@@ -91,6 +91,19 @@ const COLUMN_MAP: Record<number, { table: 'profile' | 'anamnese' | 'extras' | 's
   81: { table: 'skip', field: 'final' },
 };
 
+// Header text → field mapping (for specific full questions)
+const HEADER_MAP: Record<string, { table: 'profile' | 'anamnese' | 'extras'; field: string }> = {
+  "Você já pratica musculação?": { table: 'extras', field: 'pratica_musculacao' },
+  "Quais dias da semana você consegue treinar?": { table: 'anamnese', field: 'dias_semana' },
+  "Você possui alguma dor/desconforto ao se movimentar ou fazer algum tipo de exercício?": { table: 'extras', field: 'tem_dor' },
+  "Quantas calorias você está consumindo atualmente?": { table: 'extras', field: 'calorias' },
+  "Você está consumindo essa faixa de calorias há quanto tempo?": { table: 'extras', field: 'tempo_calorias' },
+  "Qual horário você vai dormir e costuma acordar?": { table: 'extras', field: 'horario_sono' },
+  "Como você julga a qualidade do seu sono?": { table: 'extras', field: 'qualidade_sono' },
+  "Além do Igor Correa, qual seu outro influenciador favorito? (coloque o @ do instagram)": { table: 'extras', field: 'influenciador_favorito' },
+  "Faixa Salarial": { table: 'extras', field: 'faixa_salarial' },
+};
+
 export interface ParsedAnamneseRow {
   profile: Record<string, string>;
   anamnese: Record<string, string>;
@@ -106,11 +119,11 @@ function parseCSVLine(text: string): string[][] {
   let currentRow: string[] = [];
   let currentField = '';
   let inQuotes = false;
-  
+
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
     const nextChar = text[i + 1];
-    
+
     if (inQuotes) {
       if (char === '"' && nextChar === '"') {
         currentField += '"';
@@ -129,7 +142,7 @@ function parseCSVLine(text: string): string[][] {
       } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
         currentRow.push(currentField.trim());
         currentField = '';
-        if (currentRow.length > 1) { // skip empty lines
+        if (currentRow.length > 0) { // Keep empty lines for header detection if needed, but usually skip
           rows.push(currentRow);
         }
         currentRow = [];
@@ -139,15 +152,15 @@ function parseCSVLine(text: string): string[][] {
       }
     }
   }
-  
+
   // Last field/row
   if (currentField || currentRow.length > 0) {
     currentRow.push(currentField.trim());
-    if (currentRow.length > 1) {
+    if (currentRow.length > 0) {
       rows.push(currentRow);
     }
   }
-  
+
   return rows;
 }
 
@@ -165,23 +178,50 @@ function isDataRow(row: string[]): boolean {
  */
 export function parseAnamneseCSV(csvText: string): ParsedAnamneseRow[] {
   const allRows = parseCSVLine(csvText);
+  if (allRows.length < 2) return [];
+
+  // Identify column indices for headers
+  const headerRow = allRows[0];
+  const headerToIndexMap: Record<string, number> = {};
+  headerRow.forEach((h, i) => {
+    if (h) headerToIndexMap[h] = i;
+  });
+
   const dataRows = allRows.filter(isDataRow);
-  
+
   return dataRows.map((row) => {
     const profile: Record<string, string> = {};
     const anamnese: Record<string, string> = {};
     const dados_extras: Record<string, string> = {};
     let timestamp = '';
-    
+
+    // 1. Map by Header Text (Prioritized)
+    Object.entries(HEADER_MAP).forEach(([question, mapping]) => {
+      const index = headerToIndexMap[question];
+      if (index !== undefined && row[index]) {
+        const value = row[index];
+        switch (mapping.table) {
+          case 'profile': profile[mapping.field] = value; break;
+          case 'anamnese': anamnese[mapping.field] = value; break;
+          case 'extras': dados_extras[mapping.field] = value; break;
+        }
+      }
+    });
+
+    // 2. Map by Fixed Index (Fallback/Legacy)
     row.forEach((value, index) => {
       const mapping = COLUMN_MAP[index];
       if (!mapping || !value) return;
-      
+
       if (index === 0) {
         timestamp = value;
         return;
       }
-      
+
+      // Check if this field was already mapped by header
+      const alreadyMapped = Object.values(HEADER_MAP).some(m => m.field === mapping.field);
+      if (alreadyMapped) return;
+
       switch (mapping.table) {
         case 'profile':
           profile[mapping.field] = value;
@@ -194,17 +234,17 @@ export function parseAnamneseCSV(csvText: string): ParsedAnamneseRow[] {
           break;
       }
     });
-    
+
     // Handle "tem_dor" → merge into anamnese.lesoes
     if (dados_extras.tem_dor?.toLowerCase() === 'não' || dados_extras.tem_dor?.toLowerCase() === 'nao') {
       delete anamnese.lesoes; // no injury
     }
     delete dados_extras.tem_dor;
-    
+
     // Handle fotos → group into dados_extras.fotos
     const fotos: Record<string, string> = {};
     const fotoKeys = ['foto_frente_url', 'foto_costas_url', 'foto_direito_url', 'foto_esquerdo_url', 'foto_perfil_url',
-                      'foto_pose_frente_url', 'foto_pose_lado_url', 'foto_pose_costas_url'];
+      'foto_pose_frente_url', 'foto_pose_lado_url', 'foto_pose_costas_url'];
     fotoKeys.forEach(k => {
       if (dados_extras[k]) {
         fotos[k.replace('_url', '')] = dados_extras[k];
@@ -214,7 +254,7 @@ export function parseAnamneseCSV(csvText: string): ParsedAnamneseRow[] {
     if (Object.keys(fotos).length > 0) {
       (dados_extras as any).fotos = fotos;
     }
-    
+
     return { profile, anamnese, dados_extras, timestamp };
   });
 }
@@ -222,9 +262,9 @@ export function parseAnamneseCSV(csvText: string): ParsedAnamneseRow[] {
 /**
  * Get a preview summary of parsed data for confirmation UI.
  */
-export function getImportPreview(rows: ParsedAnamneseRow[]): { 
-  total: number; 
-  sample: { nome: string; email: string; objetivo: string }[] 
+export function getImportPreview(rows: ParsedAnamneseRow[]): {
+  total: number;
+  sample: { nome: string; email: string; objetivo: string }[]
 } {
   return {
     total: rows.length,

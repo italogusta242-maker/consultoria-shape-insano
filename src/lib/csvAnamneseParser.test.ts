@@ -45,6 +45,22 @@ describe("csvAnamneseParser", () => {
         expect(parsed.dados_extras.historico_familiar_desc).toBe("Diabetes na família");
     });
 
+    it("should parse header-based columns correctly", () => {
+        const headers = ["Carimbo de data/hora", "Nome Completo", "Qual horário você vai dormir e costuma acordar?", "Você já pratica musculação?", "Quais dias da semana você consegue treinar?"];
+        const values = ["01/01/2026 12:00:00", "Maria Souza", "22h às 06h", "Sim, há 2 anos", "Segunda, Quarta, Sexta"];
+
+        const csvContent = `"${headers.join('","')}"\n"${values.join('","')}"`;
+        const result = parseAnamneseCSV(csvContent);
+
+        expect(result).toHaveLength(1);
+        const parsed = result[0];
+
+        expect(parsed.profile.nome).toBe("Maria Souza");
+        expect(parsed.dados_extras.horario_sono).toBe("22h às 06h");
+        expect(parsed.dados_extras.pratica_musculacao).toBe("Sim, há 2 anos");
+        expect(parsed.anamnese.dias_semana).toBe("Segunda, Quarta, Sexta");
+    });
+
     it("should handle empty or malformed lines gracefully", () => {
         const csvContent = "header_mock\n\n,,,,\n";
         const result = parseAnamneseCSV(csvContent);
