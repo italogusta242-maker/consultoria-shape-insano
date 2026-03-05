@@ -94,7 +94,7 @@ const COLUMN_MAP: Record<number, { table: 'profile' | 'anamnese' | 'extras' | 's
 // Header text → field mapping (for specific full questions)
 const HEADER_MAP: Record<string, { table: 'profile' | 'anamnese' | 'extras'; field: string }> = {
   "Você já pratica musculação?": { table: 'extras', field: 'pratica_musculacao' },
-  "Quais dias da semana você consegue treinar?": { table: 'anamnese', field: 'dias_semana' },
+  "Quais dias da semana você consegue treinar?": { table: 'extras', field: 'dias_semana' },
   "Você possui alguma dor/desconforto ao se movimentar ou fazer algum tipo de exercício?": { table: 'extras', field: 'tem_dor' },
   "Quantas calorias você está consumindo atualmente?": { table: 'extras', field: 'calorias' },
   "Você está consumindo essa faixa de calorias há quanto tempo?": { table: 'extras', field: 'tempo_calorias' },
@@ -235,11 +235,11 @@ export function parseAnamneseCSV(csvText: string): ParsedAnamneseRow[] {
       }
     });
 
-    // Handle "tem_dor" → merge into anamnese.lesoes
+    // Handle "tem_dor" → if "não", clear lesoes but keep tem_dor in extras for display
     if (dados_extras.tem_dor?.toLowerCase() === 'não' || dados_extras.tem_dor?.toLowerCase() === 'nao') {
       delete anamnese.lesoes; // no injury
     }
-    delete dados_extras.tem_dor;
+    // Keep tem_dor in dados_extras for the specialist display component
 
     // Handle fotos → group into dados_extras.fotos
     const fotos: Record<string, string> = {};

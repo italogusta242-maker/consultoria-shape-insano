@@ -58,7 +58,7 @@ describe("csvAnamneseParser", () => {
         expect(parsed.profile.nome).toBe("Maria Souza");
         expect(parsed.dados_extras.horario_sono).toBe("22h às 06h");
         expect(parsed.dados_extras.pratica_musculacao).toBe("Sim, há 2 anos");
-        expect(parsed.anamnese.dias_semana).toBe("Segunda, Quarta, Sexta");
+        expect(parsed.dados_extras.dias_semana).toBe("Segunda, Quarta, Sexta");
     });
 
     it("should handle empty or malformed lines gracefully", () => {
