@@ -6,6 +6,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+/**
+ * Sanitize dados_extras JSONB: ensure all values are valid JSON-safe types.
+ * Empty strings → null, arrays kept, nested objects kept, booleans preserved.
+ */
+function sanitizeDadosExtras(raw: Record<string, any>): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value === undefined || value === "") {
+      // Skip empty values — don't insert nulls for missing legacy columns
+      continue;
+    }
+    if (value === null) continue;
+    if (typeof value === "object" && !Array.isArray(value)) {
+      // Nested object (e.g. fotos) — recurse
+      const nested = sanitizeDadosExtras(value);
+      if (Object.keys(nested).length > 0) clean[key] = nested;
+    } else {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
+/**
+ * Sanitize anamnese direct columns: only keep keys that exist in the table schema.
+ * Convert empty strings to null so Postgres doesn't reject type mismatches.
+ */
+const ANAMNESE_COLUMNS = new Set([
+  "objetivo", "experiencia_treino", "frequencia_treino", "local_treino",
+  "equipamentos", "lesoes", "medicamentos", "condicoes_saude",
+  "dieta_atual", "suplementos", "agua_diaria", "sono_horas",
+  "nivel_estresse", "ocupacao", "disponibilidade_treino", "motivacao",
+  "restricoes_alimentares",
+]);
+
+function sanitizeAnamneseColumns(raw: Record<string, string>): Record<string, string | null> {
+  const clean: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!ANAMNESE_COLUMNS.has(key)) continue; // skip unknown columns
+    clean[key] = value && value.trim() !== "" ? value.trim() : null;
+  }
+  return clean;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -85,6 +129,10 @@ serve(async (req) => {
           continue;
         }
 
+        // Sanitize inputs before DB operations
+        const cleanAnamnese = sanitizeAnamneseColumns(row.anamnese || {});
+        const cleanExtras = sanitizeDadosExtras(row.dados_extras || {});
+
         // Check if user already exists by email
         const { data: existingUsers } = await supabase.auth.admin.listUsers();
         const existingUser = existingUsers?.users?.find(
@@ -99,8 +147,8 @@ serve(async (req) => {
           // Update profile with CSV data
           const profileUpdate: Record<string, any> = {};
           for (const [key, value] of Object.entries(row.profile)) {
-            if (key === 'email') continue; // don't overwrite email
-            if (value) profileUpdate[key] = value;
+            if (key === 'email') continue;
+            if (value && value.trim() !== "") profileUpdate[key] = value.trim();
           }
           if (Object.keys(profileUpdate).length > 0) {
             profileUpdate.onboarded = true;
@@ -115,17 +163,15 @@ serve(async (req) => {
             .limit(1);
 
           if (existingAnamnese && existingAnamnese.length > 0) {
-            // Update existing anamnese
-            const anamneseUpdate: Record<string, any> = { ...row.anamnese };
-            anamneseUpdate.dados_extras = row.dados_extras;
+            const anamneseUpdate: Record<string, any> = { ...cleanAnamnese };
+            anamneseUpdate.dados_extras = cleanExtras;
             await supabase.from("anamnese").update(anamneseUpdate).eq("id", existingAnamnese[0].id);
             results.updated++;
           } else {
-            // Insert new anamnese
             const anamneseInsert: Record<string, any> = {
               user_id: userId,
-              ...row.anamnese,
-              dados_extras: row.dados_extras,
+              ...cleanAnamnese,
+              dados_extras: cleanExtras,
             };
             const parsedTs = parseTimestamp(row.timestamp);
             if (parsedTs) anamneseInsert.created_at = parsedTs;
@@ -155,13 +201,11 @@ serve(async (req) => {
           const profileUpdate: Record<string, any> = {};
           for (const [key, value] of Object.entries(row.profile)) {
             if (key === 'email') continue;
-            if (value) profileUpdate[key] = value;
+            if (value && value.trim() !== "") profileUpdate[key] = value.trim();
           }
           profileUpdate.onboarded = true;
 
-          // Small delay to let trigger create profile
           await new Promise(r => setTimeout(r, 500));
-
           await supabase.from("profiles").update(profileUpdate).eq("id", userId);
 
           // Add user role
@@ -170,8 +214,8 @@ serve(async (req) => {
           // Insert anamnese
           const anamneseInsert: Record<string, any> = {
             user_id: userId,
-            ...row.anamnese,
-            dados_extras: row.dados_extras,
+            ...cleanAnamnese,
+            dados_extras: cleanExtras,
           };
           const parsedTs = parseTimestamp(row.timestamp);
           if (parsedTs) anamneseInsert.created_at = parsedTs;
