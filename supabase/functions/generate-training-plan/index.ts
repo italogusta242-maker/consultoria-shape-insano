@@ -221,6 +221,7 @@ REGRAS TÉCNICAS OBRIGATÓRIAS:
 4. Analise o histórico de treinos e feedback do aluno para progressão adequada.
 5. Considere o estado mental (sono, estresse, humor) para ajustar intensidade.
 6. Retorne APENAS o JSON válido no formato especificado, sem texto adicional.
+7. Se imagens de postura do aluno forem fornecidas, analise cuidadosamente a postura corporal do aluno (desvios posturais, assimetrias, cifose, lordose, escoliose, desalinhamentos de ombros/quadris, joelhos valgos/varos, etc.) e use essa análise para fundamentar o campo "avaliacao_postural" e para ajustar a seleção e prescrição de exercícios (exercícios corretivos, priorização de grupos fracos, evitação de movimentos contraindicados).
 
 ${jsonSchema}`;
     const userPrompt = `Gere um plano de treino personalizado para este aluno:
@@ -334,6 +335,77 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
       console.warn("RAG retrieval failed, proceeding without knowledge context:", ragErr);
     }
 
+    // Fetch student posture photos for multimodal vision analysis
+    const studentPhotoParts: any[] = [];
+    try {
+      // 1. Try latest monthly assessment photos
+      const photoFields = ["foto_frente", "foto_costas", "foto_lado_direito", "foto_lado_esquerdo"];
+      if (assessment) {
+        for (const field of photoFields) {
+          const url = (assessment as any)[field];
+          if (!url || typeof url !== "string") continue;
+          try {
+            const imgResp = await fetch(url);
+            if (imgResp.ok) {
+              const arrayBuf = await imgResp.arrayBuffer();
+              const bytes = new Uint8Array(arrayBuf);
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+              const base64 = btoa(binary);
+              const contentType = imgResp.headers.get("content-type") || "image/jpeg";
+              studentPhotoParts.push({
+                inline_data: { mime_type: contentType, data: base64 },
+              });
+              console.log(`Photo loaded from assessment: ${field}`);
+            }
+          } catch (imgErr) {
+            console.warn(`Failed to fetch assessment photo ${field}:`, imgErr);
+          }
+        }
+      }
+
+      // 2. Fallback: try anamnese-photos storage bucket (latest anamnese)
+      if (studentPhotoParts.length === 0 && anamnese) {
+        const folderPath = `${student_id}/${anamnese.id}`;
+        const { data: files } = await supabaseAdmin.storage
+          .from("anamnese-photos")
+          .list(folderPath);
+
+        if (files && files.length > 0) {
+          // Limit to 4 photos max to control payload size
+          for (const file of files.slice(0, 4)) {
+            try {
+              const { data: fileData, error: dlErr } = await supabaseAdmin.storage
+                .from("anamnese-photos")
+                .download(`${folderPath}/${file.name}`);
+              if (dlErr || !fileData) continue;
+
+              const arrayBuf = await fileData.arrayBuffer();
+              const bytes = new Uint8Array(arrayBuf);
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+              const base64 = btoa(binary);
+              const mimeType = file.metadata?.mimetype || "image/jpeg";
+              studentPhotoParts.push({
+                inline_data: { mime_type: mimeType, data: base64 },
+              });
+              console.log(`Photo loaded from storage: ${file.name}`);
+            } catch (dlErr) {
+              console.warn(`Failed to download storage photo ${file.name}:`, dlErr);
+            }
+          }
+        }
+      }
+
+      if (studentPhotoParts.length > 0) {
+        console.log(`Multimodal: injecting ${studentPhotoParts.length} posture photos for vision analysis`);
+      } else {
+        console.log("Multimodal: no student photos found, proceeding text-only");
+      }
+    } catch (photoErr) {
+      console.warn("Photo fetch failed, proceeding without vision:", photoErr);
+    }
+
     // Build Gemini content parts
     const contentParts: any[] = [];
 
@@ -367,6 +439,12 @@ FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
       } catch (pdfErr) {
         console.warn("PDF download failed, proceeding without it:", pdfErr);
       }
+    }
+
+    // Add student posture photos for vision analysis (before text)
+    if (studentPhotoParts.length > 0) {
+      contentParts.push(...studentPhotoParts);
+      contentParts.push({ text: "As imagens acima são fotos de postura do aluno. Analise a postura corporal detalhadamente para fundamentar a avaliação postural e ajustar a prescrição de exercícios.\n\n" });
     }
 
     // Add text prompt with RAG context injected
