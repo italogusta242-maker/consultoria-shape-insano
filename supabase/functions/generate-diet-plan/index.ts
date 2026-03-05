@@ -19,9 +19,11 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: authHeader } },
     });
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
@@ -159,14 +161,127 @@ serve(async (req) => {
       ? `\n🕐 PREFERÊNCIAS DE REFEIÇÕES: "${horarioRefeicoes}"\nRespeite ao nomear e organizar as refeições.\n`
       : "";
 
-    const systemPrompt = `[IDENTITY & PURPOSE]
-Você é a inteligência artificial nutricional de elite do ecossistema Shape Insano Pro. Seu objetivo não é apenas calcular macros, mas desenhar estratégias nutricionais focadas em neuro-performance, altíssima adesão e resultados estéticos. Você atua como o braço direito do Nutricionista Chefe. O seu plano deve blindar o aluno contra a desistência e manter a "Chama de Honra" (nossa métrica de constância) sempre acesa.
+    // =====================================================
+    // RAG: Retrieve relevant knowledge base context via pgvector
+    // =====================================================
+    let ragContext = "";
+    try {
+      const ragQuery = `nutrição dieta ${anamnese?.objetivo || ""} ${anamnese?.restricoes_alimentares || ""} ${assessment?.adesao_dieta || ""} ${goal_hint || ""} ${goal_type || ""}`.trim();
+
+      if (ragQuery.length > 10) {
+        const embResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "models/text-embedding-004",
+              content: { parts: [{ text: ragQuery }] },
+              taskType: "RETRIEVAL_QUERY",
+            }),
+          }
+        );
+
+        if (embResponse.ok) {
+          const embData = await embResponse.json();
+          const queryEmbedding = embData?.embedding?.values;
+
+          if (queryEmbedding) {
+            const { data: matchedDocs, error: matchErr } = await supabaseAdmin.rpc("match_documents", {
+              query_embedding: JSON.stringify(queryEmbedding),
+              match_count: 8,
+              match_threshold: 0.65,
+              filter_specialist_id: specialistId,
+            });
+
+            if (!matchErr && matchedDocs && matchedDocs.length > 0) {
+              ragContext = `\n\n## BASE DE CONHECIMENTO DO ESPECIALISTA (DIRETRIZ PRIMÁRIA — siga estes princípios rigorosamente)
+Utilize o contexto abaixo como sua principal diretriz e base de conhecimento para fundamentar suas decisões de prescrição nutricional.
+Os trechos a seguir foram extraídos do material de referência do especialista:
+
+${matchedDocs.map((d: any, i: number) => `[Trecho ${i + 1}] ${d.content}`).join("\n\n")}
+
+FIM DA BASE DE CONHECIMENTO — aplique estes princípios ao plano gerado.`;
+              console.log(`RAG: injected ${matchedDocs.length} knowledge chunks (best similarity: ${(matchedDocs[0].similarity * 100).toFixed(0)}%)`);
+            } else {
+              console.log("RAG: no matching documents found", matchErr?.message);
+            }
+          }
+        } else {
+          console.warn("RAG embedding generation failed:", embResponse.status);
+        }
+      }
+    } catch (ragErr) {
+      console.warn("RAG retrieval failed, proceeding without knowledge context:", ragErr);
+    }
+
+    // =====================================================
+    // RLHF: Inject liked plans as gold standards
+    // =====================================================
+    let rlhfContext = "";
+    try {
+      const { data: likedLogs } = await supabaseAdmin
+        .from("ai_generation_logs")
+        .select("generated_content")
+        .eq("specialist_id", specialistId)
+        .eq("feedback", "like")
+        .order("created_at", { ascending: false })
+        .limit(3);
+
+      if (likedLogs && likedLogs.length > 0) {
+        rlhfContext = `\n\n## EXEMPLOS PADRÃO OURO (planos aprovados pelo especialista — imite o estilo)
+${likedLogs.map((l: any, i: number) => {
+  const content = typeof l.generated_content === "string" ? l.generated_content : JSON.stringify(l.generated_content);
+  return `### Exemplo ${i + 1}:\n${content.slice(0, 3000)}`;
+}).join("\n\n")}
+FIM DOS EXEMPLOS — use como referência de qualidade e estilo.`;
+        console.log(`RLHF: injected ${likedLogs.length} gold-standard diet plans`);
+      }
+    } catch (rlhfErr) {
+      console.warn("RLHF retrieval failed:", rlhfErr);
+    }
+
+    // =====================================================
+    // RLHF Negative: Inject dislike reasons as anti-patterns
+    // =====================================================
+    let rlhfNegativeContext = "";
+    try {
+      const { data: dislikedLogs } = await supabaseAdmin
+        .from("ai_generation_logs")
+        .select("dislike_reason")
+        .eq("specialist_id", specialistId)
+        .eq("feedback", "dislike")
+        .not("dislike_reason", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (dislikedLogs && dislikedLogs.length > 0) {
+        const reasons = dislikedLogs.map((l: any) => l.dislike_reason).filter(Boolean);
+        if (reasons.length > 0) {
+          rlhfNegativeContext = `\n\n## ⚠️ ERROS A EVITAR (feedback negativo do especialista)
+O especialista rejeitou planos anteriores pelos seguintes motivos. NÃO repita estes erros:
+${reasons.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}
+`;
+          console.log(`RLHF Negative: injected ${reasons.length} dislike reasons as anti-patterns`);
+        }
+      }
+    } catch (rlhfNegErr) {
+      console.warn("RLHF negative retrieval failed:", rlhfNegErr);
+    }
+
+    // =====================================================
+    // SYSTEM PROMPT — Strict Nutritionist with Guardrails
+    // =====================================================
+    const systemPrompt = `[IDENTIDADE E PROPÓSITO]
+Você é um nutricionista estrito e especialista em nutrição esportiva do ecossistema Shape Insano Pro. Você DEVE usar APENAS os padrões fornecidos no contexto (Base de Conhecimento do Especialista e Exemplos Padrão Ouro). Seu objetivo é desenhar estratégias nutricionais focadas em neuro-performance, altíssima adesão e resultados estéticos.
+
+Você NÃO inventa metodologias — você aplica RIGOROSAMENTE a metodologia fornecida na Base de Conhecimento. Se nenhuma base de conhecimento for fornecida, use os princípios padrão de nutrição esportiva baseada em evidências.
 
 ${specialistStyle}
 
-[STRICT RULES OF ENGAGEMENT]
+[REGRAS ESTRITAS DE ENGAJAMENTO]
 
-1. **Realismo Brasileiro (Base TACO/TBCA):** Utilize APENAS alimentos acessíveis e comuns no Brasil (ex: arroz, feijão, ovo de galinha, pão francês, frango, patinho, cuscuz, tapioca). Proibido sugerir ingredientes exóticos ou inviáveis (como mirtilos frescos diários ou salmão selvagem), a menos que o aluno tenha altíssimo poder aquisitivo explícito no perfil.
+1. **Realismo Brasileiro (Base TACO/TBCA):** Utilize APENAS alimentos acessíveis e comuns no Brasil (ex: arroz, feijão, ovo de galinha, pão francês, frango, patinho, cuscuz, tapioca). Proibido sugerir ingredientes exóticos ou inviáveis.
 2. **A Regra Anti-Falha (Fricção Zero):** O desjejum e a refeição pré-treino devem ser extremamente práticas. Pessoas ocupadas falham na dieta quando a preparação demora mais de 15 minutos.
 3. **Neuro-Performance:** Inclua fontes estratégicas de colina (ovos), ômega 3 e carboidratos de baixo índice glicêmico nos horários de trabalho focado do aluno para evitar o "crash" de energia e névoa mental.
 4. **Alinhamento de Macros:**
@@ -178,65 +293,16 @@ ${specialistStyle}
 7. **Preferências:** Respeite os horários e preferências de refeições do aluno.
 8. Considere o estado mental (sono, estresse, humor) e nível de atividade para ajustar o plano.
 9. **PORÇÕES:** Cada alimento DEVE ter a porção em MEDIDA CASEIRA + GRAMAS no formato "X [medida] ou Yg" (ex: "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g", "2 fatias ou 60g"). NUNCA coloque apenas gramas.
-10. **SUBSTITUTOS REAIS:** Cada alimento principal DEVE ter 1-3 substitutos nutricionalmente equivalentes. Substitutos devem ser alimentos DIFERENTES mas com macros similares (ex: arroz → batata inglesa, frango → tilápia, feijão carioca → feijão preto).
-11. Retorne APENAS o JSON válido no formato especificado.
+10. **SUBSTITUTOS REAIS:** Cada alimento principal DEVE ter 1-3 substitutos nutricionalmente equivalentes. Substitutos devem ser alimentos DIFERENTES mas com macros similares.
+11. Retorne a resposta ESTRITAMENTE no formato JSON com as chaves obrigatórias: 'title', 'goal', 'goal_description', 'meals' (cada meal com 'refeicoes'), 'macronutrientes' (totais diários), 'restricoes' (lista de restrições aplicadas).
 ${forbiddenSection}${mealCountRule}${mealScheduleInfo}
 
 [EXEMPLO DE REFERÊNCIA - QUALIDADE ESPERADA]
-Este é um exemplo REAL de plano aprovado por nutricionista. USE como referência de QUALIDADE, nível de detalhe e formato de porções:
-
 Café da Manhã (08:00):
-- Pão francês: 1 unidade (50g) → substitutos: Pão de forma 2 fatias (50g), Cuscuz de milho 1 pedaço grande (200g), Tapioca 3 colheres de sopa rasas (45g)
+- Pão francês: 1 unidade (50g) → substitutos: Pão de forma 2 fatias (50g), Cuscuz de milho 1 pedaço grande (200g)
 - Ovo de galinha: 3 unidades (150g) → substitutos: Frango desfiado 60g, Queijo mussarela 2 fatias (30g)
-- Iogurte natural: 1 unidade (100g)
-- Fruta de preferência: 1 unidade grande (100g)
 
-Almoço:
-- Arroz branco: 4 colheres de arroz cheias (180g) → substitutos: Batata inglesa 9 col sopa (217g), Mandioca 5 col sopa (176g)
-- Feijão carioca: 2 conchas rasas (160g) → substitutos: Feijão preto 2 conchas rasas (160g), Grão de bico 2 conchas rasas (160g)
-- Filé de frango grelhado: 1 fatia média (110g) → substitutos: Carne (alcatra, patinho) grelhada 1 fatia (110g), Tilápia 1 unidade (113g)
-- Verduras: 3 colheres de servir cheias (120g)
-- Salada: À vontade
-
-OBSERVE: porções sempre em medida caseira + gramas, substitutos práticos e equivalentes, alimentos 100% brasileiros.
-
-[OUTPUT FORMAT]
-Retorne um JSON com esta estrutura EXATA:
-{
-  "title": "Nome do Plano",
-  "goal": "deficit|bulking|manutenção|recomposição",
-  "goal_description": "Resumo estratégico: 2-3 linhas explicando POR QUE essa dieta vai funcionar para a rotina específica deste aluno. Inclua distribuição de macros totais diários (ex: Proteína Xg | Carbs Yg | Gordura Zg | Total Wkcal).",
-  "meals": [
-    {
-      "name": "Nome da Refeição",
-      "time": "HH:MM",
-      "foods": [
-        {
-          "name": "Nome do alimento",
-          "portion": "medida caseira ou Xg",
-          "calories": 150,
-          "protein": 10,
-          "carbs": 20,
-          "fat": 5,
-          "substitute": {
-            "name": "Substituto equivalente",
-            "portion": "medida caseira ou Xg",
-            "calories": 145,
-            "protein": 9,
-            "carbs": 21,
-            "fat": 4
-          }
-        }
-      ]
-    }
-  ]
-}
-
-IMPORTANTE sobre o formato:
-- "portion" deve ser string com medida caseira + gramas: "1 unidade ou 50g", "3 colheres de sopa cheias ou 45g"
-- "substitute" é um OBJETO ÚNICO (não array) com o substituto mais relevante, ou null se não houver
-- Macros são números (não strings)
-- NÃO inclua campos extras como "quantity", "unit", "macros", "notes" nas refeições`;
+OBSERVE: porções sempre em medida caseira + gramas, substitutos práticos e equivalentes, alimentos 100% brasileiros.`;
 
     const userPrompt = `Gere um plano alimentar personalizado para este aluno:
 
@@ -301,20 +367,96 @@ ${refeicoesDia ? `\n## 🔢 GERE EXATAMENTE ${refeicoesDia} REFEIÇÕES. NÃO MA
 
 Gere o plano agora. Responda APENAS com o JSON válido.`;
 
-    // Call Gemini API
+    // =====================================================
+    // Gemini API call with Structured Outputs (responseSchema)
+    // =====================================================
+    const responseSchema = {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING", description: "Nome do plano alimentar" },
+        goal: { type: "STRING", enum: ["deficit", "bulking", "manutenção", "recomposição"], description: "Objetivo do plano" },
+        goal_description: { type: "STRING", description: "Resumo estratégico de 2-3 linhas com distribuição de macros totais diários" },
+        meals: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING", description: "Nome da refeição (ex: Café da Manhã)" },
+              time: { type: "STRING", description: "Horário no formato HH:MM" },
+              foods: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    name: { type: "STRING", description: "Nome do alimento" },
+                    portion: { type: "STRING", description: "Medida caseira + gramas (ex: '1 unidade ou 50g')" },
+                    calories: { type: "NUMBER", description: "Calorias do alimento" },
+                    protein: { type: "NUMBER", description: "Proteína em gramas" },
+                    carbs: { type: "NUMBER", description: "Carboidratos em gramas" },
+                    fat: { type: "NUMBER", description: "Gordura em gramas" },
+                    substitute: {
+                      type: "OBJECT",
+                      nullable: true,
+                      properties: {
+                        name: { type: "STRING" },
+                        portion: { type: "STRING" },
+                        calories: { type: "NUMBER" },
+                        protein: { type: "NUMBER" },
+                        carbs: { type: "NUMBER" },
+                        fat: { type: "NUMBER" },
+                      },
+                      required: ["name", "portion", "calories", "protein", "carbs", "fat"],
+                    },
+                  },
+                  required: ["name", "portion", "calories", "protein", "carbs", "fat"],
+                },
+              },
+            },
+            required: ["name", "time", "foods"],
+          },
+        },
+        macronutrientes: {
+          type: "OBJECT",
+          description: "Totais diários de macronutrientes",
+          properties: {
+            calorias_totais: { type: "NUMBER", description: "Total de calorias diárias" },
+            proteina_total_g: { type: "NUMBER", description: "Proteína total em gramas" },
+            carboidratos_total_g: { type: "NUMBER", description: "Carboidratos totais em gramas" },
+            gordura_total_g: { type: "NUMBER", description: "Gordura total em gramas" },
+            proteina_por_kg: { type: "NUMBER", description: "Proteína por kg de peso corporal" },
+            gordura_por_kg: { type: "NUMBER", description: "Gordura por kg de peso corporal" },
+          },
+          required: ["calorias_totais", "proteina_total_g", "carboidratos_total_g", "gordura_total_g"],
+        },
+        restricoes: {
+          type: "ARRAY",
+          items: { type: "STRING" },
+          description: "Lista de restrições alimentares aplicadas neste plano",
+        },
+      },
+      required: ["title", "goal", "goal_description", "meals", "macronutrientes", "restricoes"],
+    };
+
+    // Build the full prompt with RAG + RLHF context injected
+    const fullUserPrompt = ragContext + rlhfContext + rlhfNegativeContext + "\n\n" + userPrompt;
+
     const geminiRes = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: systemPrompt }],
+          },
           contents: [
-            { role: "user", parts: [{ text: systemPrompt + "\n\n" + userPrompt }] },
+            { role: "user", parts: [{ text: fullUserPrompt }] },
           ],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 32768,
+            maxOutputTokens: 65536,
             responseMimeType: "application/json",
+            responseSchema,
           },
         }),
       }
@@ -340,7 +482,7 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
       throw new Error("Resposta vazia da IA. Tente novamente.");
     }
 
-    // Parse JSON with multiple strategies
+    // Parse JSON — with structured outputs this should always be valid
     let planJson;
     try {
       planJson = JSON.parse(rawText);
@@ -362,6 +504,18 @@ Gere o plano agora. Responda APENAS com o JSON válido.`;
           throw new Error("Falha ao interpretar resposta da IA. Tente novamente.");
         }
       }
+    }
+
+    // Log generation for RLHF
+    try {
+      await supabaseAdmin.from("ai_generation_logs").insert({
+        specialist_id: specialistId,
+        student_id: student_id,
+        generated_content: planJson,
+        prompt_context: `diet|${goal_type || "manutenção"}|RAG:${ragContext ? "yes" : "no"}`,
+      });
+    } catch (logErr) {
+      console.warn("Failed to log AI generation:", logErr);
     }
 
     return new Response(JSON.stringify({ plan: planJson }), {
