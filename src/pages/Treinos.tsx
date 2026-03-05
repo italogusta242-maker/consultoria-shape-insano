@@ -1019,8 +1019,12 @@ const Treinos = () => {
                           </div>
                         ) : (
                         <>
-                        {/* GIF from exercise library */}
+                        {/* Exercise media: video OR gif (never both) */}
                         {(() => {
+                          const resolvedVideoId = ex.videoId || findVideoByKeywords(ex.name);
+                          if (resolvedVideoId) {
+                            return <ExerciseVideoThumb videoId={resolvedVideoId} name={ex.name} />;
+                          }
                           const libData = exerciseLibMap.get(ex.name.toLowerCase());
                           const gifUrl = (ex as any).gif_url || libData?.gif_url;
                           return gifUrl ? (
@@ -1034,7 +1038,6 @@ const Treinos = () => {
                             </div>
                           ) : null;
                         })()}
-                        <ExerciseVideoThumb videoId={ex.videoId} name={ex.name} />
                         <div className="flex items-center gap-2 bg-card rounded-lg p-3 border border-border">
                           <RefreshCw size={16} className="text-muted-foreground" />
                           <span className="text-sm text-muted-foreground flex-1">Séries:</span>
