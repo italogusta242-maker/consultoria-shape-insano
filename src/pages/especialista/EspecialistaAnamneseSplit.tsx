@@ -247,11 +247,31 @@ const EspecialistaAnamneseSplit = () => {
 
   // Helper to extract dados_extras fields
   const extras = (anamnese?.dados_extras as Record<string, any>) ?? {};
-  const extraVal = (key: string): string => {
+  const extraVal = (key: string, fallbackField?: string): string => {
     const v = extras[key];
-    if (v == null || v === "") return "—";
-    if (Array.isArray(v)) return v.join(", ") || "—";
-    return String(v);
+    if (v != null && v !== "") {
+      if (Array.isArray(v)) return v.join(", ") || "—";
+      return String(v);
+    }
+    // Fallback to direct anamnese column
+    if (fallbackField && anamnese) {
+      const fb = (anamnese as any)[fallbackField];
+      if (fb != null && fb !== "") return String(fb);
+    }
+    return "—";
+  };
+
+  /** Combines a main field with its "outro" counterpart */
+  const extraValWithOther = (mainKey: string, otherKey: string, fallbackField?: string): string => {
+    const main = extraVal(mainKey, fallbackField);
+    const other = extras[otherKey];
+    const otherStr = other != null && other !== "" ? String(other) : "";
+
+    if (main !== "—" && /outro/i.test(main) && otherStr) {
+      return `${main}: ${otherStr}`;
+    }
+    if (main === "—" && otherStr) return otherStr;
+    return main;
   };
 
   return (
@@ -366,32 +386,35 @@ const EspecialistaAnamneseSplit = () => {
                   <>
                     <div className="border-t border-border/50" />
                     <Section icon={Dumbbell} title="Objetivo & Treino">
-                      <Field label="Objetivo" value={extraVal("objetivo")} />
+                      <Field label="Objetivo" value={extraValWithOther("objetivo", "objetivo_outro", "objetivo")} />
                       <Field label="Fisiculturismo" value={extraVal("fisiculturismo")} />
                       <Field label="Pratica Musculação" value={extraVal("pratica_musculacao")} />
-                      <Field label="Local de Treino" value={extraVal("local_treino")} />
-                      <Field label="Frequência Semanal" value={extraVal("frequencia")} />
+                      <Field label="Local de Treino" value={extraVal("local_treino", "local_treino")} />
+                      <Field label="Frequência Semanal" value={extraVal("frequencia", "frequencia_treino")} />
                       <Field label="Dias da Semana" value={extraVal("dias_semana")} />
                       <Field label="Horário do Treino" value={extraVal("horario_treino")} />
-                      <Field label="Tempo de Treino" value={extraVal("tempo_treino")} />
+                      <Field label="Tempo de Treino" value={extraVal("tempo_treino", "disponibilidade_treino")} />
                       <Field label="Faz Cardio" value={extraVal("faz_cardio")} />
                       <Field label="Tempo de Cardio" value={extraVal("tempo_cardio")} />
+                      <Field label="Experiência" value={extraVal("experiencia_treino", "experiencia_treino")} />
+                      <Field label="Motivação" value={extraVal("motivacao", "motivacao")} />
                     </Section>
 
                     <div className="border-t border-border/50" />
                     <Section icon={Dumbbell} title="Academia">
                       <Field label="Grupos Prioritários" value={extraVal("grupos_prioritarios")} />
-                      <Field label="Tem Dor/Lesão" value={extraVal("tem_dor")} />
-                      <Field label="Exercício que Não Gosta" value={extraVal("exercicio_nao_gosta")} />
-                      <Field label="Máquinas Indisponíveis" value={extraVal("maquinas_nao_tem")} />
+                      <Field label="Tem Dor/Lesão" value={extraVal("tem_dor", "lesoes")} />
+                      <Field label="Exercício que Não Gosta" value={extraValWithOther("exercicio_nao_gosta", "exercicio_nao_gosta_desc")} />
+                      <Field label="Máquinas Indisponíveis" value={extraValWithOther("maquinas_nao_tem", "maquina_outra", "equipamentos")} />
                     </Section>
 
                     <div className="border-t border-border/50" />
                     <Section icon={ClipboardCheck} title="Saúde">
-                      <Field label="Doenças" value={extraVal("doencas")} />
-                      <Field label="Histórico Familiar" value={extraVal("historico_familiar")} />
-                      <Field label="Medicamentos" value={extraVal("medicamentos")} />
-                      <Field label="Alergias" value={extraVal("alergias")} />
+                      <Field label="Doenças" value={extraValWithOther("doencas", "doenca_outra", "condicoes_saude")} />
+                      <Field label="Histórico Familiar" value={extraValWithOther("historico_familiar", "historico_familiar_desc")} />
+                      <Field label="Medicamentos" value={extraValWithOther("medicamentos", "medicamento_outro", "medicamentos")} />
+                      <Field label="Alergias" value={extraValWithOther("alergias", "alergia_outra")} />
+                      <Field label="Uso de Hormônios" value={extraVal("uso_hormonios")} />
                     </Section>
 
                     <div className="border-t border-border/50" />
@@ -401,21 +424,31 @@ const EspecialistaAnamneseSplit = () => {
                       <Field label="Horários das Refeições" value={extraVal("horario_refeicoes")} />
                       <Field label="Calorias Diárias" value={extraVal("calorias")} />
                       <Field label="Tempo nesse Consumo" value={extraVal("tempo_calorias")} />
-                      <Field label="Restrições" value={extraVal("restricoes")} />
-                      <Field label="Frutas Preferidas" value={extraVal("frutas")} />
-                      <Field label="Suplementos" value={extraVal("suplementos")} />
+                      <Field label="Passos / Calorias" value={extraVal("passos_calorias")} />
+                      <Field label="Restrições" value={extraVal("restricoes", "restricoes_alimentares")} />
+                      <Field label="Frutas Preferidas" value={extraValWithOther("frutas", "fruta_outra")} />
+                      <Field label="Suplementos" value={extraValWithOther("suplementos", "suplemento_outro", "suplementos")} />
+                      <Field label="Dieta Atual" value={extraVal("dieta_atual", "dieta_atual")} />
                     </Section>
 
                     <div className="border-t border-border/50" />
                     <Section icon={Brain} title="Estilo de Vida">
                       <Field label="Horário do Sono" value={extraVal("horario_sono")} />
                       <Field label="Qualidade do Sono" value={extraVal("qualidade_sono")} />
+                      <Field label="Horas de Sono" value={extraVal("horas_sono", "sono_horas")} />
+                      <Field label="Nível de Estresse" value={extraVal("nivel_estresse", "nivel_estresse")} />
                       <Field label="Alimentos Diários" value={extraVal("alimentos_diarios")} />
                       <Field label="Alimentos que Não Come" value={extraVal("alimentos_nao_come")} />
-                      <Field label="Água Diária" value={extraVal("agua")} />
+                      <Field label="Água Diária" value={extraValWithOther("agua", "agua_outra", "agua_diaria")} />
                       <Field label="Líquido nas Refeições" value={extraVal("liquido_refeicao")} />
                       <Field label="Qual Líquido" value={extraVal("liquido_qual")} />
                       <Field label="Investimento em Dieta" value={extraVal("investimento_dieta")} />
+                      <Field label="Freq. Evacuação" value={extraVal("frequencia_evacuacao")} />
+                      <Field label="Sintomas Digestão" value={extraVal("sintomas_digestao")} />
+                      <Field label="Escala de Bristol" value={extraVal("escala_bristol")} />
+                      <Field label="Ocupação" value={extraVal("ocupacao", "ocupacao")} />
+                      <Field label="Faixa Salarial" value={extraVal("faixa_salarial")} />
+                      <Field label="Influenciador Favorito" value={extraVal("influenciador_favorito")} />
                     </Section>
 
                     <p className="text-[10px] text-muted-foreground text-right pt-2">
