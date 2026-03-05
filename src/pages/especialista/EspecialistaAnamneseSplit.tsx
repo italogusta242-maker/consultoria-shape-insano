@@ -15,12 +15,13 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
 import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
 import StudentPhotosPanel from "@/components/especialista/StudentPhotosPanel";
 import PlanVersionTimeline from "@/components/especialista/PlanVersionTimeline";
+import LegacyPhotosUpload from "@/components/especialista/LegacyPhotosUpload";
 
 const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
   <div className="space-y-3">
@@ -208,6 +209,7 @@ const EspecialistaAnamneseSplit = () => {
 
   const [bodyFat, setBodyFat] = useState<string>("");
   const bodyFatInitialized = useState(false);
+  const [legacyPhotosOpen, setLegacyPhotosOpen] = useState(false);
 
   // Sync bodyFat state when profile loads
   if (profile && !bodyFatInitialized[0]) {
@@ -372,13 +374,33 @@ const EspecialistaAnamneseSplit = () => {
                 {/* Fotos da última reavaliação */}
                 {studentId && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-md bg-[hsl(var(--gold)/0.15)]">
-                        <Camera size={14} className="text-[hsl(var(--gold))]" />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-md bg-[hsl(var(--gold)/0.15)]">
+                          <Camera size={14} className="text-[hsl(var(--gold))]" />
+                        </div>
+                        <h4 className="font-cinzel text-sm font-bold text-foreground">Fotos</h4>
                       </div>
-                      <h4 className="font-cinzel text-sm font-bold text-foreground">Fotos</h4>
+                      {anamnese && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-[10px] gap-1 h-7"
+                          onClick={() => setLegacyPhotosOpen(true)}
+                        >
+                          <ImagePlus size={10} /> Anexar Fotos
+                        </Button>
+                      )}
                     </div>
                     <StudentPhotosPanel studentId={studentId} />
+                    {anamnese && (
+                      <LegacyPhotosUpload
+                        studentId={studentId}
+                        anamneseId={anamnese.id}
+                        open={legacyPhotosOpen}
+                        onOpenChange={setLegacyPhotosOpen}
+                      />
+                    )}
                   </div>
                 )}
 
