@@ -17,6 +17,7 @@ export type Database = {
       ai_generation_logs: {
         Row: {
           created_at: string
+          dislike_reason: string | null
           feedback: string | null
           generated_content: Json
           id: string
@@ -27,6 +28,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dislike_reason?: string | null
           feedback?: string | null
           generated_content?: Json
           id?: string
@@ -37,6 +39,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dislike_reason?: string | null
           feedback?: string | null
           generated_content?: Json
           id?: string

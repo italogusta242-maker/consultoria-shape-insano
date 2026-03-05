@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_generation_logs ADD COLUMN dislike_reason text NULL;
