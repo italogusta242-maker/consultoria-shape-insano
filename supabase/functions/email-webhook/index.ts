@@ -17,8 +17,28 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const body = await req.json();
-    console.log("[email-webhook] Received:", JSON.stringify(body).substring(0, 500));
+    // Basic security check: require a path/header token if you decide to configure it later
+    const expectedToken = Deno.env.get("BREVO_WEBHOOK_SECRET");
+    if (expectedToken) {
+      const authHeader = req.headers.get("authorization") || req.headers.get("x-brevo-token");
+      if (authHeader !== expectedToken) {
+        console.error("[email-webhook] Unauthorized access attempt");
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const textBody = await req.text();
+    if (!textBody) {
+      return new Response(JSON.stringify({ ok: true, ignored: "empty_body" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = JSON.parse(textBody);
+    console.log("[email-webhook] Received:", textBody.substring(0, 500));
 
     // Brevo sends webhooks as single events or arrays
     const events = Array.isArray(body) ? body : [body];

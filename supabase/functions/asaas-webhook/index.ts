@@ -178,15 +178,24 @@ async function autoProvisionAccount(
   });
 
   if (createError) {
-    if (createError.message.includes("already been registered")) {
-      console.log("[asaas-webhook] User already exists:", email);
-      // Find existing user and update password
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
-      if (existingUser) {
-        userId = existingUser.id;
-        await supabase.auth.admin.updateUserById(existingUser.id, { password });
-        console.log("[asaas-webhook] Password updated for existing user:", existingUser.id);
+    if (createError.message.includes("already been registered") || createError.message.includes("Email already in use")) {
+      console.log("[asaas-webhook] User already exists, fetching by email:", email);
+      // Find existing user by email directly
+      const { data: userData, error: fetchError } = await supabase.auth.admin.getUserByEmail(email);
+
+      if (fetchError || !userData?.user) {
+        console.error("[asaas-webhook] Failed to fetch existing user:", fetchError?.message);
+        return { success: false, error: fetchError?.message || "User exists but could not be fetched" };
+      }
+
+      userId = userData.user.id;
+      // Update password to the new one generated (CPF or fallback)
+      const { error: updateError } = await supabase.auth.admin.updateUserById(userId, { password });
+
+      if (updateError) {
+        console.error("[asaas-webhook] Failed to update password for existing user:", updateError.message);
+      } else {
+        console.log("[asaas-webhook] Password updated for existing user:", userId);
       }
     } else {
       console.error("[asaas-webhook] User creation failed:", createError.message);
@@ -201,7 +210,7 @@ async function autoProvisionAccount(
   if (userId) {
     const profileUpdate: Record<string, any> = { nome, email };
     if (cpf) profileUpdate.cpf = (cpf || "").replace(/\D/g, "");
-    
+
     await supabase
       .from("profiles")
       .update(profileUpdate)
@@ -245,12 +254,13 @@ async function autoProvisionAccount(
 
     if (!result.ok) {
       console.error("[asaas-webhook] Email send failed:", result.error);
-      return { success: true, error: "Email send failed" };
+      // We return success: true because the user WAS created, but notice the error
+      return { success: true, error: `Email failed: ${result.error}` };
     }
-    console.log("[asaas-webhook] Credentials email sent to:", email);
-  } catch (emailErr) {
-    console.error("[asaas-webhook] Email send error:", emailErr);
-    return { success: true, error: "Email send exception" };
+    console.log("[asaas-webhook] Credentials email sent successfully to:", email);
+  } catch (emailErr: any) {
+    console.error("[asaas-webhook] Email send exception:", emailErr.message);
+    return { success: true, error: `Email exception: ${emailErr.message}` };
   }
 
   return { success: true };
@@ -358,11 +368,18 @@ Deno.serve(async (req) => {
 
     // --- Idempotency Check ---
     const idempotencyKey = `webhook_${payment.id}_${event}`;
-    const { data: existingKey } = await supabase
-      .from("idempotency_keys")
-      .select("key, response")
-      .eq("key", idempotencyKey)
-      .maybeSingle();
+    let existingKey: any = null;
+
+    try {
+      const { data } = await supabase
+        .from("idempotency_keys")
+        .select("key, response")
+        .eq("key", idempotencyKey)
+        .maybeSingle();
+      existingKey = data;
+    } catch (idemErr: any) {
+      console.error("[asaas-webhook] Idempotency DB check failed (continuing anyway):", idemErr.message);
+    }
 
     if (existingKey) {
       console.log("[asaas-webhook] Duplicate webhook, returning cached:", idempotencyKey);
@@ -445,10 +462,23 @@ Deno.serve(async (req) => {
     }
 
     // --- AUTO-PROVISION: Create account + send credentials ---
-    const result = await autoProvisionAccount(supabase, customerEmail, inviteName, inviteCpf, effectivePlanValue, inviteId);
+    let result: { success: boolean; error?: string } = { success: false, error: "Not started" };
+    try {
+      result = await autoProvisionAccount(supabase, customerEmail, inviteName, inviteCpf, effectivePlanValue, inviteId);
+    } catch (provisionErr: any) {
+      console.error("[asaas-webhook] CRITICAL Auto-provisioning crashed:", provisionErr?.message || provisionErr);
+      result = { success: false, error: "Auto-provisioning crashed: " + (provisionErr?.message || "unknown") };
+      // Note: we still return 200 OK to Asaas to prevent infinite retries if the crash was unrecoverable 
+      // (like a persistent DB limit hit), but the error is logged.
+    }
 
     const response = { ok: true, invite_id: inviteId, action: "auto_provisioned", ...result };
-    await supabase.from("idempotency_keys").insert({ key: idempotencyKey, response });
+
+    try {
+      await supabase.from("idempotency_keys").insert({ key: idempotencyKey, response });
+    } catch (idemInsErr: any) {
+      console.error("[asaas-webhook] Failed to save idempotency key:", idemInsErr.message);
+    }
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
