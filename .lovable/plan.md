@@ -1,41 +1,35 @@
 
 
-# Plano: Exibir campos "Outros" na Anamnese do Especialista
+## Verification Results
 
-## Problema
-Quando o aluno seleciona "Outros" em campos como objetivo, doenças, alergias, etc., o formulário salva dois campos no `dados_extras`: o campo principal (ex: `objetivo` = "Outros") e o campo de texto livre (ex: `objetivo_outro` = "Ganhar massa magra focando em costas"). A tela do especialista só exibe o campo principal, perdendo a informação detalhada.
+### 1. Secrets Status
+Both **ASAAS_WEBHOOK_TOKEN** and **BREVO_API_KEY** are confirmed set in the project secrets. No action needed.
 
-## Campos afetados (pares principal → texto livre)
-| Campo principal | Campo "outro" no JSONB |
-|---|---|
-| `objetivo` | `objetivo_outro` |
-| `doencas` | `doenca_outra` |
-| `alergias` | `alergia_outra` |
-| `suplementos` | `suplemento_outro` |
-| `medicamentos` | `medicamento_outro` |
-| `exercicio_nao_gosta` | `exercicio_nao_gosta_desc` |
-| `historico_familiar` | `historico_familiar_desc` |
-| `maquinas_nao_tem` | `maquina_outra` |
-| `frutas` | `fruta_outra` |
-| `agua` | `agua_outra` |
+### 2. Edge Function Logs
+No logs found for `asaas-webhook`. This means either:
+- No webhook events have been received recently
+- The function hasn't been triggered yet
 
-## Solução
+### 3. Code Review — `asaas-webhook/index.ts`
+The function is well-structured:
+- **Token validation** (lines 266-282): Rejects requests if `ASAAS_WEBHOOK_TOKEN` is missing or doesn't match the `asaas-access-token` header
+- **ASAAS_API_KEY** check (lines 319-326): Returns 500 if not set
+- **Idempotency** via `idempotency_keys` table
+- **Auto-provisioning** creates user, sends credentials email via Brevo
 
-Arquivo: `src/pages/especialista/EspecialistaAnamneseSplit.tsx`
+### 4. Simulate a Test Webhook
+To safely test, I can use the edge function testing tool to send a simulated `PAYMENT_CONFIRMED` event to the deployed function. This will verify:
+- Token validation works
+- The function processes the event correctly
+- Brevo email sending works
 
-1. **Criar helper `extraValWithOther`**: Uma nova função que recebe a chave principal e a chave "outro". Se o valor principal contiver "Outro" (case-insensitive), concatena com o texto livre. Se ambos existirem, exibe `"Outros: texto detalhado"`. Se só o texto livre existir, exibe ele diretamente.
+### Proposed Plan
 
-2. **Atualizar cada `<Field>` afetado** para usar o novo helper, passando o par de chaves corretas. Exemplo:
-   - `<Field label="Objetivo" value={extraValWithOther("objetivo", "objetivo_outro")} />`
-   - `<Field label="Doenças" value={extraValWithOther("doencas", "doenca_outra")} />`
-   - etc.
+1. **Test the webhook endpoint** — Use `curl_edge_functions` to send a test payload with the correct `asaas-access-token` header and a `PAYMENT_CONFIRMED` event with a fake payment ID. This will confirm the function is reachable and the token validation works.
 
-3. **Adicionar campos que estão completamente ausentes da UI**: Alguns campos do `dados_extras` (como `influenciador_favorito`, `uso_hormonios`, `frequencia_evacuacao`, `sintomas_digestao`, `escala_bristol`, `faixa_salarial`, `passos_calorias`) nunca são exibidos. Eles serão adicionados nas seções correspondentes.
+2. **Review logs after test** — Check edge function logs to see if the request was processed or rejected, identifying any 401/500 errors.
 
-4. **Também exibir campos da tabela `anamnese` direta** que atualmente são ignorados em favor do `dados_extras` (ex: `anamnese.objetivo`, `anamnese.lesoes`, `anamnese.medicamentos`, `anamnese.condicoes_saude`, `anamnese.restricoes_alimentares`, `anamnese.suplementos`, `anamnese.agua_diaria`, `anamnese.sono_horas`, `anamnese.nivel_estresse`, `anamnese.dieta_atual`). A lógica será: exibir o valor do `dados_extras` se disponível, senão fallback para o campo direto da tabela `anamnese`.
+3. **Report findings** — Share the results with you so we can determine if anything needs fixing.
 
-## Escopo
-- Apenas `EspecialistaAnamneseSplit.tsx` (componente de renderização)
-- Zero alteração no banco de dados
-- Zero alteração no formulário de onboarding
+> **Note**: The test will use a fake customer ID, so it will fail at the Asaas API customer lookup step (which is expected and safe). This is enough to confirm the webhook pipeline is working up to the external API call.
 
