@@ -221,6 +221,36 @@ export type Database = {
           },
         ]
       }
+      closer_goals: {
+        Row: {
+          closer_id: string
+          id: string
+          month: string
+          sales_goal: number | null
+          ticket_goal: number | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          closer_id: string
+          id?: string
+          month: string
+          sales_goal?: number | null
+          ticket_goal?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          closer_id?: string
+          id?: string
+          month?: string
+          sales_goal?: number | null
+          ticket_goal?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       conversation_participants: {
         Row: {
           conversation_id: string
@@ -492,6 +522,7 @@ export type Database = {
       flame_status: {
         Row: {
           last_approved_date: string | null
+          last_midnight_check: string | null
           state: string
           streak: number
           updated_at: string
@@ -499,6 +530,7 @@ export type Database = {
         }
         Insert: {
           last_approved_date?: string | null
+          last_midnight_check?: string | null
           state?: string
           streak?: number
           updated_at?: string
@@ -506,12 +538,21 @@ export type Database = {
         }
         Update: {
           last_approved_date?: string | null
+          last_midnight_check?: string | null
           state?: string
           streak?: number
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "flame_status_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       food_database: {
         Row: {
@@ -848,6 +889,9 @@ export type Database = {
           progresso_triceps: boolean | null
           refeicoes_horarios: string | null
           restricao_alimentar: string | null
+          reviewed: boolean
+          reviewed_at: string | null
+          reviewed_by: string | null
           sugestao_dieta: string | null
           sugestao_melhoria: string | null
           tempo_disponivel: string | null
@@ -896,6 +940,9 @@ export type Database = {
           progresso_triceps?: boolean | null
           refeicoes_horarios?: string | null
           restricao_alimentar?: string | null
+          reviewed?: boolean
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           sugestao_dieta?: string | null
           sugestao_melhoria?: string | null
           tempo_disponivel?: string | null
@@ -944,6 +991,9 @@ export type Database = {
           progresso_triceps?: boolean | null
           refeicoes_horarios?: string | null
           restricao_alimentar?: string | null
+          reviewed?: boolean
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           sugestao_dieta?: string | null
           sugestao_melhoria?: string | null
           tempo_disponivel?: string | null
@@ -1062,6 +1112,7 @@ export type Database = {
           logradouro: string | null
           meta_peso: string | null
           nascimento: string | null
+          next_anamnese_due: string | null
           nome: string | null
           notification_preview: string
           onboarded: boolean
@@ -1070,6 +1121,8 @@ export type Database = {
           status: string
           telefone: string | null
           tempo_acompanha: string | null
+          timezone: string | null
+          walkthrough_completed: boolean | null
         }
         Insert: {
           altura?: string | null
@@ -1091,6 +1144,7 @@ export type Database = {
           logradouro?: string | null
           meta_peso?: string | null
           nascimento?: string | null
+          next_anamnese_due?: string | null
           nome?: string | null
           notification_preview?: string
           onboarded?: boolean
@@ -1099,6 +1153,8 @@ export type Database = {
           status?: string
           telefone?: string | null
           tempo_acompanha?: string | null
+          timezone?: string | null
+          walkthrough_completed?: boolean | null
         }
         Update: {
           altura?: string | null
@@ -1120,6 +1176,7 @@ export type Database = {
           logradouro?: string | null
           meta_peso?: string | null
           nascimento?: string | null
+          next_anamnese_due?: string | null
           nome?: string | null
           notification_preview?: string
           onboarded?: boolean
@@ -1128,6 +1185,8 @@ export type Database = {
           status?: string
           telefone?: string | null
           tempo_acompanha?: string | null
+          timezone?: string | null
+          walkthrough_completed?: boolean | null
         }
         Relationships: []
       }
@@ -1188,6 +1247,33 @@ export type Database = {
           id?: string
           p256dh?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      specialist_ai_chats: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          image_url: string | null
+          role: string
+          specialist_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          role: string
+          specialist_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          role?: string
+          specialist_id?: string
         }
         Relationships: []
       }
@@ -1531,6 +1617,36 @@ export type Database = {
           specialist_id?: string
           student_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      weekly_ratings: {
+        Row: {
+          created_at: string | null
+          feedback_text: string | null
+          id: string
+          nutri_rating: number | null
+          personal_rating: number | null
+          platform_rating: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          feedback_text?: string | null
+          id?: string
+          nutri_rating?: number | null
+          personal_rating?: number | null
+          platform_rating?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          feedback_text?: string | null
+          id?: string
+          nutri_rating?: number | null
+          personal_rating?: number | null
+          platform_rating?: number | null
+          user_id?: string
         }
         Relationships: []
       }
