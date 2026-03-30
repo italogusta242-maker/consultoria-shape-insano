@@ -398,6 +398,7 @@ const Treinos = () => {
         date: string;
         view: View;
         selectedGroup: number;
+        groupName?: string;
         startedAt: string;
         exercises: Exercise[];
         expandedExercise: number | null;
