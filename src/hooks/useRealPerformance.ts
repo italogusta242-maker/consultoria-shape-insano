@@ -62,6 +62,25 @@ const regionMap: Record<string, "superior" | "inferior"> = {
 
 const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+interface WorkoutExerciseLike {
+  name: string;
+  setsData: Array<{ done?: boolean }>;
+}
+
+function getSafeWorkoutExercises(value: unknown): WorkoutExerciseLike[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((exercise): exercise is { name?: unknown; setsData?: unknown } => !!exercise && typeof exercise === "object")
+    .map((exercise) => ({
+      name: typeof exercise.name === "string" ? exercise.name.trim() : "",
+      setsData: Array.isArray(exercise.setsData)
+        ? exercise.setsData.filter((set): set is { done?: boolean } => !!set && typeof set === "object")
+        : [],
+    }))
+    .filter((exercise) => exercise.name.length > 0);
+}
+
 function getWeekStart(): string {
   const now = new Date();
   const day = now.getDay();
@@ -85,8 +104,7 @@ function calcTrainingForDay(workouts: any[]): { score: number; setsCompleted: nu
   let groupName = "";
   for (const w of workouts) {
     if (w.group_name) groupName = w.group_name;
-    const exercises = w.exercises as any[];
-    if (!exercises) continue;
+    const exercises = getSafeWorkoutExercises(w.exercises);
     for (const ex of exercises) {
       const sets = ex.setsData || [];
       totalSets += sets.length;
@@ -218,8 +236,7 @@ export const useRealPerformance = () => {
   const volumeDetalhado: VolumeEntry[] = (() => {
     const counts: Record<string, number> = {};
     for (const w of weekWorkouts ?? []) {
-      const exercises = w.exercises as any[];
-      if (!exercises) continue;
+      const exercises = getSafeWorkoutExercises(w.exercises);
       for (const ex of exercises) {
         const group = mapExerciseToGroup(ex.name || "");
         if (group === "Outro") continue;

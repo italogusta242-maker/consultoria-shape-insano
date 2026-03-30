@@ -217,6 +217,42 @@ const parseRestSeconds = (rest: string): number => {
   return minutes * 60 + seconds;
 };
 
+const sanitizeSetData = (value: unknown): ExerciseSet[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((set): set is Partial<ExerciseSet> => !!set && typeof set === "object")
+    .map((set) => ({
+      targetReps: typeof set.targetReps === "string" ? set.targetReps : "",
+      weight: typeof set.weight === "number" ? set.weight : null,
+      actualReps: typeof set.actualReps === "number" ? set.actualReps : null,
+      done: Boolean(set.done),
+    }));
+};
+
+const sanitizeExercises = (value: unknown): Exercise[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter((exercise): exercise is Partial<Exercise> & { freeText?: boolean } => !!exercise && typeof exercise === "object")
+    .filter((exercise) => Boolean(exercise.freeText) || typeof exercise.name === "string")
+    .map((exercise) => {
+      const name = typeof exercise.name === "string" ? exercise.name.trim() : "";
+      const setsData = sanitizeSetData(exercise.setsData);
+
+      return {
+        ...exercise,
+        name: exercise.freeText ? name || "Instrução do Preparador" : name,
+        sets: typeof exercise.sets === "number" ? exercise.sets : setsData.length,
+        reps: typeof exercise.reps === "string" ? exercise.reps : "",
+        weight: typeof exercise.weight === "number" ? exercise.weight : null,
+        rest: typeof exercise.rest === "string" ? exercise.rest : "",
+        setsData,
+      } as Exercise;
+    })
+    .filter((exercise) => Boolean((exercise as any).freeText) || exercise.name.length > 0);
+};
+
 /** Rest countdown timer component */
 const RestTimer = ({ seconds, onDone, onSkip }: { seconds: number; onDone: () => void; onSkip: () => void }) => {
   const [remaining, setRemaining] = useState(seconds);
@@ -370,11 +406,12 @@ const Treinos = () => {
   };
 
   const persisted = getPersistedExecution();
+  const persistedExercises = sanitizeExercises(persisted?.exercises);
 
   const [view, setView] = useState<View>(persisted?.view === "execution" ? "execution" : "list");
   const [selectedGroup, setSelectedGroup] = useState<number | null>(persisted?.selectedGroup ?? null);
   const [expandedExercise, setExpandedExercise] = useState<number | null>(persisted?.expandedExercise ?? null);
-  const [exercises, setExercises] = useState<Exercise[]>(persisted?.exercises ?? []);
+  const [exercises, setExercises] = useState<Exercise[]>(persistedExercises);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [effortRating, setEffortRating] = useState<number | null>(null);
@@ -463,15 +500,17 @@ const Treinos = () => {
   const sessionsCompleted = workoutHistory.filter((w) => w.finished_at).length;
 
   const workoutGroups: WorkoutGroup[] = plan?.groups
-    ? (plan.groups as unknown as WorkoutGroup[]).map(g => ({
-      ...g,
-      exercises: [...g.exercises]
-        .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
-        .map(ex => ({
-          ...ex,
-          videoId: ex.videoId || findVideoByKeywords(ex.name) || undefined,
-        })),
-    }))
+    ? (plan.groups as unknown as WorkoutGroup[])
+      .filter((group): group is WorkoutGroup => Boolean(group && typeof group === "object" && typeof group.name === "string"))
+      .map((group) => ({
+        ...group,
+        exercises: sanitizeExercises(group.exercises)
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((exercise) => ({
+            ...exercise,
+            videoId: exercise.videoId || findVideoByKeywords(exercise.name) || undefined,
+          })),
+      }))
     : fallbackGroups;
   const totalSessions = plan?.total_sessions ?? 50;
   const planTitle = plan?.title ?? "Plano Personalizado";
@@ -618,8 +657,9 @@ const Treinos = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         const todayStr = getToday();
-        if (parsed.date === todayStr && parsed.exercises?.length === group.exercises.length) {
-          setExercises(parsed.exercises);
+        const safeExercises = sanitizeExercises(parsed.exercises);
+        if (parsed.date === todayStr && safeExercises.length === group.exercises.length) {
+          setExercises(safeExercises);
           setSelectedGroup(index);
           setExpandedExercise(null);
           setView("detail");
@@ -631,8 +671,7 @@ const Treinos = () => {
     const exs = group.exercises.map((ex) => {
       const setsData = initSetsData(ex);
       const maxWeight = workoutHistory.reduce((max, w) => {
-        const exercises = w.exercises as any[];
-        if (!exercises) return max;
+        const exercises = sanitizeExercises(w.exercises);
         for (const histEx of exercises) {
           if (histEx.name === ex.name && histEx.setsData) {
             for (const s of histEx.setsData) {
@@ -707,7 +746,7 @@ const Treinos = () => {
     updated[exIdx].setsData.forEach((s) => { if (!s.done) s.done = true; });
     setExercises(updated);
     if (exIdx < exercises.length - 1) setExpandedExercise(exIdx + 1);
-    toast.success(`${ex.name} concluído!`);
+    toast.success(`${ex?.name || "Exercício"} concluído!`);
     try { SFX.xp(); } catch { }
   };
 
