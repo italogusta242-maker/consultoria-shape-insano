@@ -514,6 +514,14 @@ const Treinos = () => {
     : fallbackGroups;
   const totalSessions = plan?.total_sessions ?? 50;
   const planTitle = plan?.title ?? "Plano Personalizado";
+  const hasValidSelectedGroup = selectedGroup !== null && selectedGroup >= 0 && selectedGroup < workoutGroups.length;
+  const selectedGroupName = hasValidSelectedGroup ? workoutGroups[selectedGroup].name : null;
+  const persistedGroupMismatch = Boolean(
+    persisted?.groupName &&
+    selectedGroup !== null &&
+    hasValidSelectedGroup &&
+    selectedGroupName !== persisted.groupName
+  );
 
   // Save workout mutation
   const saveWorkout = useMutation({
@@ -617,13 +625,33 @@ const Treinos = () => {
     setSelectedGroup(null);
   }, [timer, timerRunning]);
 
+  useEffect(() => {
+    if (selectedGroup === null) return;
+    if (hasValidSelectedGroup && !persistedGroupMismatch) return;
+
+    localStorage.removeItem("workout-execution-state");
+    localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+    setSelectedGroup(null);
+    setExpandedExercise(null);
+    setExercises([]);
+    setStartedAt("");
+    setTimer(0);
+    setTimerRunning(false);
+
+    if (view !== "list") {
+      setView("list");
+      toast.error("Limpamos uma sessão de treino antiga salva neste aparelho.");
+    }
+  }, [hasValidSelectedGroup, persistedGroupMismatch, selectedGroup, view]);
+
   // Persist execution state to localStorage
   useEffect(() => {
-    if (view === "execution" && selectedGroup !== null && startedAt) {
+    if (view === "execution" && hasValidSelectedGroup && startedAt) {
       localStorage.setItem("workout-execution-state", JSON.stringify({
         date: getToday(),
         view,
         selectedGroup,
+        groupName: workoutGroups[selectedGroup].name,
         startedAt,
         exercises,
         expandedExercise,
@@ -631,7 +659,7 @@ const Treinos = () => {
     } else if (view !== "execution") {
       localStorage.removeItem("workout-execution-state");
     }
-  }, [view, selectedGroup, startedAt, exercises, expandedExercise]);
+  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups]);
 
   // Determine next group
   const getNextGroupIndex = useCallback(() => {
@@ -658,12 +686,18 @@ const Treinos = () => {
         const parsed = JSON.parse(saved);
         const todayStr = getToday();
         const safeExercises = sanitizeExercises(parsed.exercises);
-        if (parsed.date === todayStr && safeExercises.length === group.exercises.length) {
+        const matchesGroupName = typeof parsed.groupName !== "string" || parsed.groupName === group.name;
+
+        if (parsed.date === todayStr && matchesGroupName && safeExercises.length === group.exercises.length) {
           setExercises(safeExercises);
           setSelectedGroup(index);
           setExpandedExercise(null);
           setView("detail");
           return;
+        }
+
+        if (!matchesGroupName) {
+          localStorage.removeItem(storageKey);
         }
       }
     } catch { }
@@ -694,14 +728,15 @@ const Treinos = () => {
 
   // Auto-save exercises to localStorage whenever they change
   useEffect(() => {
-    if (selectedGroup === null || exercises.length === 0) return;
+    if (!hasValidSelectedGroup || exercises.length === 0) return;
     if (view !== "detail" && view !== "execution") return;
     const storageKey = `workout-in-progress-${selectedGroup}`;
     localStorage.setItem(storageKey, JSON.stringify({
       date: getToday(),
+      groupName: workoutGroups[selectedGroup].name,
       exercises,
     }));
-  }, [exercises, selectedGroup, view]);
+  }, [exercises, hasValidSelectedGroup, selectedGroup, view, workoutGroups]);
 
   const startWorkout = () => {
     setView("execution");
@@ -822,6 +857,16 @@ const Treinos = () => {
   // ═══════════════════════════════════════════════════════════
   // VIEW: HISTORY
   // ═══════════════════════════════════════════════════════════
+  if (view !== "list" && view !== "history" && selectedGroup !== null && (!hasValidSelectedGroup || persistedGroupMismatch)) {
+    return (
+      <div className="p-4 max-w-lg mx-auto pb-24">
+        <div className="bg-card border border-border rounded-xl p-4 text-center">
+          <p className="text-sm text-muted-foreground">Recarregando treino…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (view === "history") {
     return (
       <div className="p-4 max-w-lg mx-auto pb-24">
