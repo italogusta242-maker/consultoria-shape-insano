@@ -13,7 +13,9 @@ export type AlertType =
   | "inactive"
   | "onboarding_pending"
   | "assessment_overdue"
-  | "churn_risk";
+  | "churn_risk"
+  | "monthly_pending"
+  | "monthly_awaiting_review";
 
 export interface ProactiveAlert {
   id: string;
@@ -77,11 +79,11 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
           .not("finished_at", "is", null),
         supabase
           .from("profiles")
-          .select("id, status, onboarded")
+          .select("id, status, onboarded, next_anamnese_due")
           .in("id", studentIds),
         supabase
           .from("monthly_assessments")
-          .select("user_id, created_at")
+          .select("user_id, created_at, reviewed")
           .in("user_id", studentIds)
           .order("created_at", { ascending: false }),
         supabase
@@ -326,8 +328,41 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
             });
           }
         }
-      }
 
+        // 8. Monthly assessment: pending (not responded) or awaiting review
+        const nextDue = (profile as any)?.next_anamnese_due;
+        if (nextDue) {
+          const dueDate = new Date(nextDue);
+          const daysOverdue = differenceInCalendarDays(today, dueDate);
+          if (daysOverdue >= 0 && (!assessment || new Date(assessment.created_at) < dueDate)) {
+            alerts.push({
+              id: `monthly-pending-${sid}`,
+              type: "monthly_pending",
+              studentId: sid,
+              studentName: name,
+              severity: getSeverity(daysOverdue, { warn: 3, critical: 7 }),
+              title: "Anamnese mensal não respondida",
+              daysRelative: daysOverdue,
+              timeLabel: daysOverdue === 0 ? "vence hoje" : `atrasada ${buildTimeLabel(daysOverdue, "overdue")}`,
+              navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+            });
+          }
+        }
+        if (assessment && !(assessment as any).reviewed) {
+          const daysSinceSubmit = differenceInCalendarDays(today, new Date(assessment.created_at));
+          alerts.push({
+            id: `monthly-review-${sid}`,
+            type: "monthly_awaiting_review",
+            studentId: sid,
+            studentName: name,
+            severity: getSeverity(daysSinceSubmit, { warn: 2, critical: 5 }),
+            title: "Mensal aguardando análise",
+            daysRelative: daysSinceSubmit,
+            timeLabel: `enviada ${buildTimeLabel(daysSinceSubmit, "overdue")}`,
+            navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+          });
+        }
+      }
       // Sort: critical first, then warning, then info
       const severityOrder: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
       alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);

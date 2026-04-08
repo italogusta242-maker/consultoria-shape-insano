@@ -215,10 +215,14 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     return map;
   }, [exerciseLib]);
 
-  // Drag-and-drop state
+  // Drag-and-drop state for exercises
   const [dragGroupIdx, setDragGroupIdx] = useState<number | null>(null);
   const [dragExIdx, setDragExIdx] = useState<number | null>(null);
   const [dragOverExIdx, setDragOverExIdx] = useState<number | null>(null);
+
+  // Drag-and-drop state for GROUP (day) reordering
+  const [dragDayIdx, setDragDayIdx] = useState<number | null>(null);
+  const [dragOverDayIdx, setDragOverDayIdx] = useState<number | null>(null);
 
   const handleDragStart = (gi: number, ei: number) => {
     setDragGroupIdx(gi);
@@ -248,6 +252,32 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     setDragGroupIdx(null);
     setDragExIdx(null);
     setDragOverExIdx(null);
+    setDragDayIdx(null);
+    setDragOverDayIdx(null);
+  };
+
+  // Group (day) drag handlers
+  const handleGroupDragStart = (e: React.DragEvent, gi: number) => {
+    e.stopPropagation();
+    setDragDayIdx(gi);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleGroupDragOver = (e: React.DragEvent, gi: number) => {
+    e.preventDefault();
+    if (dragDayIdx !== null) setDragOverDayIdx(gi);
+  };
+
+  const handleGroupDrop = (e: React.DragEvent, gi: number) => {
+    e.preventDefault();
+    if (dragDayIdx !== null && dragDayIdx !== gi) {
+      const next = [...groups];
+      const [moved] = next.splice(dragDayIdx, 1);
+      next.splice(gi, 0, moved);
+      setGroups(next);
+    }
+    setDragDayIdx(null);
+    setDragOverDayIdx(null);
   };
 
   const addGroup = () => {
@@ -456,7 +486,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground mb-1 block">Pontos de Melhoria</label>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Informações Adicionais</label>
               <Textarea
                 value={pontosMelhoria}
                 onChange={(e) => setPontosMelhoria(e.target.value)}
@@ -553,10 +583,22 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           {groups.map((group, gi) => (
             <div
               key={gi}
-              className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden"
+              draggable
+              onDragStart={(e) => handleGroupDragStart(e, gi)}
+              onDragOver={(e) => handleGroupDragOver(e, gi)}
+              onDrop={(e) => handleGroupDrop(e, gi)}
+              onDragEnd={handleDragEnd}
+              className={cn(
+                "rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden transition-all",
+                dragDayIdx === gi && "opacity-40",
+                dragDayIdx !== null && dragOverDayIdx === gi && dragDayIdx !== gi && "ring-2 ring-[hsl(var(--forja-teal))]"
+              )}
             >
               {/* Group header */}
               <div className="flex items-center justify-between p-3 border-b border-[hsl(var(--glass-border))]">
+                <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing">
+                  <GripVertical size={16} className="text-muted-foreground shrink-0" />
+                </div>
                 <Input
                   value={group.name}
                   onChange={(e) => updateGroupName(gi, e.target.value)}
