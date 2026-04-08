@@ -601,6 +601,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             </div>
           )}
 
+          <input type="file" ref={pdfInputRef} accept=".pdf" className="hidden" onChange={handlePdfImport} />
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
