@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Plus, Trash2, Save,
-  GripVertical, FolderOpen, Dumbbell, Eye, FileText, History, Sparkles, Loader2,
+  GripVertical, FolderOpen, Dumbbell, Eye, FileText, History, Sparkles, Loader2, Upload,
 } from "lucide-react";
 import RestTimePicker from "./RestTimePicker";
 import TrainingPreviewModal from "./TrainingPreviewModal";
@@ -234,13 +234,27 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     setDragOverExIdx(ei);
   };
 
-  const handleDrop = (gi: number, ei: number) => {
-    if (dragGroupIdx === gi && dragExIdx !== null && dragExIdx !== ei) {
+  const handleDrop = (targetGi: number, targetEi: number) => {
+    if (dragGroupIdx === null || dragExIdx === null) return;
+    if (dragGroupIdx === targetGi && dragExIdx === targetEi) {
+      // No movement
+    } else if (dragGroupIdx === targetGi) {
+      // Same group reorder
       const next = [...groups];
-      const exercises = [...next[gi].exercises];
+      const exercises = [...next[targetGi].exercises];
       const [moved] = exercises.splice(dragExIdx, 1);
-      exercises.splice(ei, 0, moved);
-      next[gi] = { ...next[gi], exercises };
+      exercises.splice(targetEi, 0, moved);
+      next[targetGi] = { ...next[targetGi], exercises };
+      setGroups(next);
+    } else {
+      // Cross-group move
+      const next = [...groups];
+      const srcExercises = [...next[dragGroupIdx].exercises];
+      const [moved] = srcExercises.splice(dragExIdx, 1);
+      next[dragGroupIdx] = { ...next[dragGroupIdx], exercises: srcExercises };
+      const dstExercises = [...next[targetGi].exercises];
+      dstExercises.splice(targetEi, 0, moved);
+      next[targetGi] = { ...next[targetGi], exercises: dstExercises };
       setGroups(next);
     }
     setDragGroupIdx(null);
@@ -278,6 +292,53 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     }
     setDragDayIdx(null);
     setDragOverDayIdx(null);
+  };
+
+  // PDF Import state
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePdfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+
+    setPdfParsing(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Não autenticado");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-training-pdf`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: formData,
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Erro ${res.status}`);
+      }
+
+      const result = await res.json();
+      if (result.groups && Array.isArray(result.groups)) {
+        setGroups(result.groups);
+        if (result.title) setTitle(result.title);
+        toast.success(`PDF importado: ${result.groups.length} grupo(s) extraídos`);
+      } else {
+        throw new Error("Formato inválido retornado pelo parser");
+      }
+    } catch (err: any) {
+      console.error("Erro importação PDF:", err);
+      toast.error(`Erro ao importar PDF: ${err.message}`);
+    } finally {
+      setPdfParsing(false);
+    }
   };
 
   const addGroup = () => {
@@ -540,6 +601,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             </div>
           )}
 
+          <input type="file" ref={pdfInputRef} accept=".pdf" className="hidden" onChange={handlePdfImport} />
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -557,6 +619,16 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               className="gap-1.5 border-[hsl(var(--glass-border))]"
             >
               <FolderOpen size={14} /> Templates
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={pdfParsing}
+              className="gap-1.5 border-[hsl(var(--glass-border))]"
+            >
+              {pdfParsing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {pdfParsing ? "Importando..." : "Importar PDF"}
             </Button>
             <Button
               variant="outline"
@@ -639,10 +711,17 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               </div>
 
               {/* Exercises */}
-              <div className="divide-y divide-[hsl(var(--glass-border))]">
+              <div
+                className="divide-y divide-[hsl(var(--glass-border))]"
+                onDragOver={(e) => { if (dragGroupIdx !== null && group.exercises.length === 0) e.preventDefault(); }}
+                onDrop={() => { if (dragGroupIdx !== null && group.exercises.length === 0) handleDrop(gi, 0); }}
+              >
                 {group.exercises.length === 0 && (
-                  <p className="text-center text-muted-foreground text-xs py-6">
-                    Clique em + para adicionar exercícios
+                  <p className={cn(
+                    "text-center text-muted-foreground text-xs py-6",
+                    dragGroupIdx !== null && "border-2 border-dashed border-[hsl(var(--forja-teal))] rounded-lg"
+                  )}>
+                    {dragGroupIdx !== null ? "Solte aqui para mover" : "Clique em + para adicionar exercícios"}
                   </p>
                 )}
                 {group.exercises.map((ex, ei) => (
