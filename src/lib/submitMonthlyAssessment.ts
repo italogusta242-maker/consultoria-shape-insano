@@ -82,6 +82,22 @@ export async function submitMonthlyAssessment(
 
     if (insertError) throw insertError;
 
+    // Mark all anamnese_request notifications as read so alert disappears
+    await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", user.id)
+      .eq("type", "anamnese_request")
+      .eq("read", false);
+
+    // Update next_anamnese_due to +30 days
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + 30);
+    await supabase
+      .from("profiles")
+      .update({ next_anamnese_due: nextDue.toISOString().split("T")[0] })
+      .eq("id", user.id);
+
     // 2. Upload photos
     const photoFields: { key: keyof MonthlyFormData; label: string }[] = [
       { key: "foto_frente", label: "frente" },
