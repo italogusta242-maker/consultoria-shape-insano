@@ -623,6 +623,16 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             <Button
               variant="outline"
               size="sm"
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={pdfParsing}
+              className="gap-1.5 border-[hsl(var(--glass-border))]"
+            >
+              {pdfParsing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {pdfParsing ? "Importando..." : "Importar PDF"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setPreviewOpen(true)}
               disabled={groups.every(g => g.exercises.length === 0)}
               className="gap-1.5 border-[hsl(var(--glass-border))]"
