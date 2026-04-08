@@ -234,13 +234,27 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     setDragOverExIdx(ei);
   };
 
-  const handleDrop = (gi: number, ei: number) => {
-    if (dragGroupIdx === gi && dragExIdx !== null && dragExIdx !== ei) {
+  const handleDrop = (targetGi: number, targetEi: number) => {
+    if (dragGroupIdx === null || dragExIdx === null) return;
+    if (dragGroupIdx === targetGi && dragExIdx === targetEi) {
+      // No movement
+    } else if (dragGroupIdx === targetGi) {
+      // Same group reorder
       const next = [...groups];
-      const exercises = [...next[gi].exercises];
+      const exercises = [...next[targetGi].exercises];
       const [moved] = exercises.splice(dragExIdx, 1);
-      exercises.splice(ei, 0, moved);
-      next[gi] = { ...next[gi], exercises };
+      exercises.splice(targetEi, 0, moved);
+      next[targetGi] = { ...next[targetGi], exercises };
+      setGroups(next);
+    } else {
+      // Cross-group move
+      const next = [...groups];
+      const srcExercises = [...next[dragGroupIdx].exercises];
+      const [moved] = srcExercises.splice(dragExIdx, 1);
+      next[dragGroupIdx] = { ...next[dragGroupIdx], exercises: srcExercises };
+      const dstExercises = [...next[targetGi].exercises];
+      dstExercises.splice(targetEi, 0, moved);
+      next[targetGi] = { ...next[targetGi], exercises: dstExercises };
       setGroups(next);
     }
     setDragGroupIdx(null);
