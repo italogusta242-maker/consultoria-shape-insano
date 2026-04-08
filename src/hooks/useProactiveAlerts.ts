@@ -13,7 +13,9 @@ export type AlertType =
   | "inactive"
   | "onboarding_pending"
   | "assessment_overdue"
-  | "churn_risk";
+  | "churn_risk"
+  | "monthly_pending"
+  | "monthly_awaiting_review";
 
 export interface ProactiveAlert {
   id: string;
@@ -77,11 +79,11 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
           .not("finished_at", "is", null),
         supabase
           .from("profiles")
-          .select("id, status, onboarded")
+          .select("id, status, onboarded, next_anamnese_due")
           .in("id", studentIds),
         supabase
           .from("monthly_assessments")
-          .select("user_id, created_at")
+          .select("user_id, created_at, reviewed")
           .in("user_id", studentIds)
           .order("created_at", { ascending: false }),
         supabase

@@ -154,6 +154,8 @@ const ALERT_FILTER_OPTIONS: { key: AlertFilterKey; label: string }[] = [
   { key: "all", label: "Todos" },
   { key: "no_plan", label: "Sem plano" },
   { key: "anamnese_review_pending", label: "Anamnese pendente" },
+  { key: "monthly_pending", label: "Mensal pendente" },
+  { key: "monthly_awaiting_review", label: "Mensal aguardando análise" },
   { key: "onboarding_pending", label: "Onboarding" },
   { key: "assessment_overdue", label: "Reavaliação" },
   { key: "churn_risk", label: "Risco de Churn" },

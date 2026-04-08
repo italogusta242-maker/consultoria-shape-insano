@@ -486,7 +486,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground mb-1 block">Pontos de Melhoria</label>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Informações Adicionais</label>
               <Textarea
                 value={pontosMelhoria}
                 onChange={(e) => setPontosMelhoria(e.target.value)}
