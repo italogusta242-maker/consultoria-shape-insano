@@ -553,10 +553,22 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           {groups.map((group, gi) => (
             <div
               key={gi}
-              className="rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden"
+              draggable
+              onDragStart={(e) => handleGroupDragStart(e, gi)}
+              onDragOver={(e) => handleGroupDragOver(e, gi)}
+              onDrop={(e) => handleGroupDrop(e, gi)}
+              onDragEnd={handleDragEnd}
+              className={cn(
+                "rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] overflow-hidden transition-all",
+                dragDayIdx === gi && "opacity-40",
+                dragDayIdx !== null && dragOverDayIdx === gi && dragDayIdx !== gi && "ring-2 ring-[hsl(var(--forja-teal))]"
+              )}
             >
               {/* Group header */}
               <div className="flex items-center justify-between p-3 border-b border-[hsl(var(--glass-border))]">
+                <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing">
+                  <GripVertical size={16} className="text-muted-foreground shrink-0" />
+                </div>
                 <Input
                   value={group.name}
                   onChange={(e) => updateGroupName(gi, e.target.value)}
