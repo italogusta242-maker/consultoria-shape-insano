@@ -294,6 +294,53 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     setDragOverDayIdx(null);
   };
 
+  // PDF Import state
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePdfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+
+    setPdfParsing(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Não autenticado");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-training-pdf`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: formData,
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Erro ${res.status}`);
+      }
+
+      const result = await res.json();
+      if (result.groups && Array.isArray(result.groups)) {
+        setGroups(result.groups);
+        if (result.title) setTitle(result.title);
+        toast.success(`PDF importado: ${result.groups.length} grupo(s) extraídos`);
+      } else {
+        throw new Error("Formato inválido retornado pelo parser");
+      }
+    } catch (err: any) {
+      console.error("Erro importação PDF:", err);
+      toast.error(`Erro ao importar PDF: ${err.message}`);
+    } finally {
+      setPdfParsing(false);
+    }
+  };
+
   const addGroup = () => {
     const idx = groups.length;
     const letter = GROUP_LETTERS[idx] || `G${idx + 1}`;
