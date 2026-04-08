@@ -328,16 +328,13 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
             });
           }
         }
-        }
 
         // 8. Monthly assessment: pending (not responded) or awaiting review
-        const assessment = latestAssessment.get(sid);
-        const nextDue = profile?.next_anamnese_due;
+        const nextDue = (profile as any)?.next_anamnese_due;
         if (nextDue) {
           const dueDate = new Date(nextDue);
           const daysOverdue = differenceInCalendarDays(today, dueDate);
           if (daysOverdue >= 0 && (!assessment || new Date(assessment.created_at) < dueDate)) {
-            // Student hasn't responded to the current monthly cycle
             alerts.push({
               id: `monthly-pending-${sid}`,
               type: "monthly_pending",
@@ -351,7 +348,6 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
             });
           }
         }
-        // Responded but not reviewed by specialist
         if (assessment && !(assessment as any).reviewed) {
           const daysSinceSubmit = differenceInCalendarDays(today, new Date(assessment.created_at));
           alerts.push({
@@ -366,6 +362,7 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
             navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
           });
         }
+      }
       // Sort: critical first, then warning, then info
       const severityOrder: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
       alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
