@@ -263,6 +263,28 @@ const RestTimer = ({ seconds, onDone, onSkip }: { seconds: number; onDone: () =>
     setRemaining(seconds);
   }, [seconds]);
 
+  // Wake Lock API — prevent screen from sleeping during rest
+  useEffect(() => {
+    let wakeLock: any = null;
+    const requestLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request("screen");
+        }
+      } catch {}
+    };
+    requestLock();
+    // Re-acquire on visibility change (mobile resumes)
+    const onVisChange = () => {
+      if (document.visibilityState === "visible") requestLock();
+    };
+    document.addEventListener("visibilitychange", onVisChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisChange);
+      wakeLock?.release().catch(() => {});
+    };
+  }, []);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startRef.current) / 1000);
