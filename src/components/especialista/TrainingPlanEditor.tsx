@@ -215,10 +215,14 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     return map;
   }, [exerciseLib]);
 
-  // Drag-and-drop state
+  // Drag-and-drop state for exercises
   const [dragGroupIdx, setDragGroupIdx] = useState<number | null>(null);
   const [dragExIdx, setDragExIdx] = useState<number | null>(null);
   const [dragOverExIdx, setDragOverExIdx] = useState<number | null>(null);
+
+  // Drag-and-drop state for GROUP (day) reordering
+  const [dragDayIdx, setDragDayIdx] = useState<number | null>(null);
+  const [dragOverDayIdx, setDragOverDayIdx] = useState<number | null>(null);
 
   const handleDragStart = (gi: number, ei: number) => {
     setDragGroupIdx(gi);
@@ -248,6 +252,32 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
     setDragGroupIdx(null);
     setDragExIdx(null);
     setDragOverExIdx(null);
+    setDragDayIdx(null);
+    setDragOverDayIdx(null);
+  };
+
+  // Group (day) drag handlers
+  const handleGroupDragStart = (e: React.DragEvent, gi: number) => {
+    e.stopPropagation();
+    setDragDayIdx(gi);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleGroupDragOver = (e: React.DragEvent, gi: number) => {
+    e.preventDefault();
+    if (dragDayIdx !== null) setDragOverDayIdx(gi);
+  };
+
+  const handleGroupDrop = (e: React.DragEvent, gi: number) => {
+    e.preventDefault();
+    if (dragDayIdx !== null && dragDayIdx !== gi) {
+      const next = [...groups];
+      const [moved] = next.splice(dragDayIdx, 1);
+      next.splice(gi, 0, moved);
+      setGroups(next);
+    }
+    setDragDayIdx(null);
+    setDragOverDayIdx(null);
   };
 
   const addGroup = () => {
