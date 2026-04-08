@@ -1,35 +1,74 @@
 
 
-## Verification Results
+## Diagnóstico — Dois problemas do aluno
 
-### 1. Secrets Status
-Both **ASAAS_WEBHOOK_TOKEN** and **BREVO_API_KEY** are confirmed set in the project secrets. No action needed.
+### 1. "App cobrando anamnese que já respondi 3x"
 
-### 2. Edge Function Logs
-No logs found for `asaas-webhook`. This means either:
-- No webhook events have been received recently
-- The function hasn't been triggered yet
+**Causa raiz**: Quando o aluno submete a reavaliação mensal (`submitMonthlyAssessment.ts`), o sistema:
+- Salva o `monthly_assessment` no banco
+- Atualiza peso/altura no perfil
+- Envia para Google Sheets
 
-### 3. Code Review — `asaas-webhook/index.ts`
-The function is well-structured:
-- **Token validation** (lines 266-282): Rejects requests if `ASAAS_WEBHOOK_TOKEN` is missing or doesn't match the `asaas-access-token` header
-- **ASAAS_API_KEY** check (lines 319-326): Returns 500 if not set
-- **Idempotency** via `idempotency_keys` table
-- **Auto-provisioning** creates user, sends credentials email via Brevo
+Mas **NÃO** faz duas coisas críticas:
+- **Não marca as notificações `anamnese_request` como lidas** — o `AnamneseRequestAlert` continua encontrando notificações não lidas e mostrando o banner/modal
+- **Não atualiza `next_anamnese_due`** no perfil para +30 dias — então qualquer automação futura continuaria cobrando
 
-### 4. Simulate a Test Webhook
-To safely test, I can use the edge function testing tool to send a simulated `PAYMENT_CONFIRMED` event to the deployed function. This will verify:
-- Token validation works
-- The function processes the event correctly
-- Brevo email sending works
+Resultado: o aluno preenche, mas o banner continua aparecendo indefinidamente.
 
-### Proposed Plan
+### 2. "App trava no descanso e fecha"
 
-1. **Test the webhook endpoint** — Use `curl_edge_functions` to send a test payload with the correct `asaas-access-token` header and a `PAYMENT_CONFIRMED` event with a fake payment ID. This will confirm the function is reachable and the token validation works.
+**Causa raiz**: O `RestTimer` usa um overlay `fixed inset-0 z-50` com um `setInterval` de 250ms. No mobile:
+- Quando o celular bloqueia a tela ou o navegador vai para background, o OS pode suspender/matar a aba
+- Ao restaurar, o estado do React é perdido mas o componente tenta re-renderizar sem contexto
+- Não há proteção com `wakeLock` API nem persistência do estado do timer
 
-2. **Review logs after test** — Check edge function logs to see if the request was processed or rejected, identifying any 401/500 errors.
+---
 
-3. **Report findings** — Share the results with you so we can determine if anything needs fixing.
+## Plano de Correção
 
-> **Note**: The test will use a fake customer ID, so it will fail at the Asaas API customer lookup step (which is expected and safe). This is enough to confirm the webhook pipeline is working up to the external API call.
+### Correção 1 — Marcar notificações como lidas após envio da anamnese
+
+**Arquivo**: `src/lib/submitMonthlyAssessment.ts`
+
+Após a inserção bem-sucedida (após linha 83), adicionar:
+```typescript
+// Mark all anamnese_request notifications as read
+await supabase
+  .from("notifications")
+  .update({ read: true })
+  .eq("user_id", user.id)
+  .eq("type", "anamnese_request")
+  .eq("read", false);
+
+// Update next_anamnese_due to +30 days
+const nextDue = new Date();
+nextDue.setDate(nextDue.getDate() + 30);
+await supabase
+  .from("profiles")
+  .update({ next_anamnese_due: nextDue.toISOString().split("T")[0] })
+  .eq("id", user.id);
+```
+
+### Correção 2 — Proteger o RestTimer contra suspensão do mobile
+
+**Arquivo**: `src/pages/Treinos.tsx` (componente `RestTimer`)
+
+- Implementar **Wake Lock API** para impedir que a tela desligue durante o descanso:
+  ```typescript
+  useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null;
+    if ("wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").then(wl => { wakeLock = wl; }).catch(() => {});
+    }
+    return () => { wakeLock?.release().catch(() => {}); };
+  }, []);
+  ```
+- Adicionar tratamento de `visibilitychange` para recalcular o tempo restante quando o app volta ao primeiro plano (já existe parcialmente via `startRef.current`, mas verificar que funciona corretamente ao retomar)
+
+### Resumo de alterações
+
+| Arquivo | O que muda |
+|---------|-----------|
+| `src/lib/submitMonthlyAssessment.ts` | Marca notificações como lidas + atualiza `next_anamnese_due` |
+| `src/pages/Treinos.tsx` | Wake Lock API no RestTimer para evitar suspensão no mobile |
 
