@@ -621,11 +621,10 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               <FolderOpen size={14} /> Templates
             </Button>
             <Button
-              variant="outline"
               size="sm"
               onClick={() => pdfInputRef.current?.click()}
               disabled={pdfParsing}
-              className="gap-1.5 border-[hsl(var(--glass-border))]"
+              className="gap-1.5 bg-orange-600 hover:bg-orange-700 text-white border-0"
             >
               {pdfParsing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
               {pdfParsing ? "Importando..." : "Importar PDF"}
