@@ -653,10 +653,17 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               </div>
 
               {/* Exercises */}
-              <div className="divide-y divide-[hsl(var(--glass-border))]">
+              <div
+                className="divide-y divide-[hsl(var(--glass-border))]"
+                onDragOver={(e) => { if (dragGroupIdx !== null && group.exercises.length === 0) e.preventDefault(); }}
+                onDrop={() => { if (dragGroupIdx !== null && group.exercises.length === 0) handleDrop(gi, 0); }}
+              >
                 {group.exercises.length === 0 && (
-                  <p className="text-center text-muted-foreground text-xs py-6">
-                    Clique em + para adicionar exercícios
+                  <p className={cn(
+                    "text-center text-muted-foreground text-xs py-6",
+                    dragGroupIdx !== null && "border-2 border-dashed border-[hsl(var(--forja-teal))] rounded-lg"
+                  )}>
+                    {dragGroupIdx !== null ? "Solte aqui para mover" : "Clique em + para adicionar exercícios"}
                   </p>
                 )}
                 {group.exercises.map((ex, ei) => (
