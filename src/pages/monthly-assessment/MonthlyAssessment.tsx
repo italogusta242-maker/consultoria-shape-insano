@@ -581,6 +581,11 @@ const MonthlyAssessment = () => {
                   placeholder="Alguma sugestão para melhorarmos?" rows={3} />
               </div>
             </div>
+            {submitError && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-sm text-destructive font-medium">
+                ⚠️ {submitError}
+              </div>
+            )}
             <AdvanceButton label={isSubmitting ? "ENVIANDO..." : "ENVIAR REAVALIAÇÃO"} onClick={handleSubmit} />
           </motion.div>
         )}
