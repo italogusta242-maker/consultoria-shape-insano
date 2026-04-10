@@ -255,12 +255,62 @@ const EspecialistaDashboard = () => {
   // reviewStats kept for potential future use but efficiency is now alert-based
   const { data: proactiveAlerts, isLoading: alertsLoading } = useProactiveAlerts(specialty, studentIds, studentNames);
   const { data: unresponsiveStudents } = useUnresponsiveStudents(user?.id, studentIds, studentNames);
+  const { dismissOne, dismissAllForStudent, restoreAll } = useDismissAlert();
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
 
   const alertCount = proactiveAlerts?.length ?? 0;
   const unresponsiveCount = unresponsiveStudents?.length ?? 0;
   const filteredAlerts = alertFilter === "all"
     ? (proactiveAlerts ?? [])
     : (proactiveAlerts ?? []).filter((a) => a.type === alertFilter);
+
+  // Group alerts by student
+  const groupedAlerts = useMemo(() => {
+    const map = new Map<string, ProactiveAlert[]>();
+    for (const alert of filteredAlerts) {
+      const existing = map.get(alert.studentId) ?? [];
+      existing.push(alert);
+      map.set(alert.studentId, existing);
+    }
+    // Sort groups: critical students first
+    const entries = Array.from(map.entries());
+    const severityOrder: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
+    entries.sort((a, b) => {
+      const aMin = Math.min(...a[1].map(al => severityOrder[al.severity]));
+      const bMin = Math.min(...b[1].map(al => severityOrder[al.severity]));
+      return aMin - bMin;
+    });
+    return entries;
+  }, [filteredAlerts]);
+
+  const toggleExpanded = (sid: string) => {
+    setExpandedStudents(prev => {
+      const next = new Set(prev);
+      next.has(sid) ? next.delete(sid) : next.add(sid);
+      return next;
+    });
+  };
+
+  const handleDismissOne = (e: React.MouseEvent, alert: ProactiveAlert) => {
+    e.stopPropagation();
+    dismissOne.mutate({ alertKey: alert.id, studentId: alert.studentId }, {
+      onSuccess: () => toast.success("Alerta dispensado"),
+    });
+  };
+
+  const handleDismissAllStudent = (e: React.MouseEvent, alerts: ProactiveAlert[]) => {
+    e.stopPropagation();
+    dismissAllForStudent.mutate({ alerts }, {
+      onSuccess: () => toast.success(`${alerts.length} alertas dispensados`),
+    });
+  };
+
+  const handleRestoreAll = () => {
+    restoreAll.mutate(undefined, {
+      onSuccess: () => toast.success("Alertas restaurados"),
+    });
+  };
+
   const filteredCount = filteredAlerts.length;
 
   // Only show filter options that have alerts
