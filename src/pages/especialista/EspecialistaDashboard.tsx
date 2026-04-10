@@ -411,11 +411,24 @@ const EspecialistaDashboard = () => {
         <motion.div variants={fadeUp} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <GlassCard glow="crimson">
             <div className="p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle size={16} className="text-[hsl(var(--crimson-glow))]" />
-                <h3 className="text-sm font-medium text-foreground">Alertas</h3>
-                <span className="ml-auto min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-destructive/20 text-destructive text-[10px] font-bold">
-                  {alertCount}
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle size={16} className="text-[hsl(var(--crimson-glow))]" />
+                  <h3 className="text-sm font-medium text-foreground">Alertas</h3>
+                  <span className="ml-auto min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-destructive/20 text-destructive text-[10px] font-bold">
+                    {alertCount}
+                  </span>
+                  {alertCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                      onClick={handleRestoreAll}
+                      disabled={restoreAll.isPending}
+                    >
+                      <RotateCcw size={10} />
+                      Restaurar
+                    </Button>
+                  )}
                 </span>
               </div>
               {/* Filter chips */}
