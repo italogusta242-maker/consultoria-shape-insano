@@ -1,37 +1,88 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { MonthlyFormData } from "@/pages/monthly-assessment/constants";
 
+const MAX_IMAGE_DIM = 1200;
+const JPEG_QUALITY = 0.8;
+
+function compressImage(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width <= MAX_IMAGE_DIM && height <= MAX_IMAGE_DIM) {
+        URL.revokeObjectURL(img.src);
+        resolve(file);
+        return;
+      }
+      const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(img.src);
+          if (blob) {
+            resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+          } else {
+            resolve(file);
+          }
+        },
+        "image/jpeg",
+        JPEG_QUALITY
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(file); // fallback to original
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function uploadPhoto(
   userId: string,
   file: File,
   label: string,
   assessmentId: string
 ): Promise<string | null> {
-  const ext = file.name.split(".").pop() || "jpg";
+  // Compress before upload
+  const compressed = await compressImage(file);
+  const ext = compressed.name.split(".").pop() || "jpg";
   const path = `${userId}/monthly/${assessmentId}/${label}.${ext}`;
 
-  const { error } = await supabase.storage
-    .from("anamnese-photos")
-    .upload(path, file, { upsert: true });
+  // Try upload with 1 retry
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { error } = await supabase.storage
+      .from("anamnese-photos")
+      .upload(path, compressed, { upsert: true, contentType: compressed.type || "image/jpeg" });
 
-  if (error) {
-    console.error(`Erro upload ${label}:`, error);
-    return null;
+    if (!error) {
+      const { data } = supabase.storage.from("anamnese-photos").getPublicUrl(path);
+      return data.publicUrl;
+    }
+
+    console.error(`Erro upload ${label} (tentativa ${attempt + 1}):`, error);
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 1500)); // wait before retry
+    }
   }
 
-  const { data } = supabase.storage
-    .from("anamnese-photos")
-    .getPublicUrl(path);
-
-  return data.publicUrl;
+  return null;
 }
 
 export async function submitMonthlyAssessment(
   formData: MonthlyFormData
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Refresh session to avoid expired token issues
+    await supabase.auth.refreshSession();
+
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, error: "Usuário não autenticado" };
+    if (!user) return { success: false, error: "Sessão expirada. Faça login novamente e tente outra vez." };
 
     // 1. Insert assessment first to get ID
     const insertPayload = {
@@ -108,7 +159,7 @@ export async function submitMonthlyAssessment(
       .update({ next_anamnese_due: nextDue.toISOString().split("T")[0] })
       .eq("id", user.id);
 
-    // 2. Upload photos
+    // 2. Upload photos (compressed with retry)
     const photoFields: { key: keyof MonthlyFormData; label: string; column: string }[] = [
       { key: "foto_frente", label: "frente", column: "foto_frente" },
       { key: "foto_costas", label: "costas", column: "foto_costas" },
@@ -194,7 +245,6 @@ export async function submitMonthlyAssessment(
         }
       }
       sheetData["data_envio"] = new Date().toISOString();
-      // Add photo URLs
       for (const [key, url] of Object.entries(photoUpdates)) {
         sheetData[key] = url;
       }
@@ -210,6 +260,6 @@ export async function submitMonthlyAssessment(
     return { success: true };
   } catch (error: any) {
     console.error("Erro ao salvar reavaliação:", error);
-    return { success: false, error: error.message || "Erro desconhecido" };
+    return { success: false, error: error.message || "Erro desconhecido. Verifique sua conexão e tente novamente." };
   }
 }
