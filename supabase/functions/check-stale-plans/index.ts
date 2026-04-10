@@ -448,6 +448,47 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === 6. Re-send anamnese_request to students with overdue next_anamnese_due ===
+    const todayStr = today.toISOString().split("T")[0];
+    const { data: overdueProfiles } = await supabase
+      .from("profiles")
+      .select("id, nome, next_anamnese_due")
+      .eq("onboarded", true)
+      .not("next_anamnese_due", "is", null)
+      .lte("next_anamnese_due", todayStr);
+
+    for (const prof of overdueProfiles ?? []) {
+      // Check if student already has an unread anamnese_request notification
+      const { data: existingNotif } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("user_id", prof.id)
+        .eq("type", "anamnese_request")
+        .eq("read", false)
+        .limit(1);
+
+      if ((existingNotif ?? []).length > 0) continue;
+
+      // Check if student submitted a monthly_assessment after next_anamnese_due
+      const { data: recentAssessment } = await supabase
+        .from("monthly_assessments")
+        .select("id")
+        .eq("user_id", prof.id)
+        .gte("created_at", prof.next_anamnese_due)
+        .limit(1);
+
+      if ((recentAssessment ?? []).length > 0) continue;
+
+      // Re-send the notification to the student
+      notifications.push({
+        user_id: prof.id,
+        type: "anamnese_request",
+        title: "📝 Reavaliação Mensal Pendente",
+        body: "Sua reavaliação mensal está pendente. Preencha agora para manter seu plano atualizado.",
+        metadata: { auto_resent: true },
+      });
+    }
+
     let inserted = 0;
     if (notifications.length > 0) {
       const { error: insertErr } = await supabase
