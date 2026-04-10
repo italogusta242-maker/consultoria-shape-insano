@@ -65,6 +65,8 @@ const EspecialistaAnamneseSplit = () => {
   });
 
   const [selectedAnamneseIdx, setSelectedAnamneseIdx] = useState(0);
+  const [selectedMonthlyIdx, setSelectedMonthlyIdx] = useState(0);
+  const [showMonthlySection, setShowMonthlySection] = useState(true);
 
   const { data: allAnamneses, isLoading: anaLoading } = useQuery({
     queryKey: ["split-all-anamneses", studentId],
