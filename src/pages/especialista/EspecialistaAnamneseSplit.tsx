@@ -83,6 +83,22 @@ const EspecialistaAnamneseSplit = () => {
 
   const anamnese = allAnamneses?.[selectedAnamneseIdx] ?? null;
 
+  // Fetch monthly assessments
+  const { data: monthlyAssessments, isLoading: monthlyLoading } = useQuery({
+    queryKey: ["split-monthly-assessments", studentId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("monthly_assessments")
+        .select("*")
+        .eq("user_id", studentId!)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!studentId,
+  });
+
+  const selectedMonthly = monthlyAssessments?.[selectedMonthlyIdx] ?? null;
+
   const markReviewedMutation = useMutation({
     mutationFn: async () => {
       if (!anamnese?.id || !user) return;
