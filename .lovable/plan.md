@@ -1,67 +1,39 @@
 
 
-## Problema
+## Problema confirmado
 
-O sistema gera até **8 tipos de alerta por aluno** (sem plano, inativo, reavaliação, churn, etc.). Com alunos que deram churn mas ainda estão vinculados, os alertas se acumulam indefinidamente — resultando em 199 alertas impossíveis de gerenciar.
+O Athos tem **0 registros** na `monthly_assessments`. Se ele preencheu 3 vezes, os envios falharam. Causas prováveis:
 
-Não existe nenhum mecanismo para dispensar/excluir alertas nem para filtrar alunos inativos/churn.
+1. **Bug no AnamneseRequestAlert**: ao clicar "PREENCHER AGORA", a notificação é marcada como `read: true` antes do envio. O alerta some, o aluno acha que completou.
+2. **Erro silencioso no submit**: o `submitMonthlyAssessment` usa `as any` para bypass de tipos. Se o insert falha, o erro é exibido como toast mas pode não ser notado.
+3. **Banner do Dashboard não aparece**: usa lógica de `daysSinceAnamnese >= 30` ao invés de `next_anamnese_due`, então alunos recentes não veem o lembrete.
 
-## Plano de Correção
+## Correções
 
-### 1. Criar tabela `dismissed_alerts` no banco
+### 1. AnamneseRequestAlert — Não marcar como lido ao clicar
+**Arquivo:** `src/components/AnamneseRequestAlert.tsx`
+- Remover `update({ read: true })` da função `markReadAndNavigate`
+- Apenas navegar para `/reavaliacao`
+- A notificação será marcada como lida apenas após o submit bem-sucedido (já feito em `submitMonthlyAssessment.ts`)
 
-Armazena alertas que o especialista dispensou manualmente:
-```sql
-CREATE TABLE dismissed_alerts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  specialist_id UUID NOT NULL,
-  alert_key TEXT NOT NULL,        -- ex: "no-plan-<student_id>"
-  student_id UUID NOT NULL,
-  dismissed_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(specialist_id, alert_key)
-);
-ALTER TABLE dismissed_alerts ENABLE ROW LEVEL SECURITY;
--- RLS: specialists manage own
-```
+### 2. Dashboard banner — Usar `next_anamnese_due`
+**Arquivo:** `src/pages/Dashboard.tsx`
+- Alterar a condição do `MonthlyAnamnesisBanner` para verificar `profile.next_anamnese_due <= hoje`
+- Garantir que o banner aparece para todos com reavaliação vencida
 
-### 2. Filtrar alunos churned automaticamente
+### 3. Melhorar feedback de erro no submit
+**Arquivo:** `src/lib/submitMonthlyAssessment.ts`
+- Adicionar logging mais detalhado
+- Garantir que erros de insert são exibidos claramente ao usuário
 
-No `useProactiveAlerts.ts`:
-- Buscar `profiles.status` e ignorar alunos com `status = 'churned'` ou `status = 'cancelado'`
-- Buscar `dismissed_alerts` do especialista e excluir alertas com chave correspondente
-- Isso já vai reduzir drasticamente o número de alertas
-
-### 3. Adicionar botão "Dispensar" em cada alerta
-
-No `EspecialistaDashboard.tsx`:
-- Adicionar ícone `X` em cada linha de alerta
-- Ao clicar, inserir na tabela `dismissed_alerts` e invalidar o cache
-- Adicionar botão "Restaurar alertas dispensados" para desfazer
-
-### 4. Agrupar alertas por aluno (simplificação visual)
-
-Em vez de listar 5 alertas separados para o mesmo aluno, agrupar:
-- Mostrar **1 linha por aluno** com badge do número de pendências
-- Expandir ao clicar para ver os detalhes
-- Isso transforma 199 linhas em ~30-40 linhas (uma por aluno)
-
-### 5. Adicionar ação "Dispensar todos do aluno"
-
-Para alunos que deram churn:
-- Botão "Dispensar todos" que insere todas as chaves de alerta daquele aluno na tabela `dismissed_alerts` de uma vez
-
-## Arquivos alterados
+### 4. Cron reenviar notificação
+**Arquivo:** `supabase/functions/check-stale-plans/index.ts`
+- Se `next_anamnese_due` venceu e não há `monthly_assessment` recente, reinserir notificação `anamnese_request` (se não existir uma não-lida)
 
 | Arquivo | Mudança |
 |---------|---------|
-| **Migration SQL** | Criar tabela `dismissed_alerts` com RLS |
-| `src/hooks/useProactiveAlerts.ts` | Filtrar churned + buscar dismissed_alerts |
-| `src/pages/especialista/EspecialistaDashboard.tsx` | Agrupar por aluno, botão dispensar, restaurar |
-
-## Resultado esperado
-
-- Alunos churned não geram mais alertas
-- Especialista pode dispensar alertas individualmente ou por aluno
-- Visualização agrupada por aluno reduz ruído visual
-- Contador reflete apenas alertas ativos e relevantes
+| `src/components/AnamneseRequestAlert.tsx` | Não marcar notificação como lida ao clicar |
+| `src/pages/Dashboard.tsx` | Banner baseado em `next_anamnese_due` |
+| `src/lib/submitMonthlyAssessment.ts` | Melhorar feedback de erro |
+| `supabase/functions/check-stale-plans/index.ts` | Reenviar notificação se não respondida |
 
