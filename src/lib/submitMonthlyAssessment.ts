@@ -34,9 +34,7 @@ export async function submitMonthlyAssessment(
     if (!user) return { success: false, error: "Usuário não autenticado" };
 
     // 1. Insert assessment first to get ID
-    const { data: assessment, error: insertError } = await supabase
-      .from("monthly_assessments" as any)
-      .insert({
+    const insertPayload = {
         user_id: user.id,
         altura: formData.altura || null,
         peso: formData.peso || null,
@@ -76,11 +74,22 @@ export async function submitMonthlyAssessment(
         sugestao_dieta: formData.sugestao_dieta || null,
         autoriza_publicacao: formData.autoriza_publicacao === "sim",
         sugestao_melhoria: formData.sugestao_melhoria || null,
-      } as any)
+      };
+
+    console.log("[submitMonthlyAssessment] Inserting assessment for user:", user.id);
+
+    const { data: assessment, error: insertError } = await supabase
+      .from("monthly_assessments" as any)
+      .insert(insertPayload as any)
       .select("id")
       .single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("[submitMonthlyAssessment] INSERT FAILED:", insertError);
+      throw new Error(`Erro ao salvar reavaliação: ${insertError.message}`);
+    }
+
+    console.log("[submitMonthlyAssessment] Assessment saved successfully:", (assessment as any)?.id);
 
     // Mark all anamnese_request notifications as read so alert disappears
     await supabase
