@@ -1,39 +1,39 @@
 
 
-## Problema confirmado
+## Problema
 
-O Athos tem **0 registros** na `monthly_assessments`. Se ele preencheu 3 vezes, os envios falharam. Causas prováveis:
+A página "Ver Anamnese" do especialista (`/especialista/anamnese/:studentId`) só mostra a **anamnese inicial** (tabela `anamnese`). As **reavaliações mensais** (tabela `monthly_assessments`) não são buscadas nem exibidas em lugar nenhum. Além disso, o `submitMonthlyAssessment` não notifica os especialistas quando um aluno envia uma reavaliação.
 
-1. **Bug no AnamneseRequestAlert**: ao clicar "PREENCHER AGORA", a notificação é marcada como `read: true` antes do envio. O alerta some, o aluno acha que completou.
-2. **Erro silencioso no submit**: o `submitMonthlyAssessment` usa `as any` para bypass de tipos. Se o insert falha, o erro é exibido como toast mas pode não ser notado.
-3. **Banner do Dashboard não aparece**: usa lógica de `daysSinceAnamnese >= 30` ao invés de `next_anamnese_due`, então alunos recentes não veem o lembrete.
+São 3 correções combinadas:
 
-## Correções
+1. **Notificar especialistas** quando aluno submete reavaliação mensal
+2. **Exibir reavaliações mensais** na página de anamnese do especialista
+3. **Permitir marcar como revisada** a reavaliação mensal
 
-### 1. AnamneseRequestAlert — Não marcar como lido ao clicar
-**Arquivo:** `src/components/AnamneseRequestAlert.tsx`
-- Remover `update({ read: true })` da função `markReadAndNavigate`
-- Apenas navegar para `/reavaliacao`
-- A notificação será marcada como lida apenas após o submit bem-sucedido (já feito em `submitMonthlyAssessment.ts`)
+## Alterações
 
-### 2. Dashboard banner — Usar `next_anamnese_due`
-**Arquivo:** `src/pages/Dashboard.tsx`
-- Alterar a condição do `MonthlyAnamnesisBanner` para verificar `profile.next_anamnese_due <= hoje`
-- Garantir que o banner aparece para todos com reavaliação vencida
-
-### 3. Melhorar feedback de erro no submit
+### 1. Notificar especialistas após submit
 **Arquivo:** `src/lib/submitMonthlyAssessment.ts`
-- Adicionar logging mais detalhado
-- Garantir que erros de insert são exibidos claramente ao usuário
+- Após insert bem-sucedido, buscar especialistas vinculados via `student_specialists`
+- Inserir notificação tipo `monthly_completed` para cada especialista com nome do aluno
 
-### 4. Cron reenviar notificação
-**Arquivo:** `supabase/functions/check-stale-plans/index.ts`
-- Se `next_anamnese_due` venceu e não há `monthly_assessment` recente, reinserir notificação `anamnese_request` (se não existir uma não-lida)
+### 2. Exibir reavaliações mensais na tela do especialista
+**Arquivo:** `src/pages/especialista/EspecialistaAnamneseSplit.tsx`
+- Adicionar query para buscar `monthly_assessments` do aluno (ordenado por `created_at DESC`)
+- Criar nova seção "Reavaliações Mensais" com timeline navegável (como já existe para anamneses iniciais)
+- Exibir campos: peso, altura, modalidade, nível fadiga, progressão muscular, dias disponíveis, adesão treinos/cardio/dieta, objetivo atual, fotos, sugestões
+- Botão "Marcar como revisada" que atualiza `reviewed`, `reviewed_by`, `reviewed_at`
+- Badge visual indicando se está pendente de revisão ou já revisada
+
+### 3. Reduzir cache do dashboard
+**Arquivo:** `src/pages/especialista/EspecialistaDashboard.tsx`
+- Reduzir `refetchInterval` para alertas proativos de 5min para 2min
+
+## Resumo
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/AnamneseRequestAlert.tsx` | Não marcar notificação como lida ao clicar |
-| `src/pages/Dashboard.tsx` | Banner baseado em `next_anamnese_due` |
-| `src/lib/submitMonthlyAssessment.ts` | Melhorar feedback de erro |
-| `supabase/functions/check-stale-plans/index.ts` | Reenviar notificação se não respondida |
+| `src/lib/submitMonthlyAssessment.ts` | Notificar especialistas vinculados |
+| `src/pages/especialista/EspecialistaAnamneseSplit.tsx` | Seção de reavaliações mensais com timeline e revisão |
+| `src/pages/especialista/EspecialistaDashboard.tsx` | Reduzir cache interval |
 
