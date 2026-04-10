@@ -143,7 +143,35 @@ export async function submitMonthlyAssessment(
       })
       .eq("id", user.id);
 
-    // 5. Send data to Google Sheets
+    // 5. Notify specialists
+    try {
+      const { data: studentProfile } = await supabase
+        .from("profiles")
+        .select("nome")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { data: specialists } = await supabase
+        .from("student_specialists")
+        .select("specialist_id")
+        .eq("student_id", user.id);
+
+      if (specialists && specialists.length > 0) {
+        const studentName = studentProfile?.nome || "Aluno";
+        const notifications = specialists.map((s) => ({
+          user_id: s.specialist_id,
+          title: "📝 Nova Reavaliação Mensal",
+          body: `${studentName} enviou a reavaliação mensal.`,
+          type: "monthly_completed",
+          metadata: { student_id: user.id, assessment_id: (assessment as any).id },
+        }));
+        await supabase.from("notifications").insert(notifications as any);
+      }
+    } catch (notifError) {
+      console.error("Erro ao notificar especialistas:", notifError);
+    }
+
+    // 6. Send data to Google Sheets
     try {
       const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzFzk3QLHv8oxt-1xLKxILb0pmirT24Y4OxhLw3uKm1o-GR5q38sLxZVbco9raf_vmx/exec";
       const sheetData: Record<string, any> = {};

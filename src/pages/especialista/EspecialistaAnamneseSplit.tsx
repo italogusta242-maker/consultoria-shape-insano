@@ -65,6 +65,8 @@ const EspecialistaAnamneseSplit = () => {
   });
 
   const [selectedAnamneseIdx, setSelectedAnamneseIdx] = useState(0);
+  const [selectedMonthlyIdx, setSelectedMonthlyIdx] = useState(0);
+  const [showMonthlySection, setShowMonthlySection] = useState(true);
 
   const { data: allAnamneses, isLoading: anaLoading } = useQuery({
     queryKey: ["split-all-anamneses", studentId],
@@ -81,6 +83,22 @@ const EspecialistaAnamneseSplit = () => {
 
   const anamnese = allAnamneses?.[selectedAnamneseIdx] ?? null;
 
+  // Fetch monthly assessments
+  const { data: monthlyAssessments, isLoading: monthlyLoading } = useQuery({
+    queryKey: ["split-monthly-assessments", studentId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("monthly_assessments")
+        .select("*")
+        .eq("user_id", studentId!)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!studentId,
+  });
+
+  const selectedMonthly = monthlyAssessments?.[selectedMonthlyIdx] ?? null;
+
   const markReviewedMutation = useMutation({
     mutationFn: async () => {
       if (!anamnese?.id || !user) return;
@@ -93,6 +111,21 @@ const EspecialistaAnamneseSplit = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["split-all-anamneses"] });
       queryClient.invalidateQueries({ queryKey: ["unreviewed-anamneses"] });
+    },
+  });
+
+  const markMonthlyReviewedMutation = useMutation({
+    mutationFn: async (assessmentId: string) => {
+      if (!user) return;
+      const { error } = await supabase
+        .from("monthly_assessments")
+        .update({ reviewed: true, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .eq("id", assessmentId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["split-monthly-assessments"] });
+      toast.success("Reavaliação marcada como revisada");
     },
   });
 
@@ -484,6 +517,164 @@ const EspecialistaAnamneseSplit = () => {
                 ) : (
                   <div className="text-center py-10 text-muted-foreground">
                     Nenhuma anamnese encontrada para este aluno.
+                  </div>
+                )}
+
+                {/* Monthly Assessments Section */}
+                {monthlyAssessments && monthlyAssessments.length > 0 && (
+                  <div className="border-t border-border/50 pt-4 space-y-3">
+                    <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowMonthlySection(!showMonthlySection)}>
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-md bg-[hsl(var(--gold)/0.15)]">
+                          <ClipboardCheck size={14} className="text-[hsl(var(--gold))]" />
+                        </div>
+                        <h4 className="font-cinzel text-sm font-bold text-foreground">Reavaliações Mensais</h4>
+                        <Badge variant="secondary" className="text-[10px]">{monthlyAssessments.length}</Badge>
+                      </div>
+                      {showMonthlySection ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+
+                    {showMonthlySection && (
+                      <>
+                        {/* Timeline selector */}
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                          {monthlyAssessments.map((ma, idx) => {
+                            const d = new Date(ma.created_at);
+                            const label = format(d, "dd MMM yyyy", { locale: ptBR });
+                            const isSelected = idx === selectedMonthlyIdx;
+                            return (
+                              <button
+                                key={ma.id}
+                                onClick={() => setSelectedMonthlyIdx(idx)}
+                                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${isSelected
+                                  ? "bg-primary text-primary-foreground shadow-md"
+                                  : "bg-card border border-border text-foreground/80 hover:border-primary/50"
+                                }`}
+                              >
+                                {label}
+                                {!ma.reviewed && <span className="ml-1 inline-block w-2 h-2 rounded-full bg-amber-400" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {selectedMonthly && (
+                          <div className="rounded-lg border border-border/50 bg-card/50 p-4 space-y-4">
+                            {/* Review status */}
+                            <div className="flex items-center justify-between">
+                              <Badge variant={selectedMonthly.reviewed ? "secondary" : "destructive"} className="text-[10px]">
+                                {selectedMonthly.reviewed ? "✅ Revisada" : "⏳ Pendente de revisão"}
+                              </Badge>
+                              {!selectedMonthly.reviewed && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs gap-1 h-7"
+                                  onClick={() => markMonthlyReviewedMutation.mutate(selectedMonthly.id)}
+                                  disabled={markMonthlyReviewedMutation.isPending}
+                                >
+                                  {markMonthlyReviewedMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                                  Marcar como revisada
+                                </Button>
+                              )}
+                            </div>
+
+                            {/* Data fields */}
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                              <Field label="Peso" value={selectedMonthly.peso ?? "—"} />
+                              <Field label="Altura" value={selectedMonthly.altura ?? "—"} />
+                              <Field label="Modalidade" value={selectedMonthly.modalidade ?? "—"} />
+                              <Field label="Nível de Fadiga" value={selectedMonthly.nivel_fadiga != null ? `${selectedMonthly.nivel_fadiga}/10` : "—"} />
+                              <Field label="Objetivo Atual" value={selectedMonthly.objetivo_atual ?? "—"} />
+                              <Field label="Frequência" value={selectedMonthly.frequencia_compromisso ?? "—"} />
+                              <Field label="Tempo Disponível" value={selectedMonthly.tempo_disponivel ?? "—"} />
+                              <Field label="Dias Disponíveis" value={selectedMonthly.dias_disponiveis?.join(", ") ?? "—"} />
+                              <Field label="Adesão Treinos" value={selectedMonthly.adesao_treinos != null ? `${selectedMonthly.adesao_treinos}%` : "—"} />
+                              <Field label="Motivo Adesão Treinos" value={selectedMonthly.motivo_adesao_treinos ?? "—"} />
+                              <Field label="Adesão Cardio" value={selectedMonthly.adesao_cardios != null ? `${selectedMonthly.adesao_cardios}%` : "—"} />
+                              <Field label="Adesão Dieta" value={selectedMonthly.adesao_dieta ?? "—"} />
+                              <Field label="Horário Treino" value={selectedMonthly.horario_treino ?? "—"} />
+                              <Field label="Refeições/Horários" value={selectedMonthly.refeicoes_horarios ?? "—"} />
+                              <Field label="Alongamentos Corretos" value={selectedMonthly.alongamentos_corretos === true ? "Sim" : selectedMonthly.alongamentos_corretos === false ? "Não" : "—"} />
+                              <Field label="Competição Fisiculturismo" value={selectedMonthly.competicao_fisiculturismo ?? "—"} />
+                              <Field label="Restrição Alimentar" value={selectedMonthly.restricao_alimentar ?? "—"} />
+                              <Field label="Alimentos Proibidos" value={selectedMonthly.alimentos_proibidos ?? "—"} />
+                              <Field label="Prioridades Físicas" value={selectedMonthly.prioridades_fisicas ?? "—"} />
+                              <Field label="Notas de Progressão" value={selectedMonthly.notas_progressao ?? "—"} />
+                            </div>
+
+                            {/* Progression booleans */}
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Progressão Muscular</p>
+                              <div className="flex flex-wrap gap-2">
+                                {[
+                                  { key: "progresso_peitoral", label: "Peitoral" },
+                                  { key: "progresso_costas", label: "Costas" },
+                                  { key: "progresso_deltoide", label: "Deltóide" },
+                                  { key: "progresso_triceps", label: "Tríceps" },
+                                  { key: "progresso_biceps", label: "Bíceps" },
+                                  { key: "progresso_quadriceps", label: "Quadríceps" },
+                                  { key: "progresso_posteriores", label: "Posteriores" },
+                                  { key: "progresso_gluteos", label: "Glúteos" },
+                                  { key: "progresso_panturrilha", label: "Panturrilha" },
+                                ].map(({ key, label }) => {
+                                  const val = (selectedMonthly as any)[key];
+                                  return (
+                                    <Badge
+                                      key={key}
+                                      variant={val === true ? "default" : val === false ? "destructive" : "secondary"}
+                                      className="text-[10px]"
+                                    >
+                                      {label}: {val === true ? "✓" : val === false ? "✗" : "—"}
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                              {selectedMonthly.progresso_abdomen && (
+                                <p className="text-xs text-muted-foreground mt-1">Abdômen: {selectedMonthly.progresso_abdomen}</p>
+                              )}
+                              {selectedMonthly.progresso_antebraco && (
+                                <p className="text-xs text-muted-foreground">Antebraço: {selectedMonthly.progresso_antebraco}</p>
+                              )}
+                            </div>
+
+                            {/* Photos */}
+                            {(selectedMonthly.foto_frente || selectedMonthly.foto_costas || selectedMonthly.foto_lado_direito || selectedMonthly.foto_lado_esquerdo || selectedMonthly.foto_perfil_lado) && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Fotos</p>
+                                <div className="grid grid-cols-5 gap-2">
+                                  {[
+                                    { url: selectedMonthly.foto_frente, label: "Frente" },
+                                    { url: selectedMonthly.foto_costas, label: "Costas" },
+                                    { url: selectedMonthly.foto_lado_direito, label: "Lado D" },
+                                    { url: selectedMonthly.foto_lado_esquerdo, label: "Lado E" },
+                                    { url: selectedMonthly.foto_perfil_lado, label: "Perfil" },
+                                  ].filter(p => p.url).map(({ url, label }) => (
+                                    <div key={label} className="space-y-1">
+                                      <img src={url!} alt={label} className="rounded-md w-full aspect-[3/4] object-cover border border-border" />
+                                      <p className="text-[9px] text-center text-muted-foreground">{label}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Suggestions */}
+                            {(selectedMonthly.sugestao_dieta || selectedMonthly.sugestao_melhoria || selectedMonthly.motivo_nao_dieta) && (
+                              <div className="space-y-2">
+                                {selectedMonthly.sugestao_dieta && <Field label="Sugestão Dieta" value={selectedMonthly.sugestao_dieta} />}
+                                {selectedMonthly.motivo_nao_dieta && <Field label="Motivo Não Seguir Dieta" value={selectedMonthly.motivo_nao_dieta} />}
+                                {selectedMonthly.sugestao_melhoria && <Field label="Sugestão de Melhoria" value={selectedMonthly.sugestao_melhoria} />}
+                              </div>
+                            )}
+
+                            {selectedMonthly.maquinas_indisponiveis && selectedMonthly.maquinas_indisponiveis.length > 0 && (
+                              <Field label="Máquinas Indisponíveis" value={selectedMonthly.maquinas_indisponiveis.join(", ")} />
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 
