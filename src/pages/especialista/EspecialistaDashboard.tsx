@@ -434,7 +434,9 @@ const EspecialistaDashboard = () => {
               {alertCount > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {activeFilterOptions.map((f) => {
-                    const count = f.key === "all" ? alertCount : (proactiveAlerts ?? []).filter((a) => a.type === f.key).length;
+                    const count = f.key === "all"
+                      ? new Set((proactiveAlerts ?? []).map(a => a.studentId)).size
+                      : new Set((proactiveAlerts ?? []).filter(a => a.type === f.key).map(a => a.studentId)).size;
                     return (
                       <button
                         key={f.key}
