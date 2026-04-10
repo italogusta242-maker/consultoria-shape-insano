@@ -88,7 +88,7 @@ const AnamneseRequestAlert = () => {
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={markReadAndNavigate}
+          onClick={navigateToForm}
           className="w-full mt-3 py-3 rounded-lg font-cinzel text-sm font-bold tracking-wide flex items-center justify-center gap-2"
           style={{
             background: "linear-gradient(135deg, hsl(40, 90%, 50%), hsl(30, 85%, 45%))",
@@ -118,7 +118,7 @@ const AnamneseRequestAlert = () => {
           </DialogHeader>
           <div className="space-y-2 mt-4">
             <Button
-              onClick={markReadAndNavigate}
+              onClick={navigateToForm}
               className="w-full font-cinzel font-bold tracking-wide py-5"
               style={{
                 background: "linear-gradient(135deg, hsl(40, 90%, 50%), hsl(30, 85%, 45%))",
