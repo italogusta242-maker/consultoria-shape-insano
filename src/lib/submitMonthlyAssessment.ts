@@ -79,17 +79,18 @@ export async function submitMonthlyAssessment(
     console.log("[submitMonthlyAssessment] Inserting assessment for user:", user.id);
 
     const { data: assessment, error: insertError } = await supabase
-      .from("monthly_assessments" as any)
+      .from("monthly_assessments")
       .insert(insertPayload as any)
       .select("id")
       .single();
 
-    if (insertError) {
+    if (insertError || !assessment) {
       console.error("[submitMonthlyAssessment] INSERT FAILED:", insertError);
-      throw new Error(`Erro ao salvar reavaliação: ${insertError.message}`);
+      throw new Error(`Erro ao salvar reavaliação: ${insertError?.message || "Sem ID retornado"}`);
     }
 
-    console.log("[submitMonthlyAssessment] Assessment saved successfully:", (assessment as any)?.id);
+    const assessmentId = (assessment as any).id as string;
+    console.log("[submitMonthlyAssessment] Assessment saved successfully:", assessmentId);
 
     // Mark all anamnese_request notifications as read so alert disappears
     await supabase
@@ -108,30 +109,38 @@ export async function submitMonthlyAssessment(
       .eq("id", user.id);
 
     // 2. Upload photos
-    const photoFields: { key: keyof MonthlyFormData; label: string }[] = [
-      { key: "foto_frente", label: "frente" },
-      { key: "foto_costas", label: "costas" },
-      { key: "foto_lado_direito", label: "lado_direito" },
-      { key: "foto_lado_esquerdo", label: "lado_esquerdo" },
-      { key: "foto_perfil_lado", label: "perfil_lado" },
+    const photoFields: { key: keyof MonthlyFormData; label: string; column: string }[] = [
+      { key: "foto_frente", label: "frente", column: "foto_frente" },
+      { key: "foto_costas", label: "costas", column: "foto_costas" },
+      { key: "foto_lado_direito", label: "lado_direito", column: "foto_lado_direito" },
+      { key: "foto_lado_esquerdo", label: "lado_esquerdo", column: "foto_lado_esquerdo" },
+      { key: "foto_perfil_lado", label: "perfil_lado", column: "foto_perfil_lado" },
     ];
 
     const photoUpdates: Record<string, string> = {};
     const uploads = photoFields
       .filter(({ key }) => formData[key] instanceof File)
-      .map(async ({ key, label }) => {
-        const url = await uploadPhoto(user.id, formData[key] as File, label, (assessment as any).id);
-        if (url) photoUpdates[`foto_${label}`.replace("foto_foto_", "foto_")] = url;
+      .map(async ({ key, label, column }) => {
+        const url = await uploadPhoto(user.id, formData[key] as File, label, assessmentId);
+        if (url) {
+          photoUpdates[column] = url;
+          console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${url}`);
+        }
       });
 
     await Promise.all(uploads);
 
     // 3. Update with photo URLs
     if (Object.keys(photoUpdates).length > 0) {
-      await supabase
-        .from("monthly_assessments" as any)
+      console.log("[submitMonthlyAssessment] Updating photos:", Object.keys(photoUpdates));
+      const { error: photoError } = await supabase
+        .from("monthly_assessments")
         .update(photoUpdates as any)
-        .eq("id", (assessment as any).id);
+        .eq("id", assessmentId);
+
+      if (photoError) {
+        console.error("[submitMonthlyAssessment] Photo update failed:", photoError);
+      }
     }
 
     // 4. Update profile weight/height
@@ -163,7 +172,7 @@ export async function submitMonthlyAssessment(
           title: "📝 Nova Reavaliação Mensal",
           body: `${studentName} enviou a reavaliação mensal.`,
           type: "monthly_completed",
-          metadata: { student_id: user.id, assessment_id: (assessment as any).id },
+          metadata: { student_id: user.id, assessment_id: assessmentId },
         }));
         await supabase.from("notifications").insert(notifications as any);
       }

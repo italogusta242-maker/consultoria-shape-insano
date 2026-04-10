@@ -31,11 +31,19 @@ const MonthlyAssessment = () => {
   const [step, setStep] = useState<MonthlyStep>("dados");
   const [form, setForm] = useState<MonthlyFormData>({
     ...initialMonthlyFormData,
-    altura: profile?.altura || "",
-    peso: profile?.peso || "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
+
+  // Pre-fill from profile first
+  useEffect(() => {
+    if (!profile) return;
+    setForm(prev => ({
+      ...prev,
+      altura: prev.altura || profile.altura || "",
+      peso: prev.peso || profile.peso || "",
+    }));
+  }, [profile]);
 
   // Pre-fill from last monthly assessment or anamnese
   useEffect(() => {
@@ -56,6 +64,8 @@ const MonthlyAssessment = () => {
       if (lastAssessment) {
         setForm(prev => ({
           ...prev,
+          altura: prev.altura || lastAssessment.altura || "",
+          peso: prev.peso || lastAssessment.peso || "",
           modalidade: lastAssessment.modalidade || prev.modalidade,
           dias_disponiveis: lastAssessment.dias_disponiveis || prev.dias_disponiveis,
           frequencia_compromisso: lastAssessment.frequencia_compromisso || prev.frequencia_compromisso,
@@ -69,6 +79,8 @@ const MonthlyAssessment = () => {
           horario_treino: lastAssessment.horario_treino || prev.horario_treino,
           horario_treino_outro: lastAssessment.horario_treino_outro || prev.horario_treino_outro,
           prioridades_fisicas: lastAssessment.prioridades_fisicas || prev.prioridades_fisicas,
+          adesao_dieta: lastAssessment.adesao_dieta || prev.adesao_dieta,
+          sugestao_dieta: lastAssessment.sugestao_dieta || prev.sugestao_dieta,
         }));
         setPrefilled(true);
         return;
@@ -84,12 +96,16 @@ const MonthlyAssessment = () => {
         .maybeSingle();
 
       if (anamnese) {
+        const extras = (anamnese.dados_extras || {}) as Record<string, any>;
         setForm(prev => ({
           ...prev,
           objetivo_atual: anamnese.objetivo || prev.objetivo_atual,
           restricao_alimentar: anamnese.restricoes_alimentares || prev.restricao_alimentar,
           tempo_disponivel: anamnese.disponibilidade_treino || prev.tempo_disponivel,
           frequencia_compromisso: anamnese.frequencia_treino || prev.frequencia_compromisso,
+          modalidade: extras.modalidade || prev.modalidade,
+          dias_disponiveis: extras.dias_semana ? (Array.isArray(extras.dias_semana) ? extras.dias_semana : []) : prev.dias_disponiveis,
+          alimentos_proibidos: extras.alimentos_proibidos || prev.alimentos_proibidos,
         }));
       }
       setPrefilled(true);
@@ -101,7 +117,58 @@ const MonthlyAssessment = () => {
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const currentIdx = monthlySteps.indexOf(step);
+
+  // Validation per step
+  const validateStep = (s: MonthlyStep): string | null => {
+    switch (s) {
+      case "dados":
+        if (!form.peso) return "Informe o peso atual.";
+        if (!form.altura) return "Informe a altura.";
+        return null;
+      case "fotos":
+        if (!form.foto_frente) return "Foto de frente é obrigatória.";
+        if (!form.foto_costas) return "Foto de costas é obrigatória.";
+        if (!form.foto_lado_direito) return "Foto lado direito é obrigatória.";
+        if (!form.foto_lado_esquerdo) return "Foto lado esquerdo é obrigatória.";
+        if (!form.foto_perfil_lado) return "Foto de perfil é obrigatória.";
+        return null;
+      case "treino_modalidade":
+        if (!form.modalidade) return "Selecione a modalidade.";
+        if (!form.nivel_fadiga && form.nivel_fadiga !== "0") return "Selecione o nível de fadiga.";
+        return null;
+      case "progressao":
+        return null; // optional notes
+      case "prioridades":
+        if (!form.prioridades_fisicas) return "Descreva suas prioridades.";
+        return null;
+      case "disponibilidade":
+        if (form.dias_disponiveis.length === 0) return "Selecione pelo menos um dia.";
+        if (!form.frequencia_compromisso) return "Selecione a frequência.";
+        if (!form.tempo_disponivel) return "Selecione o tempo disponível.";
+        return null;
+      case "equipamentos":
+        return null; // optional
+      case "adesao":
+        if (!form.adesao_treinos) return "Informe a adesão aos treinos.";
+        if (!form.adesao_cardios) return "Informe a adesão aos cárdios.";
+        return null;
+      case "dieta":
+        if (!form.refeicoes_horarios) return "Selecione as refeições/horários.";
+        if (!form.horario_treino) return "Selecione o horário de treino.";
+        if (!form.objetivo_atual) return "Selecione o objetivo atual.";
+        if (!form.adesao_dieta) return "Selecione a adesão à dieta.";
+        return null;
+      default:
+        return null;
+    }
+  };
+
   const nextStep = () => {
+    const error = validateStep(step);
+    if (error) {
+      toast.error(error);
+      return;
+    }
     if (currentIdx < monthlySteps.length - 1) setStep(monthlySteps[currentIdx + 1]);
   };
   const prevStep = () => {
@@ -164,6 +231,11 @@ const MonthlyAssessment = () => {
   );
 
   const handleSubmit = async () => {
+    const error = validateStep("finalizacao");
+    if (error) {
+      toast.error(error);
+      return;
+    }
     setIsSubmitting(true);
     const result = await submitMonthlyAssessment(form);
     setIsSubmitting(false);
@@ -199,6 +271,11 @@ const MonthlyAssessment = () => {
                 <div><Label className="text-muted-foreground text-xs">Peso atual (kg) <span className="text-primary">*</span></Label>
                   <Input type="number" className={fc} value={form.peso} onChange={(e) => u("peso", e.target.value)} placeholder="80" /></div>
               </div>
+              {(form.altura || form.peso) && (
+                <p className="text-[10px] text-muted-foreground text-center">
+                  💡 Dados pré-preenchidos da última avaliação. Altere apenas o que mudou.
+                </p>
+              )}
             </div>
             <AdvanceButton />
           </motion.div>
@@ -216,20 +293,20 @@ const MonthlyAssessment = () => {
             <div className="space-y-3">
               <img src={posturalFrenteCostas} alt="Exemplo frente e costas" className="max-w-[180px] mx-auto rounded-lg border border-border" />
               <div className="grid grid-cols-2 gap-3">
-                <FileUploadField label="Frente" value={form.foto_frente} onChange={(f) => u("foto_frente", f)} required />
-                <FileUploadField label="Costas" value={form.foto_costas} onChange={(f) => u("foto_costas", f)} required />
+                <FileUploadField label="Frente *" value={form.foto_frente} onChange={(f) => u("foto_frente", f)} required />
+                <FileUploadField label="Costas *" value={form.foto_costas} onChange={(f) => u("foto_costas", f)} required />
               </div>
             </div>
             <div className="space-y-3">
               <img src={posturalPerfil} alt="Exemplo perfil" className="max-w-[180px] mx-auto rounded-lg border border-border" />
               <div className="grid grid-cols-2 gap-3">
-                <FileUploadField label="Lado Direito" value={form.foto_lado_direito} onChange={(f) => u("foto_lado_direito", f)} required />
-                <FileUploadField label="Lado Esquerdo" value={form.foto_lado_esquerdo} onChange={(f) => u("foto_lado_esquerdo", f)} required />
+                <FileUploadField label="Lado Direito *" value={form.foto_lado_direito} onChange={(f) => u("foto_lado_direito", f)} required />
+                <FileUploadField label="Lado Esquerdo *" value={form.foto_lado_esquerdo} onChange={(f) => u("foto_lado_esquerdo", f)} required />
               </div>
             </div>
             <div className="space-y-3">
               <img src={posturalTeste} alt="Teste de sentar e alcançar" className="max-w-[180px] mx-auto rounded-lg border border-border" />
-              <FileUploadField label="Perfil (foto de lado)" value={form.foto_perfil_lado} onChange={(f) => u("foto_perfil_lado", f)} required />
+              <FileUploadField label="Perfil (foto de lado) *" value={form.foto_perfil_lado} onChange={(f) => u("foto_perfil_lado", f)} required />
             </div>
             <AdvanceButton />
           </motion.div>
@@ -311,7 +388,7 @@ const MonthlyAssessment = () => {
               </div>
 
               <div>
-                <Label className="text-muted-foreground text-xs">Se não progrediu em algum exercício, descreva: <span className="text-primary">*</span></Label>
+                <Label className="text-muted-foreground text-xs">Se não progrediu em algum exercício, descreva:</Label>
                 <Textarea className={fc} value={form.notas_progressao} onChange={(e) => u("notas_progressao", e.target.value)} placeholder="Descreva os pontos..." rows={3} />
               </div>
             </div>
@@ -438,18 +515,18 @@ const MonthlyAssessment = () => {
               </div>
 
               <div>
-                <Label className="text-muted-foreground text-xs">Pretende competir em fisiculturismo natural? <span className="text-primary">*</span></Label>
+                <Label className="text-muted-foreground text-xs">Pretende competir em fisiculturismo natural?</Label>
                 <Textarea className={fc} value={form.competicao_fisiculturismo} onChange={(e) => u("competicao_fisiculturismo", e.target.value)}
                   placeholder="Se sim, qual categoria e quanto tempo..." rows={2} />
               </div>
 
               <div>
-                <Label className="text-muted-foreground text-xs">Restrição alimentar? <span className="text-primary">*</span></Label>
+                <Label className="text-muted-foreground text-xs">Restrição alimentar?</Label>
                 <Input className={fc} value={form.restricao_alimentar} onChange={(e) => u("restricao_alimentar", e.target.value)} placeholder="Intolerância/alergia..." />
               </div>
 
               <div>
-                <Label className="text-muted-foreground text-xs">Alimentos que não come de jeito nenhum <span className="text-primary">*</span></Label>
+                <Label className="text-muted-foreground text-xs">Alimentos que não come de jeito nenhum</Label>
                 <Textarea className={fc} value={form.alimentos_proibidos} onChange={(e) => u("alimentos_proibidos", e.target.value)} rows={2} />
               </div>
 
@@ -474,7 +551,7 @@ const MonthlyAssessment = () => {
               )}
 
               <div>
-                <Label className="text-muted-foreground text-xs">Sugestão para facilitar a adesão à dieta <span className="text-primary">*</span></Label>
+                <Label className="text-muted-foreground text-xs">Sugestão para facilitar a adesão à dieta</Label>
                 <Textarea className={fc} value={form.sugestao_dieta} onChange={(e) => u("sugestao_dieta", e.target.value)} rows={2} />
               </div>
             </div>
