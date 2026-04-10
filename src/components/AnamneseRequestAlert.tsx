@@ -51,11 +51,8 @@ const AnamneseRequestAlert = () => {
   );
   const showModal = daysSinceRequest >= 2 && !modalDismissed;
 
-  const markReadAndNavigate = async () => {
-    await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("id", pendingNotification.id);
+  const navigateToForm = () => {
+    // Don't mark as read here — only submitMonthlyAssessment marks it read on success
     navigate("/reavaliacao");
   };
 

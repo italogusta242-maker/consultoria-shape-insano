@@ -298,7 +298,11 @@ const Dashboard = () => {
   const daysSinceAnamnese = lastAssessmentDate
     ? Math.floor((Date.now() - lastAssessmentDate.getTime()) / (1000 * 60 * 60 * 24))
     : 999;
-  const showAnamnese = daysSinceAnamnese >= 30;
+  // Show banner if next_anamnese_due is past OR fallback to 30-day check
+  const profileData = profile;
+  const showAnamnese = profileData?.next_anamnese_due
+    ? new Date(profileData.next_anamnese_due) <= new Date()
+    : daysSinceAnamnese >= 30;
 
   const MonthlyAnamnesisBanner = () => {
     if (!showAnamnese) return null;
