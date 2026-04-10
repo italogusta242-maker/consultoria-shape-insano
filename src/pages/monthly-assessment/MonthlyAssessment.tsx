@@ -33,6 +33,7 @@ const MonthlyAssessment = () => {
     ...initialMonthlyFormData,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
   // Pre-fill from profile first
@@ -236,6 +237,7 @@ const MonthlyAssessment = () => {
       toast.error(error);
       return;
     }
+    setSubmitError(null);
     setIsSubmitting(true);
     const result = await submitMonthlyAssessment(form);
     setIsSubmitting(false);
@@ -243,7 +245,9 @@ const MonthlyAssessment = () => {
       toast.success("Reavaliação mensal enviada com sucesso!");
       navigate("/");
     } else {
-      toast.error(result.error || "Erro ao enviar reavaliação");
+      const msg = result.error || "Erro ao enviar reavaliação. Verifique sua conexão e tente novamente.";
+      setSubmitError(msg);
+      toast.error(msg, { duration: 8000 });
     }
   };
 
