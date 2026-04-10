@@ -326,7 +326,7 @@ const EspecialistaDashboard = () => {
 
   const kpis: { label: string; value: string; icon: typeof Users; change: string; glow: "teal" | "crimson" | "gold"; to: string; onClick?: () => void }[] = [
     { label: "Meus Alunos", value: String(totalStudents), icon: Users, change: `${totalStudents} vinculados`, glow: "teal", to: "/especialista/alunos" },
-    { label: "Alertas", value: String(alertCount), icon: AlertTriangle, change: alertCount > 0 ? "ações pendentes" : "tudo em dia", glow: "crimson", to: "#alertas" },
+    { label: "Alunos em Alerta", value: String(studentsPendentes), icon: AlertTriangle, change: studentsPendentes > 0 ? `${alertCount} pendências` : "tudo em dia", glow: "crimson", to: "#alertas" },
     { label: "Em Dia", value: String(studentsEmDia), icon: ClipboardCheck, change: `${studentsPendentes} pendente(s)`, glow: studentsEmDia >= studentsPendentes ? "teal" : "gold", to: "#alertas" },
     { label: "Sem Resposta", value: String(unresponsiveCount), icon: MessageCircleOff, change: unresponsiveCount > 0 ? "alunos silenciosos 7d+" : "todos responderam", glow: unresponsiveCount > 0 ? "crimson" : "teal", to: "#", onClick: () => unresponsiveCount > 0 && setUnresponsiveOpen(true) },
   ];
@@ -413,9 +413,9 @@ const EspecialistaDashboard = () => {
             <div className="p-5">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle size={16} className="text-[hsl(var(--crimson-glow))]" />
-                <h3 className="text-sm font-medium text-foreground">Alertas</h3>
+                <h3 className="text-sm font-medium text-foreground">Alunos em Alerta</h3>
                 <span className="ml-auto min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-destructive/20 text-destructive text-[10px] font-bold">
-                  {alertCount}
+                  {groupedAlerts.length}
                 </span>
                 {alertCount > 0 && (
                   <Button
@@ -434,7 +434,9 @@ const EspecialistaDashboard = () => {
               {alertCount > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {activeFilterOptions.map((f) => {
-                    const count = f.key === "all" ? alertCount : (proactiveAlerts ?? []).filter((a) => a.type === f.key).length;
+                    const count = f.key === "all"
+                      ? new Set((proactiveAlerts ?? []).map(a => a.studentId)).size
+                      : new Set((proactiveAlerts ?? []).filter(a => a.type === f.key).map(a => a.studentId)).size;
                     return (
                       <button
                         key={f.key}
