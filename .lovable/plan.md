@@ -1,39 +1,46 @@
 
 
-## Problema
+## Diagnóstico: Por que o Athos não tem reavaliações salvas
 
-A página "Ver Anamnese" do especialista (`/especialista/anamnese/:studentId`) só mostra a **anamnese inicial** (tabela `anamnese`). As **reavaliações mensais** (tabela `monthly_assessments`) não são buscadas nem exibidas em lugar nenhum. Além disso, o `submitMonthlyAssessment` não notifica os especialistas quando um aluno envia uma reavaliação.
+**Fatos confirmados no banco:**
+- Athos (`e03682e6...`) tem **0 registros** em `monthly_assessments`
+- Notificação `anamnese_request` de 26/mar ainda está `read: false`
+- `next_anamnese_due` = 2026-03-24 (vencido há 17 dias)
+- Ele tem 1 anamnese inicial (20/mar)
 
-São 3 correções combinadas:
+**Conclusão:** Os 3 envios que ele diz ter feito falharam silenciosamente. As causas prováveis são:
 
-1. **Notificar especialistas** quando aluno submete reavaliação mensal
-2. **Exibir reavaliações mensais** na página de anamnese do especialista
-3. **Permitir marcar como revisada** a reavaliação mensal
+1. **Erro no upload de fotos no mobile** — fotos grandes podem exceder timeout ou falhar na rede, e o erro é capturado no catch genérico sem feedback claro
+2. **Sessão expirada** — `supabase.auth.getUser()` retorna null se a sessão expirou, e o retorno `{ success: false, error: "Usuário não autenticado" }` pode não ser bem visível como toast no mobile
+3. **O toast de erro desaparece rápido** no celular e o aluno não percebe
 
-## Alterações
+## Plano de correção — Tornar o submit mais resiliente
 
-### 1. Notificar especialistas após submit
+### 1. Feedback de erro mais agressivo no submit
+**Arquivo:** `src/pages/monthly-assessment/MonthlyAssessment.tsx`
+- Se `result.success === false`, além do toast, manter o botão habilitado e mostrar um banner de erro persistente (não apenas toast)
+- Adicionar um state `submitError` que exibe uma mensagem vermelha fixa na tela
+
+### 2. Reautenticar antes do submit
 **Arquivo:** `src/lib/submitMonthlyAssessment.ts`
-- Após insert bem-sucedido, buscar especialistas vinculados via `student_specialists`
-- Inserir notificação tipo `monthly_completed` para cada especialista com nome do aluno
+- Antes de `getUser()`, chamar `supabase.auth.refreshSession()` para garantir que o token não expirou
+- Se mesmo assim falhar, retornar erro mais descritivo
 
-### 2. Exibir reavaliações mensais na tela do especialista
-**Arquivo:** `src/pages/especialista/EspecialistaAnamneseSplit.tsx`
-- Adicionar query para buscar `monthly_assessments` do aluno (ordenado por `created_at DESC`)
-- Criar nova seção "Reavaliações Mensais" com timeline navegável (como já existe para anamneses iniciais)
-- Exibir campos: peso, altura, modalidade, nível fadiga, progressão muscular, dias disponíveis, adesão treinos/cardio/dieta, objetivo atual, fotos, sugestões
-- Botão "Marcar como revisada" que atualiza `reviewed`, `reviewed_by`, `reviewed_at`
-- Badge visual indicando se está pendente de revisão ou já revisada
+### 3. Reduzir tamanho das fotos antes do upload
+**Arquivo:** `src/lib/submitMonthlyAssessment.ts`
+- Comprimir imagens (resize para max 1200px, quality 0.8) antes do upload para evitar timeout no mobile
+- Isso reduz drasticamente falhas de rede
 
-### 3. Reduzir cache do dashboard
-**Arquivo:** `src/pages/especialista/EspecialistaDashboard.tsx`
-- Reduzir `refetchInterval` para alertas proativos de 5min para 2min
+### 4. Retry automático no upload de fotos
+**Arquivo:** `src/lib/submitMonthlyAssessment.ts`
+- Se upload falhar, tentar novamente 1x antes de desistir
 
-## Resumo
+### 5. Reenviar notificação para o Athos (one-time fix)
+- Criar migration para inserir nova `anamnese_request` e resetar `next_anamnese_due` para hoje
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/submitMonthlyAssessment.ts` | Notificar especialistas vinculados |
-| `src/pages/especialista/EspecialistaAnamneseSplit.tsx` | Seção de reavaliações mensais com timeline e revisão |
-| `src/pages/especialista/EspecialistaDashboard.tsx` | Reduzir cache interval |
+| `src/lib/submitMonthlyAssessment.ts` | Refresh session, comprimir fotos, retry upload |
+| `src/pages/monthly-assessment/MonthlyAssessment.tsx` | Banner de erro persistente |
+| Migration SQL | Reenviar notificação ao Athos |
 
