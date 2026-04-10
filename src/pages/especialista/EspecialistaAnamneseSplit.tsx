@@ -114,6 +114,21 @@ const EspecialistaAnamneseSplit = () => {
     },
   });
 
+  const markMonthlyReviewedMutation = useMutation({
+    mutationFn: async (assessmentId: string) => {
+      if (!user) return;
+      const { error } = await supabase
+        .from("monthly_assessments")
+        .update({ reviewed: true, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .eq("id", assessmentId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["split-monthly-assessments"] });
+      toast.success("Reavaliação marcada como revisada");
+    },
+  });
+
   const goBack = () => navigate("/especialista/alunos");
 
   /** Auto-mark anamnese as reviewed when a plan is created */
