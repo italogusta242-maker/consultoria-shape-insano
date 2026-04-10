@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff } from "lucide-react";
+import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -10,13 +10,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useProactiveAlerts, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { useProactiveAlerts, useDismissAlert, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 const stagger: Variants = {
   hidden: {},
