@@ -465,6 +465,30 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_alerts: {
+        Row: {
+          alert_key: string
+          dismissed_at: string
+          id: string
+          specialist_id: string
+          student_id: string
+        }
+        Insert: {
+          alert_key: string
+          dismissed_at?: string
+          id?: string
+          specialist_id: string
+          student_id: string
+        }
+        Update: {
+          alert_key?: string
+          dismissed_at?: string
+          id?: string
+          specialist_id?: string
+          student_id?: string
+        }
+        Relationships: []
+      }
       exercise_library: {
         Row: {
           category: string | null

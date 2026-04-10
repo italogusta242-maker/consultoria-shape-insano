@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff } from "lucide-react";
+import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -10,13 +10,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useProactiveAlerts, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { useProactiveAlerts, useDismissAlert, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 const stagger: Variants = {
   hidden: {},
@@ -252,12 +255,62 @@ const EspecialistaDashboard = () => {
   // reviewStats kept for potential future use but efficiency is now alert-based
   const { data: proactiveAlerts, isLoading: alertsLoading } = useProactiveAlerts(specialty, studentIds, studentNames);
   const { data: unresponsiveStudents } = useUnresponsiveStudents(user?.id, studentIds, studentNames);
+  const { dismissOne, dismissAllForStudent, restoreAll } = useDismissAlert();
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
 
   const alertCount = proactiveAlerts?.length ?? 0;
   const unresponsiveCount = unresponsiveStudents?.length ?? 0;
   const filteredAlerts = alertFilter === "all"
     ? (proactiveAlerts ?? [])
     : (proactiveAlerts ?? []).filter((a) => a.type === alertFilter);
+
+  // Group alerts by student
+  const groupedAlerts = useMemo(() => {
+    const map = new Map<string, ProactiveAlert[]>();
+    for (const alert of filteredAlerts) {
+      const existing = map.get(alert.studentId) ?? [];
+      existing.push(alert);
+      map.set(alert.studentId, existing);
+    }
+    // Sort groups: critical students first
+    const entries = Array.from(map.entries());
+    const severityOrder: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
+    entries.sort((a, b) => {
+      const aMin = Math.min(...a[1].map(al => severityOrder[al.severity]));
+      const bMin = Math.min(...b[1].map(al => severityOrder[al.severity]));
+      return aMin - bMin;
+    });
+    return entries;
+  }, [filteredAlerts]);
+
+  const toggleExpanded = (sid: string) => {
+    setExpandedStudents(prev => {
+      const next = new Set(prev);
+      next.has(sid) ? next.delete(sid) : next.add(sid);
+      return next;
+    });
+  };
+
+  const handleDismissOne = (e: React.MouseEvent, alert: ProactiveAlert) => {
+    e.stopPropagation();
+    dismissOne.mutate({ alertKey: alert.id, studentId: alert.studentId }, {
+      onSuccess: () => toast.success("Alerta dispensado"),
+    });
+  };
+
+  const handleDismissAllStudent = (e: React.MouseEvent, alerts: ProactiveAlert[]) => {
+    e.stopPropagation();
+    dismissAllForStudent.mutate({ alerts }, {
+      onSuccess: () => toast.success(`${alerts.length} alertas dispensados`),
+    });
+  };
+
+  const handleRestoreAll = () => {
+    restoreAll.mutate(undefined, {
+      onSuccess: () => toast.success("Alertas restaurados"),
+    });
+  };
+
   const filteredCount = filteredAlerts.length;
 
   // Only show filter options that have alerts
@@ -364,6 +417,18 @@ const EspecialistaDashboard = () => {
                 <span className="ml-auto min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-destructive/20 text-destructive text-[10px] font-bold">
                   {alertCount}
                 </span>
+                {alertCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                    onClick={handleRestoreAll}
+                    disabled={restoreAll.isPending}
+                  >
+                    <RotateCcw size={10} />
+                    Restaurar
+                  </Button>
+                )}
               </div>
               {/* Filter chips */}
               {alertCount > 0 && (
@@ -387,44 +452,91 @@ const EspecialistaDashboard = () => {
                   })}
                 </div>
               )}
-              <div className="space-y-2 max-h-[340px] overflow-y-auto">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {isLoading || alertsLoading ? (
                   Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
                 ) : filteredCount === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">{alertCount === 0 ? "Nenhum alerta no momento 🎉" : "Nenhum alerta nesta categoria"}</p>
                 ) : (
-                  filteredAlerts.map((alert) => {
-                    const styles = getSeverityStyles(alert.severity);
-                    const AlertIcon = getAlertIcon(alert.type);
+                  groupedAlerts.map(([studentId, studentAlerts]) => {
+                    const name = studentNames.get(studentId) ?? "Aluno";
+                    const isExpanded = expandedStudents.has(studentId);
+                    const worstSeverity = studentAlerts.find(a => a.severity === "critical")
+                      ? "critical" as const
+                      : studentAlerts.find(a => a.severity === "warning")
+                        ? "warning" as const
+                        : "info" as const;
+                    const styles = getSeverityStyles(worstSeverity);
+
                     return (
-                      <div
-                        key={alert.id}
-                        onClick={() => alert.navigateTo && navigate(alert.navigateTo)}
-                        className={cn(
-                          "flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]",
-                          styles.bg, styles.border
-                        )}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={cn("w-2 h-2 rounded-full shrink-0", styles.dot)} />
-                          <AlertIcon size={14} className="text-muted-foreground shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{alert.studentName}</p>
-                            <p className="text-xs text-muted-foreground">{alert.title}</p>
-                            <p className="text-[10px] text-muted-foreground/70 mt-0.5">{alert.timeLabel}</p>
-                          </div>
+                      <Collapsible key={studentId} open={isExpanded} onOpenChange={() => toggleExpanded(studentId)}>
+                        <div className={cn("rounded-lg border transition-all", styles.bg, styles.border)}>
+                          <CollapsibleTrigger asChild>
+                            <div className="flex items-center justify-between p-3 cursor-pointer hover:opacity-80 transition-opacity">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={cn("w-2 h-2 rounded-full shrink-0", styles.dot)} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">{name}</p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {studentAlerts.map(a => a.title).slice(0, 3).join(" · ")}
+                                    {studentAlerts.length > 3 && ` +${studentAlerts.length - 3}`}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <Badge
+                                  variant={styles.badge}
+                                  className={cn(
+                                    "text-[10px]",
+                                    worstSeverity === "warning" && "border-amber-400 text-amber-400",
+                                    worstSeverity === "info" && "border-[hsl(var(--forja-teal))] text-[hsl(var(--forja-teal))]"
+                                  )}
+                                >
+                                  {studentAlerts.length}
+                                </Badge>
+                                <button
+                                  onClick={(e) => handleDismissAllStudent(e, studentAlerts)}
+                                  className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                                  title="Dispensar todos deste aluno"
+                                >
+                                  <XCircle size={14} />
+                                </button>
+                                {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                              </div>
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="px-3 pb-3 space-y-1.5 border-t border-[hsl(var(--glass-border))] pt-2">
+                              {studentAlerts.map((alert) => {
+                                const AlertIcon = getAlertIcon(alert.type);
+                                const alertStyles = getSeverityStyles(alert.severity);
+                                return (
+                                  <div
+                                    key={alert.id}
+                                    className="flex items-center justify-between py-1.5 group"
+                                  >
+                                    <div
+                                      className="flex items-center gap-2 min-w-0 cursor-pointer flex-1"
+                                      onClick={() => alert.navigateTo && navigate(alert.navigateTo)}
+                                    >
+                                      <AlertIcon size={12} className="text-muted-foreground shrink-0" />
+                                      <span className="text-xs text-foreground truncate">{alert.title}</span>
+                                      <span className="text-[10px] text-muted-foreground shrink-0">{alert.timeLabel}</span>
+                                    </div>
+                                    <button
+                                      onClick={(e) => handleDismissOne(e, alert)}
+                                      className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all shrink-0 ml-1"
+                                      title="Dispensar"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </CollapsibleContent>
                         </div>
-                        <Badge
-                          variant={styles.badge}
-                          className={cn(
-                            "text-[10px] shrink-0 ml-2",
-                            alert.severity === "warning" && "border-amber-400 text-amber-400",
-                            alert.severity === "info" && "border-[hsl(var(--forja-teal))] text-[hsl(var(--forja-teal))]"
-                          )}
-                        >
-                          {getSeverityLabel(alert.severity)}
-                        </Badge>
-                      </div>
+                      </Collapsible>
                     );
                   })
                 )}
