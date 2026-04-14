@@ -1178,14 +1178,8 @@ const EspecialistaAlunos = () => {
   };
 
   const handleEditTraining = (plan: any) => {
-    setEditingTrainingPlan({
-      id: plan.id,
-      title: plan.title,
-      user_id: plan.user_id,
-      groups: Array.isArray(plan.groups) ? plan.groups : [],
-      total_sessions: plan.totalSessions ?? plan.total_sessions ?? 50,
-    });
-    setTrainingEditorOpen(true);
+    // Navigate to split view for editing
+    navigate(`/especialista/anamnese/${plan.user_id}`);
   };
 
   const handleCreateTraining = (studentId: string) => {
