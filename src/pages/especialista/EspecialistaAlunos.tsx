@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus } from "lucide-react";
+import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus, UserX, UserCheck } from "lucide-react";
 import StudentPerformancePanel from "@/components/especialista/StudentPerformancePanel";
 import StudentPhotosPanel from "@/components/especialista/StudentPhotosPanel";
 import StudentEvolutionChart from "@/components/especialista/StudentEvolutionChart";
@@ -13,7 +13,7 @@ import StudentWorkoutSummary from "@/components/especialista/StudentWorkoutSumma
 import StudentLoadProgression from "@/components/especialista/StudentLoadProgression";
 import StudentMealAdherence from "@/components/especialista/StudentMealAdherence";
 import StudentDailyMealLog from "@/components/especialista/StudentDailyMealLog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import VolumeLimitsEditor from "@/components/especialista/VolumeLimitsEditor";
