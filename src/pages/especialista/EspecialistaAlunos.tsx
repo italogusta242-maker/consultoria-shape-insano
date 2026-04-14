@@ -20,7 +20,7 @@ import VolumeLimitsEditor from "@/components/especialista/VolumeLimitsEditor";
 import { cn } from "@/lib/utils";
 import { useSpecialistStudents, useMySpecialty, useStudentAnamnese, type StudentWithDetails } from "@/hooks/useSpecialistStudents";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
