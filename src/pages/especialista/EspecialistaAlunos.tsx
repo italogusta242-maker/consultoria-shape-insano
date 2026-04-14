@@ -1400,6 +1400,36 @@ const EspecialistaAlunos = () => {
           editingPlan={editingTrainingPlan}
         />
       )}
+
+      {/* Confirmation dialog for inactivate/reactivate */}
+      <Dialog open={!!toggleStatusTarget} onOpenChange={(open) => !open && setToggleStatusTarget(null)}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="font-cinzel">
+              {toggleStatusTarget?.currentStatus === "inativo" ? "Reativar Aluno" : "Inativar Aluno"}
+            </DialogTitle>
+            <DialogDescription>
+              {toggleStatusTarget?.currentStatus === "inativo"
+                ? `Deseja reativar o aluno ${toggleStatusTarget?.name}? Ele voltará a ter acesso ao sistema.`
+                : `Deseja inativar o aluno ${toggleStatusTarget?.name}? Ele perderá acesso ao sistema, notificações e interações.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setToggleStatusTarget(null)}>Cancelar</Button>
+            <Button
+              variant={toggleStatusTarget?.currentStatus === "inativo" ? "default" : "destructive"}
+              onClick={() => {
+                if (!toggleStatusTarget) return;
+                const newStatus = toggleStatusTarget.currentStatus === "inativo" ? "ativo" : "inativo";
+                toggleStatusMutation.mutate({ studentId: toggleStatusTarget.id, newStatus });
+              }}
+              disabled={toggleStatusMutation.isPending}
+            >
+              {toggleStatusMutation.isPending ? "Processando..." : toggleStatusTarget?.currentStatus === "inativo" ? "Reativar" : "Inativar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
