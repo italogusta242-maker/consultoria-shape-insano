@@ -784,9 +784,26 @@ const EspecialistaAnamneseSplit = () => {
           </div>
         </ScrollArea>
       </div>
+      )}
 
       {/* RIGHT: Editor — auto-open */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
+      <div className={`${viewMode === "editor-only" ? "w-full" : "w-1/2"} flex flex-col overflow-hidden`}>
+        {viewMode === "editor-only" && (
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
+              <ArrowLeft size={16} />
+            </Button>
+            <h2 className="font-cinzel text-sm font-bold text-foreground flex-1">{studentName}</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={() => setViewMode("split")}
+            >
+              <Minimize2 size={14} /> Mostrar Anamnese
+            </Button>
+          </div>
+        )}
         {isNutri ? (
           <DietPlanEditor
             open={true}
