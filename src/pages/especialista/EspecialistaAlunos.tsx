@@ -1350,6 +1350,7 @@ const EspecialistaAlunos = () => {
               specialty={mySpecialty ?? null}
               onVolumeEdit={(id, name) => setVolumeEditAluno({ id, name })}
               onRequestAnamnese={(id, name) => requestAnamneseMutation.mutate({ studentId: id, studentName: name })}
+              onToggleStatus={(id, name, currentStatus) => setToggleStatusTarget({ id, name, currentStatus })}
               hasDiet={isNutricionista ? dietPlanSet.has(aluno.id) : undefined}
               dietAdherence={isNutricionista ? dietAdherenceMap?.get(aluno.id) : undefined}
               hasUnreviewedAnamnese={unreviewedSet?.has(aluno.id)}
