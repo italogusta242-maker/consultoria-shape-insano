@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus } from "lucide-react";
+import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus, UserX, UserCheck } from "lucide-react";
 import StudentPerformancePanel from "@/components/especialista/StudentPerformancePanel";
 import StudentPhotosPanel from "@/components/especialista/StudentPhotosPanel";
 import StudentEvolutionChart from "@/components/especialista/StudentEvolutionChart";
@@ -13,14 +13,14 @@ import StudentWorkoutSummary from "@/components/especialista/StudentWorkoutSumma
 import StudentLoadProgression from "@/components/especialista/StudentLoadProgression";
 import StudentMealAdherence from "@/components/especialista/StudentMealAdherence";
 import StudentDailyMealLog from "@/components/especialista/StudentDailyMealLog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import VolumeLimitsEditor from "@/components/especialista/VolumeLimitsEditor";
 import { cn } from "@/lib/utils";
 import { useSpecialistStudents, useMySpecialty, useStudentAnamnese, type StudentWithDetails } from "@/hooks/useSpecialistStudents";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
@@ -518,6 +518,7 @@ const StudentCard = ({
   specialty,
   onVolumeEdit,
   onRequestAnamnese,
+  onToggleStatus,
   hasDiet,
   dietAdherence,
   hasUnreviewedAnamnese,
@@ -539,6 +540,7 @@ const StudentCard = ({
   specialty: string | null;
   onVolumeEdit: (id: string, name: string) => void;
   onRequestAnamnese: (id: string, name: string) => void;
+  onToggleStatus: (id: string, name: string, currentStatus: string) => void;
   hasDiet?: boolean;
   dietAdherence?: number;
   hasUnreviewedAnamnese?: boolean;
@@ -660,6 +662,17 @@ const StudentCard = ({
                   <BarChart3 size={14} className="mr-2" /> Editar Volume
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onToggleStatus(aluno.id, aluno.name, aluno.status)}
+                className={aluno.status === "inativo" ? "text-emerald-400" : "text-destructive"}
+              >
+                {aluno.status === "inativo" ? (
+                  <><UserCheck size={14} className="mr-2" /> Reativar Aluno</>
+                ) : (
+                  <><UserX size={14} className="mr-2" /> Inativar Aluno</>
+                )}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -805,8 +818,26 @@ const EspecialistaAlunos = () => {
 
   const [search, setSearch] = useState("");
   const [volumeEditAluno, setVolumeEditAluno] = useState<{ id: string; name: string } | null>(null);
+  const [toggleStatusTarget, setToggleStatusTarget] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ studentId, newStatus }: { studentId: string; newStatus: string }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: newStatus })
+        .eq("id", studentId);
+      if (error) throw error;
+    },
+    onSuccess: (_, { newStatus }) => {
+      queryClient.invalidateQueries({ queryKey: ["specialist-students"] });
+      toast.success(newStatus === "inativo" ? "Aluno inativado com sucesso" : "Aluno reativado com sucesso");
+      setToggleStatusTarget(null);
+    },
+    onError: () => toast.error("Erro ao alterar status do aluno"),
+  });
 
   const requestAnamneseMutation = useMutation({
     mutationFn: async ({ studentId, studentName }: { studentId: string; studentName: string }) => {
@@ -1165,14 +1196,8 @@ const EspecialistaAlunos = () => {
   };
 
   const handleEditTraining = (plan: any) => {
-    setEditingTrainingPlan({
-      id: plan.id,
-      title: plan.title,
-      user_id: plan.user_id,
-      groups: Array.isArray(plan.groups) ? plan.groups : [],
-      total_sessions: plan.totalSessions ?? plan.total_sessions ?? 50,
-    });
-    setTrainingEditorOpen(true);
+    // Navigate to split view for editing
+    navigate(`/especialista/anamnese/${plan.user_id}`);
   };
 
   const handleCreateTraining = (studentId: string) => {
@@ -1325,6 +1350,7 @@ const EspecialistaAlunos = () => {
               specialty={mySpecialty ?? null}
               onVolumeEdit={(id, name) => setVolumeEditAluno({ id, name })}
               onRequestAnamnese={(id, name) => requestAnamneseMutation.mutate({ studentId: id, studentName: name })}
+              onToggleStatus={(id, name, currentStatus) => setToggleStatusTarget({ id, name, currentStatus })}
               hasDiet={isNutricionista ? dietPlanSet.has(aluno.id) : undefined}
               dietAdherence={isNutricionista ? dietAdherenceMap?.get(aluno.id) : undefined}
               hasUnreviewedAnamnese={unreviewedSet?.has(aluno.id)}
@@ -1374,6 +1400,36 @@ const EspecialistaAlunos = () => {
           editingPlan={editingTrainingPlan}
         />
       )}
+
+      {/* Confirmation dialog for inactivate/reactivate */}
+      <Dialog open={!!toggleStatusTarget} onOpenChange={(open) => !open && setToggleStatusTarget(null)}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="font-cinzel">
+              {toggleStatusTarget?.currentStatus === "inativo" ? "Reativar Aluno" : "Inativar Aluno"}
+            </DialogTitle>
+            <DialogDescription>
+              {toggleStatusTarget?.currentStatus === "inativo"
+                ? `Deseja reativar o aluno ${toggleStatusTarget?.name}? Ele voltará a ter acesso ao sistema.`
+                : `Deseja inativar o aluno ${toggleStatusTarget?.name}? Ele perderá acesso ao sistema, notificações e interações.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setToggleStatusTarget(null)}>Cancelar</Button>
+            <Button
+              variant={toggleStatusTarget?.currentStatus === "inativo" ? "default" : "destructive"}
+              onClick={() => {
+                if (!toggleStatusTarget) return;
+                const newStatus = toggleStatusTarget.currentStatus === "inativo" ? "ativo" : "inativo";
+                toggleStatusMutation.mutate({ studentId: toggleStatusTarget.id, newStatus });
+              }}
+              disabled={toggleStatusMutation.isPending}
+            >
+              {toggleStatusMutation.isPending ? "Processando..." : toggleStatusTarget?.currentStatus === "inativo" ? "Reativar" : "Inativar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

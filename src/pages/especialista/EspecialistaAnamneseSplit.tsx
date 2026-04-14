@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus, Maximize2, Minimize2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
 import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
@@ -67,6 +67,7 @@ const EspecialistaAnamneseSplit = () => {
   const [selectedAnamneseIdx, setSelectedAnamneseIdx] = useState(0);
   const [selectedMonthlyIdx, setSelectedMonthlyIdx] = useState(0);
   const [showMonthlySection, setShowMonthlySection] = useState(true);
+  const [viewMode, setViewMode] = useState<"split" | "editor-only">("split");
 
   const { data: allAnamneses, isLoading: anaLoading } = useQuery({
     queryKey: ["split-all-anamneses", studentId],
@@ -317,6 +318,7 @@ const EspecialistaAnamneseSplit = () => {
   return (
     <div className="flex gap-0 h-[calc(100vh-48px)] -m-6">
       {/* LEFT: Anamnese */}
+      {viewMode === "split" && (
       <div className="w-1/2 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -328,6 +330,14 @@ const EspecialistaAnamneseSplit = () => {
               <p className="text-xs text-muted-foreground">Análise de Anamnese</p>
             </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1.5"
+            onClick={() => setViewMode("editor-only")}
+          >
+            <Maximize2 size={14} /> Expandir Editor
+          </Button>
         </div>
 
         {/* Anamnese Timeline */}
@@ -774,9 +784,26 @@ const EspecialistaAnamneseSplit = () => {
           </div>
         </ScrollArea>
       </div>
+      )}
 
       {/* RIGHT: Editor — auto-open */}
-      <div className="w-1/2 flex flex-col overflow-hidden">
+      <div className={`${viewMode === "editor-only" ? "w-full" : "w-1/2"} flex flex-col overflow-hidden`}>
+        {viewMode === "editor-only" && (
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
+              <ArrowLeft size={16} />
+            </Button>
+            <h2 className="font-cinzel text-sm font-bold text-foreground flex-1">{studentName}</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={() => setViewMode("split")}
+            >
+              <Minimize2 size={14} /> Mostrar Anamnese
+            </Button>
+          </div>
+        )}
         {isNutri ? (
           <DietPlanEditor
             open={true}
