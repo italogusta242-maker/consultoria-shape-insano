@@ -318,6 +318,7 @@ const EspecialistaAnamneseSplit = () => {
   return (
     <div className="flex gap-0 h-[calc(100vh-48px)] -m-6">
       {/* LEFT: Anamnese */}
+      {viewMode === "split" && (
       <div className="w-1/2 border-r border-border flex flex-col">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -329,6 +330,14 @@ const EspecialistaAnamneseSplit = () => {
               <p className="text-xs text-muted-foreground">Análise de Anamnese</p>
             </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1.5"
+            onClick={() => setViewMode("editor-only")}
+          >
+            <Maximize2 size={14} /> Expandir Editor
+          </Button>
         </div>
 
         {/* Anamnese Timeline */}
