@@ -1209,6 +1209,7 @@ const EspecialistaAlunos = () => {
     const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase());
     if (filterParam === "alerta") return matchesSearch && (a.status === "alerta" || a.status === "inativo");
     if (activeFilter === "ativos") return matchesSearch && a.status === "ativo";
+    if (activeFilter === "inativos") return matchesSearch && a.status === "inativo";
     if (activeFilter === "sem-dieta") return matchesSearch && !dietPlanSet.has(a.id);
     if (activeFilter === "sem-treino") return matchesSearch && !trainingPlanSet.has(a.id);
     if (activeFilter === "anamnese") return matchesSearch && (unreviewedSet?.has(a.id) ?? false);
