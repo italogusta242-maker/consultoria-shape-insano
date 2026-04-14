@@ -1289,6 +1289,7 @@ const EspecialistaAlunos = () => {
         {[
           { key: "todos", label: "Todos", count: (students ?? []).length },
           { key: "ativos", label: "Ativos", count: (students ?? []).filter(s => s.status === "ativo").length },
+          { key: "inativos", label: "Inativos", count: (students ?? []).filter(s => s.status === "inativo").length },
           ...(isNutricionista ? [{ key: "sem-dieta", label: "Sem dieta", count: (students ?? []).filter(s => !dietPlanSet.has(s.id)).length }] : []),
           ...(isPersonal ? [{ key: "sem-treino", label: "Sem treino", count: (students ?? []).filter(s => !trainingPlanSet.has(s.id)).length }] : []),
           { key: "anamnese", label: "Anamnese pendente", count: unreviewedCount },
