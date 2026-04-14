@@ -818,8 +818,26 @@ const EspecialistaAlunos = () => {
 
   const [search, setSearch] = useState("");
   const [volumeEditAluno, setVolumeEditAluno] = useState<{ id: string; name: string } | null>(null);
+  const [toggleStatusTarget, setToggleStatusTarget] = useState<{ id: string; name: string; currentStatus: string } | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ studentId, newStatus }: { studentId: string; newStatus: string }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: newStatus })
+        .eq("id", studentId);
+      if (error) throw error;
+    },
+    onSuccess: (_, { newStatus }) => {
+      queryClient.invalidateQueries({ queryKey: ["specialist-students"] });
+      toast.success(newStatus === "inativo" ? "Aluno inativado com sucesso" : "Aluno reativado com sucesso");
+      setToggleStatusTarget(null);
+    },
+    onError: () => toast.error("Erro ao alterar status do aluno"),
+  });
 
   const requestAnamneseMutation = useMutation({
     mutationFn: async ({ studentId, studentName }: { studentId: string; studentName: string }) => {
