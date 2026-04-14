@@ -518,6 +518,7 @@ const StudentCard = ({
   specialty,
   onVolumeEdit,
   onRequestAnamnese,
+  onToggleStatus,
   hasDiet,
   dietAdherence,
   hasUnreviewedAnamnese,
@@ -539,6 +540,7 @@ const StudentCard = ({
   specialty: string | null;
   onVolumeEdit: (id: string, name: string) => void;
   onRequestAnamnese: (id: string, name: string) => void;
+  onToggleStatus: (id: string, name: string, currentStatus: string) => void;
   hasDiet?: boolean;
   dietAdherence?: number;
   hasUnreviewedAnamnese?: boolean;
