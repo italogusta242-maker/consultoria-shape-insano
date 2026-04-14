@@ -662,6 +662,17 @@ const StudentCard = ({
                   <BarChart3 size={14} className="mr-2" /> Editar Volume
                 </DropdownMenuItem>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onToggleStatus(aluno.id, aluno.name, aluno.status)}
+                className={aluno.status === "inativo" ? "text-emerald-400" : "text-destructive"}
+              >
+                {aluno.status === "inativo" ? (
+                  <><UserCheck size={14} className="mr-2" /> Reativar Aluno</>
+                ) : (
+                  <><UserX size={14} className="mr-2" /> Inativar Aluno</>
+                )}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
