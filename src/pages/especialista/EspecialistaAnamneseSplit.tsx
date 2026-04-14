@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus, Maximize2, Minimize2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
 import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
