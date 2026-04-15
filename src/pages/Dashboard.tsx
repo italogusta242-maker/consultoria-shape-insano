@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { SFX } from "@/hooks/useSoundEffects";
 import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Brain, Dumbbell, UtensilsCrossed, MessageCircle, TrendingUp, Calendar, AlertTriangle, ClipboardList, ChevronRight, X, Droplets, Plus, Minus, Flame } from "lucide-react";
+import { Heart, Brain, Dumbbell, UtensilsCrossed, MessageCircle, TrendingUp, Calendar, AlertTriangle, ChevronRight, X, Droplets, Plus, Minus, Flame } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import InsanoLogo from "@/components/InsanoLogo";
 import DailyCheckIn, { type MentalState, mentalStateLabels, type CheckInResult } from "@/components/DailyCheckIn";
