@@ -542,7 +542,8 @@ const StudentResumoContent = ({ aluno, specialty, anamnese, anamneseLoading }: {
       </>
     )}
   </div>
-);
+  );
+};
 
 const StudentSummaryDialog = ({ aluno, specialty, onEditTraining, onEditDiet }: { aluno: StudentWithDetails; specialty: string | null; onEditTraining?: (plan: any) => void; onEditDiet?: (plan: any) => void }) => {
   const sc = statusConfig[aluno.status];
