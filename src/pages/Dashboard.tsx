@@ -572,7 +572,6 @@ const Dashboard = () => {
         {/* Aggressive anamnesis request alert (specialist-triggered) */}
         <AnamneseRequestAlert />
 
-        <MonthlyAnamnesisBanner />
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="relative z-10">
           <StoicQuote compact />
@@ -654,8 +653,6 @@ const Dashboard = () => {
           <FlameCard state={flameState} streak={streak} adherence={adherence} />
           {/* Aggressive anamnesis request alert (specialist-triggered) */}
           <AnamneseRequestAlert />
-          {/* Monthly Anamnesis CTA */}
-          <MonthlyAnamnesisBanner />
         </div>
 
         {/* CENTER COLUMN */}
