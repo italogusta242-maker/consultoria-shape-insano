@@ -28,22 +28,22 @@ export function useUnreadConversations() {
 
     const readMessageIds = new Set((reads || []).map((r) => r.message_id));
 
-    // For each conversation, count messages NOT sent by me and NOT read
+    // Single batch query: get messages from ALL conversations at once
+    const { data: allMsgs } = await supabase
+      .from("chat_messages")
+      .select("id, sender_id, conversation_id")
+      .in("conversation_id", convIds)
+      .neq("sender_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1000);
+
+    // Calculate counts per conversation on the client
     const counts: Record<string, number> = {};
-
-    // Batch: get recent messages for all conversations (last 100 per conv is enough)
-    for (const convId of convIds) {
-      const { data: msgs } = await supabase
-        .from("chat_messages")
-        .select("id, sender_id")
-        .eq("conversation_id", convId)
-        .neq("sender_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (msgs) {
-        const unread = msgs.filter((m) => !readMessageIds.has(m.id)).length;
-        if (unread > 0) counts[convId] = unread;
+    if (allMsgs) {
+      for (const msg of allMsgs) {
+        if (!readMessageIds.has(msg.id)) {
+          counts[msg.conversation_id] = (counts[msg.conversation_id] || 0) + 1;
+        }
       }
     }
 
