@@ -67,13 +67,13 @@ export default function StudentPhotosPanel({ studentId }: Props) {
 
   const assessmentHasPhotos = assessment && PHOTO_FIELDS.some((f) => !!(assessment as any)[f.key]);
 
-  // Fallback: fetch photos from anamnese storage bucket (latest)
+  // Fallback: fetch photos from anamnese storage bucket OR dados_extras.fotos (latest)
   const { data: anamnesePhotos, isLoading: loadingAnamnese } = useQuery({
     queryKey: ["student-anamnese-photos", studentId],
     queryFn: async () => {
       const { data: anamnese, error } = await supabase
         .from("anamnese")
-        .select("id, created_at")
+        .select("id, created_at, dados_extras")
         .eq("user_id", studentId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -81,29 +81,48 @@ export default function StudentPhotosPanel({ studentId }: Props) {
 
       if (error || !anamnese) return null;
 
+      // 1. Try storage bucket first
       const folderPath = `${studentId}/${anamnese.id}`;
       const { data: files } = await supabase.storage
         .from("anamnese-photos")
         .list(folderPath);
 
-      if (!files || files.length === 0) return null;
-
-      const photos: { label: string; url: string }[] = [];
-      for (const file of files) {
-        const key = file.name.replace(/\.[^.]+$/, "");
-        const mappedLabel = STORAGE_LABEL_MAP[key];
-        if (mappedLabel || key) {
-          const { data: urlData } = supabase.storage
-            .from("anamnese-photos")
-            .getPublicUrl(`${folderPath}/${file.name}`);
-          photos.push({
-            label: mappedLabel || key.replace(/_/g, " "),
-            url: urlData.publicUrl,
-          });
+      if (files && files.length > 0) {
+        const photos: { label: string; url: string }[] = [];
+        for (const file of files) {
+          const key = file.name.replace(/\.[^.]+$/, "");
+          const mappedLabel = STORAGE_LABEL_MAP[key];
+          if (mappedLabel || key) {
+            const { data: urlData } = supabase.storage
+              .from("anamnese-photos")
+              .getPublicUrl(`${folderPath}/${file.name}`);
+            photos.push({
+              label: mappedLabel || key.replace(/_/g, " "),
+              url: urlData.publicUrl,
+            });
+          }
+        }
+        if (photos.length > 0) {
+          return { photos, date: anamnese.created_at, source: "anamnese" as const };
         }
       }
 
-      return { photos, date: anamnese.created_at, source: "anamnese" as const };
+      // 2. Fallback: dados_extras.fotos (Google Drive URLs from CSV import)
+      const extras = anamnese.dados_extras as Record<string, any> | null;
+      if (extras?.fotos && typeof extras.fotos === "object") {
+        const fotosObj = extras.fotos as Record<string, string>;
+        const photos = Object.entries(fotosObj)
+          .filter(([, url]) => !!url)
+          .map(([key, url]) => ({
+            label: STORAGE_LABEL_MAP[key] || key.replace(/_/g, " "),
+            url,
+          }));
+        if (photos.length > 0) {
+          return { photos, date: anamnese.created_at, source: "anamnese" as const };
+        }
+      }
+
+      return null;
     },
     enabled: !!studentId && !assessmentHasPhotos && !loadingAssessment,
   });
