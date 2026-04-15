@@ -5,18 +5,27 @@ const MAX_IMAGE_DIM = 1200;
 const JPEG_QUALITY = 0.8;
 
 function compressImage(file: File): Promise<File> {
-  return new Promise((resolve, reject) => {
+  // Always convert through canvas to ensure JPEG output (handles HEIC, WEBP, etc.)
+  const needsConversion = !file.type || !file.type.startsWith("image/jpeg");
+  
+  return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       let { width, height } = img;
-      if (width <= MAX_IMAGE_DIM && height <= MAX_IMAGE_DIM) {
+      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
+      
+      if (!needsResize && !needsConversion) {
         URL.revokeObjectURL(img.src);
         resolve(file);
         return;
       }
-      const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
-      width = Math.round(width * ratio);
-      height = Math.round(height * ratio);
+      
+      if (needsResize) {
+        const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
