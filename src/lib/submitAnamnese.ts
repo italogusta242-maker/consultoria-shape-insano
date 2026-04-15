@@ -188,6 +188,28 @@ export async function submitAnamnese(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
+    // 7. Notify linked specialists about completed anamnese
+    try {
+      const { data: specialists } = await supabase
+        .from("student_specialists")
+        .select("specialist_id")
+        .eq("student_id", user.id);
+
+      if (specialists && specialists.length > 0) {
+        const studentName = userData.nome || "Aluno";
+        const notifications = specialists.map((s) => ({
+          user_id: s.specialist_id,
+          title: "📋 Nova anamnese preenchida",
+          body: `${studentName} finalizou o preenchimento da anamnese.`,
+          type: "anamnese_submitted",
+          metadata: { student_id: user.id },
+        }));
+        await supabase.from("notifications").insert(notifications as any);
+      }
+    } catch (notifErr) {
+      console.error("Erro ao notificar especialistas:", notifErr);
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error("Erro ao salvar anamnese:", error);

@@ -418,16 +418,35 @@ const EspecialistaDashboard = () => {
                   {groupedAlerts.length}
                 </span>
                 {alertCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
-                    onClick={handleRestoreAll}
-                    disabled={restoreAll.isPending}
-                  >
-                    <RotateCcw size={10} />
-                    Restaurar
-                  </Button>
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                      onClick={() => {
+                        // Dismiss ALL visible alerts
+                        const allAlerts = proactiveAlerts ?? [];
+                        if (allAlerts.length === 0) return;
+                        dismissAllForStudent.mutate({ alerts: allAlerts }, {
+                          onSuccess: () => toast.success(`${allAlerts.length} alertas dispensados`),
+                        });
+                      }}
+                      disabled={dismissAllForStudent.isPending}
+                    >
+                      <XCircle size={10} />
+                      Limpar todos
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                      onClick={handleRestoreAll}
+                      disabled={restoreAll.isPending}
+                    >
+                      <RotateCcw size={10} />
+                      Restaurar
+                    </Button>
+                  </div>
                 )}
               </div>
               {/* Filter chips */}
