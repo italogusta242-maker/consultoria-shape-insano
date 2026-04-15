@@ -151,10 +151,10 @@ export default function StudentPhotosPanel({ studentId }: Props) {
         }
       }
 
-      // 2. All anamnese with photos in storage
+      // 2. All anamnese with photos in storage or dados_extras
       const { data: anamneses } = await supabase
         .from("anamnese")
-        .select("id, created_at")
+        .select("id, created_at, dados_extras")
         .eq("user_id", studentId)
         .order("created_at", { ascending: false });
 
@@ -165,24 +165,40 @@ export default function StudentPhotosPanel({ studentId }: Props) {
             .from("anamnese-photos")
             .list(folderPath);
 
-      if (files && files.length > 0) {
-        const photos: { label: string; url: string }[] = [];
-        for (const file of files) {
-          const key = file.name.replace(/\.[^.]+$/, "");
-          const mappedLabel = STORAGE_LABEL_MAP[key];
-          if (mappedLabel || key) {
-            const { data: urlData } = supabase.storage
-              .from("anamnese-photos")
-              .getPublicUrl(`${folderPath}/${file.name}`);
-            photos.push({
-              label: mappedLabel || key.replace(/_/g, " "),
-              url: urlData.publicUrl,
-            });
+          let photos: { label: string; url: string }[] = [];
+
+          if (files && files.length > 0) {
+            for (const file of files) {
+              const key = file.name.replace(/\.[^.]+$/, "");
+              const mappedLabel = STORAGE_LABEL_MAP[key];
+              if (mappedLabel || key) {
+                const { data: urlData } = supabase.storage
+                  .from("anamnese-photos")
+                  .getPublicUrl(`${folderPath}/${file.name}`);
+                photos.push({
+                  label: mappedLabel || key.replace(/_/g, " "),
+                  url: urlData.publicUrl,
+                });
+              }
+            }
           }
+
+          // Fallback: dados_extras.fotos
+          if (photos.length === 0) {
+            const extras = a.dados_extras as Record<string, any> | null;
+            if (extras?.fotos && typeof extras.fotos === "object") {
+              const fotosObj = extras.fotos as Record<string, string>;
+              photos = Object.entries(fotosObj)
+                .filter(([, url]) => !!url)
+                .map(([key, url]) => ({
+                  label: STORAGE_LABEL_MAP[key] || key.replace(/_/g, " "),
+                  url,
+                }));
             }
-            if (photos.length > 0) {
-              entries.push({ date: a.created_at, source: "anamnese", photos });
-            }
+          }
+
+          if (photos.length > 0) {
+            entries.push({ date: a.created_at, source: "anamnese", photos });
           }
         }
       }
