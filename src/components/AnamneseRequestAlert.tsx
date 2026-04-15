@@ -1,10 +1,8 @@
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, ClipboardList, X } from "lucide-react";
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { AlertTriangle, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useProfile } from "@/hooks/useProfile";
 import {
   Dialog,
   DialogContent,
@@ -15,44 +13,30 @@ import {
 import { Button } from "@/components/ui/button";
 
 /**
- * Aggressive UI alert for pending anamnesis requests.
- * - Always shows a sticky banner when an unread anamnese_request notification exists.
- * - Opens a blocking modal if the notification is >2 days old.
+ * Unified anamnesis alert.
+ * Shows when next_anamnese_due <= today (source of truth from profile).
+ * - Sticky banner always visible when due.
+ * - Blocking modal if overdue by 2+ days.
  */
 const AnamneseRequestAlert = () => {
-  const { user } = useAuth();
+  const { data: profile } = useProfile();
   const navigate = useNavigate();
   const [modalDismissed, setModalDismissed] = useState(false);
 
-  const { data: pendingNotification } = useQuery({
-    queryKey: ["anamnese-request-alert", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("id, created_at")
-        .eq("user_id", user.id)
-        .eq("type", "anamnese_request")
-        .eq("read", false)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-    refetchInterval: 60_000,
-  });
+  if (!profile?.next_anamnese_due) return null;
 
-  if (!pendingNotification) return null;
+  const dueDate = new Date(profile.next_anamnese_due + "T00:00:00");
+  const now = new Date();
+  const isDue = dueDate <= now;
+
+  if (!isDue) return null;
 
   const daysSinceRequest = Math.floor(
-    (Date.now() - new Date(pendingNotification.created_at).getTime()) / (1000 * 60 * 60 * 24)
+    (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
   );
   const showModal = daysSinceRequest >= 2 && !modalDismissed;
 
   const navigateToForm = () => {
-    // Don't mark as read here — only submitMonthlyAssessment marks it read on success
     navigate("/reavaliacao");
   };
 
