@@ -418,16 +418,35 @@ const EspecialistaDashboard = () => {
                   {groupedAlerts.length}
                 </span>
                 {alertCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
-                    onClick={handleRestoreAll}
-                    disabled={restoreAll.isPending}
-                  >
-                    <RotateCcw size={10} />
-                    Restaurar
-                  </Button>
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                      onClick={() => {
+                        // Dismiss ALL visible alerts
+                        const allAlerts = proactiveAlerts ?? [];
+                        if (allAlerts.length === 0) return;
+                        dismissAllForStudent.mutate({ alerts: allAlerts }, {
+                          onSuccess: () => toast.success(`${allAlerts.length} alertas dispensados`),
+                        });
+                      }}
+                      disabled={dismissAllForStudent.isPending}
+                    >
+                      <XCircle size={10} />
+                      Limpar todos
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                      onClick={handleRestoreAll}
+                      disabled={restoreAll.isPending}
+                    >
+                      <RotateCcw size={10} />
+                      Restaurar
+                    </Button>
+                  </div>
                 )}
               </div>
               {/* Filter chips */}
@@ -652,21 +671,38 @@ const EspecialistaDashboard = () => {
                 (unresponsiveStudents ?? []).map((s) => (
                   <div
                     key={s.studentId}
-                    onClick={() => { setUnresponsiveOpen(false); navigate(`/especialista/chat`); }}
                     className="flex items-center justify-between p-3 rounded-lg border border-destructive/25 bg-destructive/5 cursor-pointer hover:border-destructive/40 transition-all"
                   >
-                    <div className="flex items-center gap-3">
+                    <div
+                      className="flex items-center gap-3 flex-1 min-w-0"
+                      onClick={() => { setUnresponsiveOpen(false); navigate(`/especialista/chat`); }}
+                    >
                       <div className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{s.studentName}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{s.studentName}</p>
                         <p className="text-xs text-muted-foreground">
                           Última mensagem há {s.daysSinceLastMessage} dias
                         </p>
                       </div>
                     </div>
-                    <Badge variant="destructive" className="text-[10px] shrink-0">
-                      {s.daysSinceLastMessage}d
-                    </Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="destructive" className="text-[10px]">
+                        {s.daysSinceLastMessage}d
+                      </Badge>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dismissOne.mutate(
+                            { alertKey: `unresponsive-${s.studentId}`, studentId: s.studentId },
+                            { onSuccess: () => toast.success("Oculto") }
+                          );
+                        }}
+                        className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Ocultar"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
