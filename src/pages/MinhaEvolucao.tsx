@@ -2,87 +2,23 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, ImageOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { getDisplayableImageUrl } from "@/lib/imageUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-
-const photoLabels: Record<string, string> = {
-  frente: "Frente",
-  costas: "Costas",
-  direito: "Lado Direito",
-  esquerdo: "Lado Esquerdo",
-  perfil: "Perfil",
-  pose_frente: "Pose Frente",
-  pose_lado: "Pose Lado",
-  pose_costas: "Pose Costas",
-};
-
-const photoKeys = ["frente", "costas", "direito", "esquerdo", "perfil", "pose_frente", "pose_lado", "pose_costas"];
+import { getDisplayableImageUrl } from "@/lib/imageUtils";
+import SafeImage from "@/components/ui/SafeImage";
+import { buildPhotoTimeline, type TimelineEntry } from "@/lib/photoTimeline";
 
 const MinhaEvolucao = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const { data: anamneseComFotos, isLoading } = useQuery({
-    queryKey: ["anamneses-evolucao", user?.id],
-    queryFn: async () => {
-      if (!user) throw new Error("Not authenticated");
-      
-      // Get all anamneses
-      const { data: anamneses, error } = await supabase
-        .from("anamnese")
-        .select("id, created_at, dados_extras")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      if (!anamneses?.length) return [];
-
-      // For each anamnese, check for photos in dados_extras OR in storage
-      const results = await Promise.all(
-        anamneses.map(async (a) => {
-          const extras = a.dados_extras as Record<string, any> | null;
-          
-          // First check dados_extras.fotos
-          if (extras?.fotos && Object.keys(extras.fotos).length > 0) {
-            return { ...a, fotos: extras.fotos as Record<string, string> };
-          }
-
-          // Fallback: check storage bucket for photos
-          const folderPath = `${user.id}/${a.id}`;
-          const { data: files } = await supabase.storage
-            .from("anamnese-photos")
-            .list(folderPath);
-
-          const IMAGE_EXT = /\.(jpg|jpeg|png|webp|heic|heif|gif|tiff?)$/i;
-          const validFiles = (files || []).filter(f => IMAGE_EXT.test(f.name));
-
-          if (validFiles.length > 0) {
-            const fotos: Record<string, string> = {};
-            for (const file of validFiles) {
-              const key = file.name.replace(/\.[^.]+$/, ""); // remove extension
-              if (photoKeys.includes(key)) {
-                const { data: urlData } = supabase.storage
-                  .from("anamnese-photos")
-                  .getPublicUrl(`${folderPath}/${file.name}`);
-                fotos[key] = urlData.publicUrl;
-              }
-            }
-            if (Object.keys(fotos).length > 0) {
-              return { ...a, fotos };
-            }
-          }
-
-          return null;
-        })
-      );
-
-      return results.filter(Boolean) as Array<{ id: string; created_at: string; fotos: Record<string, string> }>;
-    },
+  const { data: timeline, isLoading } = useQuery({
+    queryKey: ["evolucao-timeline", user?.id],
+    queryFn: () => buildPhotoTimeline(user!.id),
     enabled: !!user,
   });
 
@@ -102,7 +38,7 @@ const MinhaEvolucao = () => {
             <div key={i} className="h-48 bg-card rounded-xl border border-border animate-pulse" />
           ))}
         </div>
-      ) : !anamneseComFotos || anamneseComFotos.length === 0 ? (
+      ) : !timeline || timeline.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -113,18 +49,17 @@ const MinhaEvolucao = () => {
             Nenhuma foto de evolução ainda.
           </p>
           <p className="text-xs text-muted-foreground/60">
-            Suas fotos das anamneses mensais aparecerão aqui para acompanhar seu progresso.
+            Suas fotos das anamneses e reavaliações mensais aparecerão aqui para acompanhar seu progresso.
           </p>
         </motion.div>
       ) : (
         <div className="space-y-6">
-          {anamneseComFotos.map((anamnese, idx) => {
-            const fotos = anamnese.fotos || {};
-            const date = new Date(anamnese.created_at);
+          {timeline.map((entry, idx) => {
+            const date = new Date(entry.date);
 
             return (
               <motion.div
-                key={anamnese.id}
+                key={`${entry.source}-${entry.date}-${idx}`}
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.1 }}
@@ -136,6 +71,13 @@ const MinhaEvolucao = () => {
                   <span className="font-cinzel font-bold text-sm text-foreground">
                     {format(date, "MMMM yyyy", { locale: ptBR }).replace(/^\w/, (c) => c.toUpperCase())}
                   </span>
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
+                    entry.source === "reavaliação"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-accent/20 text-accent-foreground"
+                  }`}>
+                    {entry.source === "reavaliação" ? "Reavaliação" : "Anamnese"}
+                  </span>
                   {idx === 0 && (
                     <span className="ml-auto text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
                       Mais recente
@@ -145,21 +87,20 @@ const MinhaEvolucao = () => {
 
                 {/* Photo grid */}
                 <div className="p-3 grid grid-cols-3 gap-2">
-                  {Object.entries(fotos).map(([key, url]) => (
+                  {entry.photos.map((photo) => (
                     <button
-                      key={key}
-                      onClick={() => setSelectedImage(url)}
+                      key={photo.label}
+                      onClick={() => setSelectedImage(photo.url)}
                       className="relative aspect-[3/4] rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors group"
                     >
-                      <img
-                        src={getDisplayableImageUrl(url)}
-                        alt={photoLabels[key] || key}
+                      <SafeImage
+                        src={photo.url}
+                        alt={photo.label}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
                         <span className="text-[9px] font-semibold text-white uppercase tracking-wider">
-                          {photoLabels[key] || key}
+                          {photo.label}
                         </span>
                       </div>
                     </button>
