@@ -1,43 +1,50 @@
 
 
-## Rollback na reavaliação quando fotos falham
+## Correção em lote: `next_anamnese_due` desatualizado para 5 alunos
 
 ### Problema
-O registro é inserido no banco e o `next_anamnese_due` é atualizado **antes** dos uploads. Se todos falharem, fica um registro fantasma sem fotos e o aluno não consegue refazer.
+5 alunos completaram a reavaliação mas o `next_anamnese_due` não foi atualizado (ficou em 21/03). O cron continua disparando notificações de anamnese pendente para todos eles.
 
-### Correção
+### Correção (via insert tool — dados)
 
-**1. Reordenar o fluxo em `src/lib/submitMonthlyAssessment.ts`**
-- Mover a marcação de notificações como lidas e o update do `next_anamnese_due` para **depois** da verificação de fotos
-- Após `Promise.all(uploads)`, verificar `Object.keys(photoUpdates).length`:
-  - Se **0 fotos** subiram: deletar o registro recém-criado e lançar erro claro
-  - Se **algumas** subiram (mas não todas): prosseguir normalmente (upload parcial é aceitável)
+**1. Atualizar `next_anamnese_due` para cada aluno (30 dias após sua reavaliação):**
 
-```typescript
-// Após Promise.all(uploads)
-const totalExpected = photoFields.filter(({ key }) => formData[key] instanceof File).length;
-if (totalExpected > 0 && Object.keys(photoUpdates).length === 0) {
-  await supabase.from("monthly_assessments").delete().eq("id", assessmentId);
-  throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
-}
+| Aluno | Reavaliação em | Novo `next_anamnese_due` |
+|-------|---------------|------------------------|
+| Danilo Victor | 05/04 | 2026-05-05 |
+| Jean Willian | 25/03 | 2026-04-24 |
+| Nicolas Macedo | 27/03 | 2026-04-26 |
+| Paulo Ricardo | 27/03 | 2026-04-26 |
+| Paulo Victor | 23/03 | 2026-04-22 |
 
-// Só agora marcar notificações como lidas e atualizar next_anamnese_due
-```
-
-**2. Migration SQL: permitir DELETE do próprio registro**
-A tabela `monthly_assessments` não tem policy de DELETE. Preciso adicionar uma para que o rollback funcione:
+**2. Marcar notificações `anamnese_request` como lidas** para todos os 5 alunos.
 
 ```sql
-CREATE POLICY "Users delete own monthly assessments"
-ON public.monthly_assessments FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
+-- Danilo
+UPDATE profiles SET next_anamnese_due = '2026-05-05' WHERE id = 'a85b237e-786b-4dbe-8630-216c1e90ee18';
+-- Jean
+UPDATE profiles SET next_anamnese_due = '2026-04-24' WHERE id = '59cd7d50-780c-4067-b1dd-558caa4e1828';
+-- Nicolas
+UPDATE profiles SET next_anamnese_due = '2026-04-26' WHERE id = 'd5d24b13-7c0c-4e2a-9ca7-acf903cbe62c';
+-- Paulo Ricardo
+UPDATE profiles SET next_anamnese_due = '2026-04-26' WHERE id = 'c7124f4c-42d6-4fbd-b5db-372a361c8caf';
+-- Paulo Victor
+UPDATE profiles SET next_anamnese_due = '2026-04-22' WHERE id = 'f7ade0bd-069f-4f95-8ded-660cbdc2445e';
+
+-- Limpar notificações pendentes
+UPDATE notifications SET read = true
+WHERE user_id IN (
+  'a85b237e-786b-4dbe-8630-216c1e90ee18',
+  '59cd7d50-780c-4067-b1dd-558caa4e1828',
+  'd5d24b13-7c0c-4e2a-9ca7-acf903cbe62c',
+  'c7124f4c-42d6-4fbd-b5db-372a361c8caf',
+  'f7ade0bd-069f-4f95-8ded-660cbdc2445e'
+) AND type = 'anamnese_request' AND read = false;
 ```
 
-### Arquivos
+### Nota sobre Nicolas
+O Nicolas tem uma reavaliação sem fotos (mesmo bug do Diogo). Com o rollback já implementado, isso não vai mais acontecer.
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/lib/submitMonthlyAssessment.ts` | Rollback + reordenar fluxo |
-| Migration SQL | Policy de DELETE em `monthly_assessments` |
+### Arquivos
+Nenhum arquivo de código alterado. Apenas correção de dados via insert tool.
 
