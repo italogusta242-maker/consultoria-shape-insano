@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, User, Users, MessageCircle, Reply, X, Search, ChevronLeft } from "lucide-react";
+import { Send, User, Users, MessageCircle, Reply, X, Search, ChevronLeft, MailOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, isToday, isYesterday, differenceInCalendarDays, startOfDay } from "date-fns";
@@ -11,12 +11,19 @@ import { useProfile } from "@/hooks/useProfile";
 import { usePresence } from "@/hooks/usePresence";
 import { useReadReceipts } from "@/hooks/useReadReceipts";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
+import { useUnreadConversations } from "@/hooks/useUnreadConversations";
 import SwipeMessage from "@/components/chat/SwipeMessage";
 import SkeletonMessages from "@/components/chat/SkeletonMessages";
 import SystemMessage from "@/components/chat/SystemMessage";
 import ReadReceiptTicks from "@/components/chat/ReadReceiptTicks";
 import MediaUploadButton from "@/components/chat/MediaUploadButton";
 import MediaMessage from "@/components/chat/MediaMessage";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 
 const formatDateSeparator = (date: Date): string => {
