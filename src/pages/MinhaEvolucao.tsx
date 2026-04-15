@@ -58,9 +58,12 @@ const MinhaEvolucao = () => {
             .from("anamnese-photos")
             .list(folderPath);
 
-          if (files && files.length > 0) {
+          const IMAGE_EXT = /\.(jpg|jpeg|png|webp|heic|heif|gif|tiff?)$/i;
+          const validFiles = (files || []).filter(f => IMAGE_EXT.test(f.name));
+
+          if (validFiles.length > 0) {
             const fotos: Record<string, string> = {};
-            for (const file of files) {
+            for (const file of validFiles) {
               const key = file.name.replace(/\.[^.]+$/, ""); // remove extension
               if (photoKeys.includes(key)) {
                 const { data: urlData } = supabase.storage

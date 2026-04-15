@@ -87,9 +87,12 @@ export default function StudentPhotosPanel({ studentId }: Props) {
         .from("anamnese-photos")
         .list(folderPath);
 
-      if (files && files.length > 0) {
+      const IMAGE_EXT = /\.(jpg|jpeg|png|webp|heic|heif|gif|tiff?)$/i;
+      const validFiles = (files || []).filter(f => IMAGE_EXT.test(f.name));
+
+      if (validFiles.length > 0) {
         const photos: { label: string; url: string }[] = [];
-        for (const file of files) {
+        for (const file of validFiles) {
           const key = file.name.replace(/\.[^.]+$/, "");
           const mappedLabel = STORAGE_LABEL_MAP[key];
           if (mappedLabel || key) {
@@ -167,8 +170,11 @@ export default function StudentPhotosPanel({ studentId }: Props) {
 
           let photos: { label: string; url: string }[] = [];
 
-          if (files && files.length > 0) {
-            for (const file of files) {
+          const IMAGE_EXT_TL = /\.(jpg|jpeg|png|webp|heic|heif|gif|tiff?)$/i;
+          const validFilesTL = (files || []).filter(f => IMAGE_EXT_TL.test(f.name));
+
+          if (validFilesTL.length > 0) {
+            for (const file of validFilesTL) {
               const key = file.name.replace(/\.[^.]+$/, "");
               const mappedLabel = STORAGE_LABEL_MAP[key];
               if (mappedLabel || key) {
