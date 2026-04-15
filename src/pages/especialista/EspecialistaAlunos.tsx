@@ -109,7 +109,7 @@ const StudentTrainingTab = ({ studentId, studentName, canEdit, onEditPlan }: { s
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_plans")
-        .select("id, title, active, updated_at, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo")
+        .select("id, title, active, updated_at, valid_until, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo")
         .eq("user_id", studentId)
         .order("updated_at", { ascending: false })
         .limit(1);
@@ -131,6 +131,20 @@ const StudentTrainingTab = ({ studentId, studentName, canEdit, onEditPlan }: { s
 
   const groups = Array.isArray(data.groups) ? data.groups : [];
 
+  const handleExportPDF = async () => {
+    const { exportTrainingPDF } = await import("@/lib/exportTrainingPDF");
+    exportTrainingPDF({
+      studentName,
+      planTitle: data.title,
+      groups: groups as any,
+      updatedAt: data.updated_at,
+      validUntil: data.valid_until ?? undefined,
+      objetivoMesociclo: data.objetivo_mesociclo ?? undefined,
+      pontosMelhoria: data.pontos_melhoria ?? undefined,
+    });
+    toast.success("PDF gerado!");
+  };
+
   return (
     <div className="space-y-4">
       {/* Plan header */}
@@ -150,6 +164,14 @@ const StudentTrainingTab = ({ studentId, studentName, canEdit, onEditPlan }: { s
           <Badge className={cn("text-[10px]", data.active ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-muted text-muted-foreground")}>
             {data.active ? "Ativo" : "Inativo"}
           </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs gap-1 border-[hsl(var(--glass-border))]"
+            onClick={handleExportPDF}
+          >
+            <FileText size={12} /> PDF
+          </Button>
           {canEdit && (
             <Button
               variant="outline"
