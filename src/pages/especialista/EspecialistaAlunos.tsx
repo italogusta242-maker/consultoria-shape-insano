@@ -85,10 +85,10 @@ const Section = ({ icon: Icon, title, children }: { icon: any; title: string; ch
   </div>
 );
 
-const Field = ({ label, value }: { label: string; value: string }) => (
-  <div>
+const Field = ({ label, value, fullWidth }: { label: string; value: string; fullWidth?: boolean }) => (
+  <div className={fullWidth ? "col-span-2" : ""}>
     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
-    <p className="text-foreground font-medium">{value}</p>
+    <p className="text-foreground font-medium break-words">{value}</p>
   </div>
 );
 
@@ -572,7 +572,7 @@ const StudentSummaryDialog = ({ aluno, specialty, onEditTraining, onEditDiet }: 
           Ver Resumo
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card/95 backdrop-blur-xl border-border">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[85vh] overflow-y-auto bg-card/95 backdrop-blur-xl border-border">
         <DialogHeader>
           <DialogTitle className="font-cinzel text-lg gold-text-gradient">{aluno.name}</DialogTitle>
           <div className="flex gap-2 mt-1">
