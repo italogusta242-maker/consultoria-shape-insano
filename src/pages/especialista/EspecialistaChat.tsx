@@ -448,7 +448,9 @@ const EspecialistaChat = () => {
                   <p className="text-sm text-muted-foreground">Nenhum resultado</p>
                 </div>
               ) : (
-                filteredItems.map((item) => (
+                filteredItems.map((item) => {
+                  const unreadCount = getConversationUnread(item.id);
+                  return (
                   <button
                     key={item.id}
                     onClick={() => handleSelectMobile(item)}
@@ -472,16 +474,24 @@ const EspecialistaChat = () => {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
-                          <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{formatConvTime(item.lastTime)}</span>
+                          <p className={`text-sm truncate ${unreadCount > 0 ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{item.name}</p>
+                          <span className={`text-[11px] shrink-0 ml-2 ${unreadCount > 0 ? "text-accent font-semibold" : "text-muted-foreground"}`}>{formatConvTime(item.lastTime)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {item.type === "new" ? "Clique para iniciar conversa..." : item.lastMessage || "Inicie a conversa..."}
-                        </p>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <p className={`text-xs truncate pr-2 ${unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                            {item.type === "new" ? "Clique para iniciar conversa..." : item.lastMessage || "Inicie a conversa..."}
+                          </p>
+                          {unreadCount > 0 && (
+                            <span className="min-w-[20px] h-5 rounded-full bg-accent text-accent-foreground text-[10px] font-bold flex items-center justify-center shrink-0 px-1.5">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </button>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
