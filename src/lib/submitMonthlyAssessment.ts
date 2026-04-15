@@ -152,22 +152,6 @@ export async function submitMonthlyAssessment(
     const assessmentId = (assessment as any).id as string;
     console.log("[submitMonthlyAssessment] Assessment saved successfully:", assessmentId);
 
-    // Mark all anamnese_request notifications as read so alert disappears
-    await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", user.id)
-      .eq("type", "anamnese_request")
-      .eq("read", false);
-
-    // Update next_anamnese_due to +30 days
-    const nextDue = new Date();
-    nextDue.setDate(nextDue.getDate() + 30);
-    await supabase
-      .from("profiles")
-      .update({ next_anamnese_due: nextDue.toISOString().split("T")[0] })
-      .eq("id", user.id);
-
     // 2. Upload photos (compressed with retry)
     const photoFields: { key: keyof MonthlyFormData; label: string; column: string }[] = [
       { key: "foto_frente", label: "frente", column: "foto_frente" },
@@ -190,6 +174,14 @@ export async function submitMonthlyAssessment(
 
     await Promise.all(uploads);
 
+    // Rollback if ALL photo uploads failed
+    const totalExpected = photoFields.filter(({ key }) => formData[key] instanceof File).length;
+    if (totalExpected > 0 && Object.keys(photoUpdates).length === 0) {
+      console.error("[submitMonthlyAssessment] ALL uploads failed, rolling back assessment:", assessmentId);
+      await supabase.from("monthly_assessments").delete().eq("id", assessmentId);
+      throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
+    }
+
     // 3. Update with photo URLs
     if (Object.keys(photoUpdates).length > 0) {
       console.log("[submitMonthlyAssessment] Updating photos:", Object.keys(photoUpdates));
@@ -202,6 +194,21 @@ export async function submitMonthlyAssessment(
         console.error("[submitMonthlyAssessment] Photo update failed:", photoError);
       }
     }
+
+    // 4. Mark notifications as read and update next_anamnese_due (only AFTER successful upload)
+    await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", user.id)
+      .eq("type", "anamnese_request")
+      .eq("read", false);
+
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + 30);
+    await supabase
+      .from("profiles")
+      .update({ next_anamnese_due: nextDue.toISOString().split("T")[0] })
+      .eq("id", user.id);
 
     // 4. Update profile weight/height
     await supabase
