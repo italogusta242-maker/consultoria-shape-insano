@@ -81,14 +81,14 @@ const Section = ({ icon: Icon, title, children }: { icon: any; title: string; ch
       </div>
       <h4 className="font-cinzel text-sm font-bold text-foreground">{title}</h4>
     </div>
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{children}</div>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">{children}</div>
   </div>
 );
 
-const Field = ({ label, value }: { label: string; value: string }) => (
-  <div>
+const Field = ({ label, value, fullWidth }: { label: string; value: string; fullWidth?: boolean }) => (
+  <div className={fullWidth ? "col-span-2" : ""}>
     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
-    <p className="text-foreground font-medium">{value}</p>
+    <p className="text-foreground font-medium break-words">{value}</p>
   </div>
 );
 
@@ -431,7 +431,7 @@ const StudentResumoContent = ({ aluno, specialty, anamnese, anamneseLoading }: {
         <Section icon={Brain} title="Perfil Psicológico (Anamnese)">
           <Field label="Estresse" value={anamnese.nivel_estresse ?? "—"} />
           <Field label="Sono" value={anamnese.sono_horas ?? "—"} />
-          <Field label="Motivação" value={anamnese.motivacao ?? "—"} />
+          <Field label="Motivação" value={anamnese.motivacao ?? "—"} fullWidth />
           <Field label="Objetivo" value={anamnese.objetivo ?? "—"} />
         </Section>
         <div className="border-t border-border/50" />
@@ -572,7 +572,7 @@ const StudentSummaryDialog = ({ aluno, specialty, onEditTraining, onEditDiet }: 
           Ver Resumo
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card/95 backdrop-blur-xl border-border">
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[85vh] overflow-y-auto bg-card/95 backdrop-blur-xl border-border">
         <DialogHeader>
           <DialogTitle className="font-cinzel text-lg gold-text-gradient">{aluno.name}</DialogTitle>
           <div className="flex gap-2 mt-1">
