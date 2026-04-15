@@ -1,18 +1,69 @@
 import type { UserData } from "@/pages/onboarding/constants";
 import { supabase } from "@/integrations/supabase/client";
 
+const MAX_IMAGE_DIM = 1200;
+const JPEG_QUALITY = 0.8;
+
+function compressImage(file: File): Promise<File> {
+  const needsConversion = !file.type || !file.type.startsWith("image/jpeg");
+  
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
+      
+      if (!needsResize && !needsConversion) {
+        URL.revokeObjectURL(img.src);
+        resolve(file);
+        return;
+      }
+      
+      if (needsResize) {
+        const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(img.src);
+          if (blob) {
+            resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+          } else {
+            resolve(file);
+          }
+        },
+        "image/jpeg",
+        JPEG_QUALITY
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(file);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function uploadPhoto(
   userId: string,
   file: File,
   label: string,
   anamneseId: string
 ): Promise<string | null> {
-  const ext = file.name.split(".").pop() || "jpg";
+  const compressed = await compressImage(file);
+  const ext = compressed.name.split(".").pop() || "jpg";
   const path = `${userId}/${anamneseId}/${label}.${ext}`;
 
   const { error } = await supabase.storage
     .from("anamnese-photos")
-    .upload(path, file, { upsert: true });
+    .upload(path, compressed, { upsert: true, contentType: compressed.type || "image/jpeg" });
 
   if (error) {
     console.error(`Erro upload ${label}:`, error);
