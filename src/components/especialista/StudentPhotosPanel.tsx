@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Camera, History } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
+import { getDisplayableImageUrl } from "@/lib/imageUtils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -189,7 +190,7 @@ export default function StudentPhotosPanel({ studentId }: Props) {
             onClick={() => setZoomUrl(p.url)}
           >
             <img
-              src={p.url!}
+              src={getDisplayableImageUrl(p.url!)}
               alt={p.label}
               loading="lazy"
               decoding="async"
