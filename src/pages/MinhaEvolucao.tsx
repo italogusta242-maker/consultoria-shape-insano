@@ -173,7 +173,7 @@ const MinhaEvolucao = () => {
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none">
           {selectedImage && (
             <img
-              src={selectedImage}
+              src={getDisplayableImageUrl(selectedImage)}
               alt="Foto de evolução"
               className="w-full h-full object-contain max-h-[90vh]"
             />

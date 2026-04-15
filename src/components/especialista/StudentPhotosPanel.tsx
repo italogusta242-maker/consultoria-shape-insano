@@ -301,7 +301,7 @@ export default function StudentPhotosPanel({ studentId }: Props) {
       {/* Zoom dialog */}
       <Dialog open={!!zoomUrl} onOpenChange={() => setZoomUrl(null)}>
         <DialogContent className="max-w-lg p-1 bg-black/90 border-none">
-          {zoomUrl && <img src={zoomUrl} alt="Foto ampliada" className="w-full h-auto rounded" />}
+          {zoomUrl && <img src={getDisplayableImageUrl(zoomUrl)} alt="Foto ampliada" className="w-full h-auto rounded" />}
         </DialogContent>
       </Dialog>
 
