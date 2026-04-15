@@ -1,43 +1,37 @@
 
 
-## Plano: Inativar aluno + Modo editor-only na tela de anamnese
+## Diagnóstico: Diogo Moreira dos Santos
 
-### Problema
-1. **Especialista não consegue inativar um aluno** — não existe botão/ação para mudar o status do aluno para "inativo", cortando seu acesso ao sistema.
-2. **Editar treino na visualização do aluno** — o botão "Editar Treino" no card do aluno abre o editor em modal. O usuário quer que funcione igual ao split (abrir o editor inline ou redirecionar para o split).
-3. **Split forçado** — ao abrir a anamnese do aluno, sempre aparece split (anamnese + editor). O especialista quer ter a opção de ver **só o editor** em tela cheia, sem o split.
+### Problema 1 — Banner/popup não aparece
+As duas notificações `anamnese_request` do Diogo estão **`read: true`**. O componente `AnamneseRequestAlert` só exibe quando existe uma notificação com `read: false`. Algo marcou essas notificações como lidas (provavelmente ele clicou na notificação no sino, o que marca como lida sem necessariamente preencher o formulário).
 
-### Alterações
+**Correção necessária:** O sistema de notificações marca `read: true` ao clicar no sino — mas a lógica do alerta de anamnese depende de `read: false`. Precisamos desacoplar: o alerta deve usar `next_anamnese_due` como fonte de verdade, não o status `read` da notificação.
 
-#### 1. Botão "Inativar Aluno" no card/menu do aluno
-**Arquivo:** `src/pages/especialista/EspecialistaAlunos.tsx`
-- Adicionar item "Inativar Aluno" no `DropdownMenu` ou `StudentSummaryDialog` do aluno
-- Ao confirmar, executar `UPDATE profiles SET status = 'inativo' WHERE id = studentId`
-- Também adicionar opção inversa "Reativar Aluno" quando o status já for inativo
-- Mostrar confirmação antes de executar (dialog ou confirm)
+### Problema 2 — Dois cards de reavaliação
+O dashboard tem **dois componentes independentes** que podem aparecer ao mesmo tempo:
+1. `AnamneseRequestAlert` — banner amarelo (baseado em notificação não lida)
+2. `MonthlyAnamnesisBanner` — card "Nova Anamnese Disponível" (baseado em `next_anamnese_due` vencido **ou** 30+ dias desde última avaliação)
 
-**RLS:** Especialistas já podem ler perfis de alunos vinculados, mas **não podem fazer UPDATE**. Será necessária uma migration para adicionar política de UPDATE limitada (especialista só pode alterar o campo `status` dos alunos vinculados).
+No caso do Diogo, `next_anamnese_due = 22/abr` (futuro), mas a última anamnese/assessment é de fev/mar, então o fallback `daysSinceAnamnese >= 30` ativa o segundo card. E se a notificação estiver não lida, o primeiro também aparece → dois cards.
 
-**Migration SQL:**
-- Criar policy permitindo que especialistas façam UPDATE na coluna `status` de profiles de alunos vinculados via `student_specialists`
+### Plano de correção
 
-#### 2. Redirecionar "Editar Treino" para o split
-**Arquivo:** `src/pages/especialista/EspecialistaAlunos.tsx`
-- Alterar `handleEditTraining` para navegar para `/especialista/anamnese/{studentId}` (a tela split) ao invés de abrir o editor em modal
-- Isso unifica a experiência: sempre editar no split com contexto da anamnese
+#### 1. Unificar em um único componente de alerta
+**Arquivo:** `src/components/AnamneseRequestAlert.tsx`
+- Mudar a lógica: verificar `next_anamnese_due <= hoje` no perfil do usuário **OU** notificação `anamnese_request` não lida
+- Isso garante que o alerta aparece mesmo que a notificação seja marcada como lida no sino
 
-#### 3. Toggle split/editor-only na tela de anamnese
-**Arquivo:** `src/pages/especialista/EspecialistaAnamneseSplit.tsx`
-- Adicionar state `viewMode: "split" | "editor-only"`
-- Adicionar botão toggle no header: "Expandir Editor" / "Mostrar Anamnese"
-- Quando `editor-only`, esconder o painel esquerdo (anamnese) e o editor ocupa 100% da largura
-- Quando `split`, manter o layout atual 50/50
+#### 2. Remover `MonthlyAnamnesisBanner` duplicado
+**Arquivo:** `src/pages/Dashboard.tsx`
+- Remover o componente `MonthlyAnamnesisBanner` e toda a lógica associada (`lastAssessmentDate`, `daysSinceAnamnese`, `showAnamnese`)
+- Manter apenas o `AnamneseRequestAlert` como ponto único de alerta
 
-### Resumo
+#### 3. Fix one-time: reenviar notificação do Diogo
+- Inserir nova notificação `anamnese_request` com `read: false` e ajustar `next_anamnese_due` para hoje
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/especialista/EspecialistaAlunos.tsx` | Botão inativar/reativar + redirecionar editar treino para split |
-| `src/pages/especialista/EspecialistaAnamneseSplit.tsx` | Toggle split vs editor-only |
-| Migration SQL | Policy UPDATE para especialistas no campo status de profiles |
+| `src/components/AnamneseRequestAlert.tsx` | Usar `next_anamnese_due` como fonte de verdade |
+| `src/pages/Dashboard.tsx` | Remover `MonthlyAnamnesisBanner` duplicado |
+| Migration SQL | Fix Diogo: nova notificação + reset `next_anamnese_due` |
 
