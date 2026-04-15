@@ -25,7 +25,7 @@ const AuthPage = () => {
   };
 
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-end overflow-hidden">
+    <div className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden">
       {/* Background image with overlay */}
       <div className="absolute inset-0">
         <img src={authBg} alt="" fetchPriority="high" loading="eager" className="w-full h-full object-cover" />
