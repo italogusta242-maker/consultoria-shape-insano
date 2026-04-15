@@ -1,64 +1,61 @@
 
 
-## Checklist de Ajustes e Melhorias — Plano de Implementação
+## Diagnóstico: App travando e fechando durante treino
 
-### Status atual
+### Causa raiz #1 — Reload silencioso MATA o treino (CRÍTICO)
 
-| Item | Status |
-|------|--------|
-| 4. Chat — Badge de não lidos | ✅ Já implementado |
-| 4. Chat — Marcar como não lido | ✅ Já implementado |
-| 2. Inativar/reativar aluno | ✅ Já implementado |
+O hook `useSilentUpdate` detecta quando um Service Worker novo é instalado e **recarrega a página inteira quando o usuário minimiza o app ou bloqueia a tela**:
 
-### Itens pendentes (5 tarefas)
+```typescript
+// useSilentUpdate.ts — linha 47
+if (document.visibilityState === "hidden" && newSwInstalled.current) {
+  window.location.reload(); // ← MATA O TREINO
+}
+```
 
----
+O fluxo é: aluno está treinando → bloqueia tela ou troca de app para trocar música → SW atualizado em background → `reload()` dispara → o app reinicia e o treino em execução é perdido.
 
-#### 1. Dashboard — Arquivar/dispensar alertas permanentes + limpar pendências
-**Arquivos:** `src/pages/especialista/EspecialistaDashboard.tsx`, `src/hooks/useProactiveAlerts.ts`
+Embora o localStorage persista o estado, o reload causa:
+- Perda do timer de descanso ativo
+- Re-fetch de todos os dados
+- Possível dessincronização do estado se o write não completou
 
-O sistema já tem dismiss individual e por aluno, mas falta:
-- Botão "Limpar todos os alertas" visível no topo da seção de alertas
-- Opção de filtrar apenas alertas críticos (escondendo info/warning)
-- A funcionalidade `restoreAll` já existe no hook — só precisa de um botão no UI
+### Causa raiz #2 — `backdrop-blur` no timer de descanso (Performance)
 
-Também no painel "Sem Resposta" — adicionar botão para dispensar/ocultar conversas sem resposta individualmente (usando `dismissed_alerts` com key `unresponsive-{studentId}`).
+O overlay do RestTimer usa `backdrop-blur-sm` em tela cheia. Em dispositivos móveis de baixo/médio porte, isso causa travamento porque o GPU precisa re-amostrar todos os pixels abaixo do overlay a cada frame, especialmente com animações do SVG do timer rodando.
 
----
+### Causa raiz #3 — N+1 queries no hook de não lidos (Performance geral)
 
-#### 2. Perfil — Visualização 360º + Datas do plano/contrato
-**Arquivo:** `src/pages/especialista/EspecialistaAlunos.tsx`
-
-- No `StudentResumoContent`, adicionar seção "Plano/Contrato" no topo com:
-  - Data de início da assinatura (`subscriptions.started_at`)
-  - Data de término calculada (via `subscription_plans.duration_months`)
-  - Validade do plano de treino/dieta (`training_plans.valid_until` / `diet_plans.valid_until`)
-- Reorganizar o layout para que dados pessoais + plano/contrato fiquem compactos em grid 2 colunas, reduzindo scroll
+O `useUnreadConversations` dispara uma query individual para CADA conversa do usuário sequencialmente. Os logs de rede mostram ~30 requests separados para `chat_messages`, um por conversa. Isso é pesado e pode travar o app durante esses disparos em série.
 
 ---
 
-#### 3. Exportação de treino em PDF
-**Arquivos:** Novo `src/lib/exportTrainingPDF.ts`, editar `StudentTrainingTab` em `EspecialistaAlunos.tsx`
+### Plano de correção
 
-- Criar função que gera PDF do plano de treino usando `jspdf` (já disponível ou instalar)
-- Layout: cabeçalho com nome do aluno + título do plano, tabela por grupo com exercícios, séries, reps, descanso
-- Botão "Exportar PDF" no card do plano de treino (ao lado de "Editar")
-- PDF gerado no client-side, download direto
+#### 1. Bloquear reload silencioso durante treino ativo
+**Arquivo:** `src/hooks/useSilentUpdate.ts`
 
----
+Antes de executar `window.location.reload()`, verificar se existe `workout-execution-state` no localStorage. Se existir, adiar o reload para quando o treino terminar.
 
-#### 4. Notificação automática ao especialista quando aluno preenche anamnese inicial
-**Arquivo:** `src/lib/submitAnamnese.ts`
+```
+Se localStorage["workout-execution-state"] existir → NÃO recarregar
+Quando o treino finalizar/cancelar → verificar flag e recarregar
+```
 
-A função `submitAnamnese` insere a anamnese mas **não notifica os especialistas vinculados**. Adicionar:
-- Buscar `student_specialists` do aluno
-- Inserir notificação tipo `anamnese_submitted` para cada especialista com título "📋 Nova anamnese preenchida" e body com nome do aluno
-- Isso dispara push automaticamente via trigger `trigger_push_on_notification`
+#### 2. Remover backdrop-blur do RestTimer
+**Arquivo:** `src/pages/Treinos.tsx`
 
----
+Trocar `bg-background/80 backdrop-blur-sm` por `bg-background/95` (cor sólida com opacidade alta). Visualmente quase igual, mas sem custo de GPU.
 
-#### 5. Alerta de reavaliação mensal para o especialista
-**Já parcialmente coberto:** O `submitMonthlyAssessment.ts` já insere notificação `monthly_completed` para especialistas. Verificar se está funcionando corretamente — se sim, este item já está resolvido. Caso o especialista não esteja recebendo, debugar a query de `student_specialists`.
+#### 3. Otimizar query de não lidos em batch
+**Arquivo:** `src/hooks/useUnreadConversations.ts`
+
+Substituir o loop de N queries individuais por uma única query usando `in()` com todos os IDs de conversa, e calcular os counts no client.
+
+#### 4. Melhorar resiliência do timer após reload inesperado
+**Arquivo:** `src/pages/Treinos.tsx`
+
+Quando o estado é restaurado do localStorage, restaurar também o timer de execução calculando o tempo elapsed desde `startedAt`, para que um reload não zere o cronômetro.
 
 ---
 
@@ -66,9 +63,7 @@ A função `submitAnamnese` insere a anamnese mas **não notifica os especialist
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/especialista/EspecialistaDashboard.tsx` | Botões limpar/restaurar alertas + dispensar sem resposta |
-| `src/pages/especialista/EspecialistaAlunos.tsx` | Seção contrato/plano no resumo + botão exportar PDF |
-| `src/lib/exportTrainingPDF.ts` | Novo — geração de PDF do treino |
-| `src/lib/submitAnamnese.ts` | Notificar especialistas ao preencher anamnese |
-| `package.json` | Adicionar `jspdf` se necessário |
+| `src/hooks/useSilentUpdate.ts` | Não recarregar durante treino ativo |
+| `src/pages/Treinos.tsx` | Remover backdrop-blur do RestTimer + melhorar restore |
+| `src/hooks/useUnreadConversations.ts` | Batch query único em vez de N+1 |
 
