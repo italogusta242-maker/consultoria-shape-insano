@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, User, Users, MessageCircle, Reply, X, Search, ChevronLeft } from "lucide-react";
+import { Send, User, Users, MessageCircle, Reply, X, Search, ChevronLeft, MailOpen } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, isToday, isYesterday, differenceInCalendarDays, startOfDay } from "date-fns";
@@ -11,12 +11,19 @@ import { useProfile } from "@/hooks/useProfile";
 import { usePresence } from "@/hooks/usePresence";
 import { useReadReceipts } from "@/hooks/useReadReceipts";
 import { useChatMessages, ChatMessage } from "@/hooks/useChatMessages";
+import { useUnreadConversations } from "@/hooks/useUnreadConversations";
 import SwipeMessage from "@/components/chat/SwipeMessage";
 import SkeletonMessages from "@/components/chat/SkeletonMessages";
 import SystemMessage from "@/components/chat/SystemMessage";
 import ReadReceiptTicks from "@/components/chat/ReadReceiptTicks";
 import MediaUploadButton from "@/components/chat/MediaUploadButton";
 import MediaMessage from "@/components/chat/MediaMessage";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 
 const formatDateSeparator = (date: Date): string => {
@@ -53,6 +60,7 @@ const formatConvTime = (dateStr?: string) => {
 const EspecialistaChat = () => {
   const { user } = useAuth();
   const { data: profile } = useProfile();
+  const { getConversationUnread, markAsRead, markAsUnread } = useUnreadConversations();
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<SidebarItem | null>(null);
@@ -240,6 +248,7 @@ const EspecialistaChat = () => {
   const handleSelect = async (item: SidebarItem) => {
     setSelectedItem(item);
     setReplyTo(null);
+    markAsRead(item.id);
 
     if (item.type === "new" && item.studentId && user) {
       const { data: conv, error } = await supabase
@@ -439,7 +448,9 @@ const EspecialistaChat = () => {
                   <p className="text-sm text-muted-foreground">Nenhum resultado</p>
                 </div>
               ) : (
-                filteredItems.map((item) => (
+                filteredItems.map((item) => {
+                  const unreadCount = getConversationUnread(item.id);
+                  return (
                   <button
                     key={item.id}
                     onClick={() => handleSelectMobile(item)}
@@ -463,16 +474,24 @@ const EspecialistaChat = () => {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground truncate">{item.name}</p>
-                          <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{formatConvTime(item.lastTime)}</span>
+                          <p className={`text-sm truncate ${unreadCount > 0 ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{item.name}</p>
+                          <span className={`text-[11px] shrink-0 ml-2 ${unreadCount > 0 ? "text-accent font-semibold" : "text-muted-foreground"}`}>{formatConvTime(item.lastTime)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {item.type === "new" ? "Clique para iniciar conversa..." : item.lastMessage || "Inicie a conversa..."}
-                        </p>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <p className={`text-xs truncate pr-2 ${unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                            {item.type === "new" ? "Clique para iniciar conversa..." : item.lastMessage || "Inicie a conversa..."}
+                          </p>
+                          {unreadCount > 0 && (
+                            <span className="min-w-[20px] h-5 rounded-full bg-accent text-accent-foreground text-[10px] font-bold flex items-center justify-center shrink-0 px-1.5">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </button>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -644,63 +663,77 @@ const EspecialistaChat = () => {
               <p className="text-sm text-muted-foreground">Nenhum aluno vinculado.</p>
             </div>
           ) : (
-            filteredItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => handleSelect(item)}
-                className={`w-full text-left px-4 py-3.5 border-b border-border/30 hover:bg-secondary/30 transition-colors ${
-                  selectedItem?.id === item.id ? "bg-secondary/40" : ""
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  {item.type === "group" ? (
-                    <div className="w-10 h-10 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
-                      <Users size={16} className="text-accent" />
-                    </div>
-                  ) : item.avatarUrl ? (
-                    <div className="relative shrink-0">
-                      <img src={item.avatarUrl} alt={item.name} className="w-10 h-10 rounded-full object-cover" />
-                      {item.studentId && (
-                        <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${isOnline(item.studentId) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+            filteredItems.map((item) => {
+              const unreadCount = getConversationUnread(item.id);
+              return (
+              <ContextMenu key={item.id}>
+                <ContextMenuTrigger asChild>
+                  <button
+                    onClick={() => handleSelect(item)}
+                    className={`w-full text-left px-4 py-3.5 border-b border-border/30 hover:bg-secondary/30 transition-colors ${
+                      selectedItem?.id === item.id ? "bg-secondary/40" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {item.type === "group" ? (
+                        <div className="w-10 h-10 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
+                          <Users size={16} className="text-accent" />
+                        </div>
+                      ) : item.avatarUrl ? (
+                        <div className="relative shrink-0">
+                          <img src={item.avatarUrl} alt={item.name} className="w-10 h-10 rounded-full object-cover" />
+                          {item.studentId && (
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${isOnline(item.studentId) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="relative shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center">
+                            <User size={16} className="text-accent" />
+                          </div>
+                          {item.studentId && (
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${isOnline(item.studentId) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
+                          )}
+                        </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="relative shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center">
-                        <User size={16} className="text-accent" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm truncate ${unreadCount > 0 ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>
+                            {item.type === "group" && item.memberNames?.length
+                              ? item.memberNames.join(", ")
+                              : item.name}
+                          </p>
+                          <span className={`text-[11px] shrink-0 ml-2 ${unreadCount > 0 ? "text-accent font-semibold" : "text-muted-foreground"}`}>{formatConvTime(item.lastTime)}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <p className={`text-xs truncate pr-2 ${unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                            {item.type === "group"
+                              ? item.lastMessage || "Grupo multidisciplinar"
+                              : item.type === "new"
+                                ? "Clique para iniciar conversa..."
+                                : item.lastMessage || "Inicie a conversa..."}
+                          </p>
+                          {unreadCount > 0 && (
+                            <span className="min-w-[20px] h-5 rounded-full bg-accent text-accent-foreground text-[10px] font-bold flex items-center justify-center shrink-0 px-1.5">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {item.studentId && (
-                        <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${isOnline(item.studentId) ? "bg-green-500" : "bg-muted-foreground/40"}`} />
-                      )}
                     </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground truncate">
-                        {item.type === "group" && item.memberNames?.length
-                          ? item.memberNames.join(", ")
-                          : item.name}
-                      </p>
-                      <span className="text-[11px] text-muted-foreground shrink-0 ml-2">{formatConvTime(item.lastTime)}</span>
-                    </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-xs text-muted-foreground truncate pr-2">
-                        {item.type === "group"
-                          ? item.lastMessage || "Grupo multidisciplinar"
-                          : item.type === "new"
-                            ? "Clique para iniciar conversa..."
-                            : item.lastMessage || "Inicie a conversa..."}
-                      </p>
-                      {item.unread > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {item.unread}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))
+                  </button>
+                </ContextMenuTrigger>
+                {item.type !== "new" && (
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => markAsUnread(item.id)} className="gap-2">
+                      <MailOpen size={14} />
+                      Marcar como não lido
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                )}
+              </ContextMenu>
+              );
+            })
           )}
           </div>
         </div>

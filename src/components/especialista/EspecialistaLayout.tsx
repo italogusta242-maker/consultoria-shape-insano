@@ -10,6 +10,7 @@ import NotificationBell from "@/components/especialista/NotificationBell";
 import { cn } from "@/lib/utils";
 import { useSpecialistStudents } from "@/hooks/useSpecialistStudents";
 import { useAllowedRoutes } from "@/hooks/useSpecialtyGuard";
+import { useUnreadConversations } from "@/hooks/useUnreadConversations";
 
 const SPECIALTY_NAV: Record<string, { title: string; path: string; icon: typeof Dumbbell }[]> = {
   personal: [],
@@ -27,6 +28,7 @@ const EspecialistaLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: students } = useSpecialistStudents();
   const { specialty, rawSpecialty } = useAllowedRoutes();
+  const { totalUnread } = useUnreadConversations();
 
   const studentCount = students?.length ?? 0;
 
@@ -73,7 +75,7 @@ const EspecialistaLayout = () => {
     navItems.push({ ...item, badge: null });
   }
   navItems.push({ title: "Treinar a IA", path: "/especialista/ia", icon: Brain, badge: null });
-  navItems.push({ title: "Chat", path: "/especialista/chat", icon: MessageSquare, badge: null });
+  navItems.push({ title: "Chat", path: "/especialista/chat", icon: MessageSquare, badge: totalUnread > 0 ? String(totalUnread) : null });
   navItems.push({ title: "Meu Perfil", path: "/especialista/perfil", icon: UserCog, badge: null });
 
   const isActive = (path: string) => {
