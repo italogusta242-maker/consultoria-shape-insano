@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Calendar, ImageOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { getDisplayableImageUrl } from "@/lib/imageUtils";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -148,7 +149,7 @@ const MinhaEvolucao = () => {
                       className="relative aspect-[3/4] rounded-lg overflow-hidden border border-border hover:border-primary/40 transition-colors group"
                     >
                       <img
-                        src={url}
+                        src={getDisplayableImageUrl(url)}
                         alt={photoLabels[key] || key}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
