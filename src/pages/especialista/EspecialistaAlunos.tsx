@@ -81,7 +81,7 @@ const Section = ({ icon: Icon, title, children }: { icon: any; title: string; ch
       </div>
       <h4 className="font-cinzel text-sm font-bold text-foreground">{title}</h4>
     </div>
-    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{children}</div>
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">{children}</div>
   </div>
 );
 
@@ -431,7 +431,7 @@ const StudentResumoContent = ({ aluno, specialty, anamnese, anamneseLoading }: {
         <Section icon={Brain} title="Perfil Psicológico (Anamnese)">
           <Field label="Estresse" value={anamnese.nivel_estresse ?? "—"} />
           <Field label="Sono" value={anamnese.sono_horas ?? "—"} />
-          <Field label="Motivação" value={anamnese.motivacao ?? "—"} />
+          <Field label="Motivação" value={anamnese.motivacao ?? "—"} fullWidth />
           <Field label="Objetivo" value={anamnese.objetivo ?? "—"} />
         </Section>
         <div className="border-t border-border/50" />
