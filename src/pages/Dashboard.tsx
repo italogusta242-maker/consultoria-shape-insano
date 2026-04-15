@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { SFX } from "@/hooks/useSoundEffects";
 import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Brain, Dumbbell, UtensilsCrossed, MessageCircle, TrendingUp, Calendar, AlertTriangle, ClipboardList, ChevronRight, X, Droplets, Plus, Minus, Flame } from "lucide-react";
+import { Heart, Brain, Dumbbell, UtensilsCrossed, MessageCircle, TrendingUp, Calendar, AlertTriangle, ChevronRight, X, Droplets, Plus, Minus, Flame } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import InsanoLogo from "@/components/InsanoLogo";
 import DailyCheckIn, { type MentalState, mentalStateLabels, type CheckInResult } from "@/components/DailyCheckIn";
@@ -270,72 +270,7 @@ const Dashboard = () => {
     </motion.div>
   );
 
-  // Fetch real last assessment date
-  const { data: lastAssessmentDate } = useQuery({
-    queryKey: ["last-assessment"],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data: monthly } = await supabase
-        .from("monthly_assessments" as any)
-        .select("created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      if (monthly) return new Date((monthly as any).created_at);
-      const { data: anamnese } = await supabase
-        .from("anamnese")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-      if (anamnese) return new Date(anamnese.created_at);
-      return null;
-    },
-  });
-  const daysSinceAnamnese = lastAssessmentDate
-    ? Math.floor((Date.now() - lastAssessmentDate.getTime()) / (1000 * 60 * 60 * 24))
-    : 999;
-  // Show banner if next_anamnese_due is past OR fallback to 30-day check
-  const profileData = profile;
-  const showAnamnese = profileData?.next_anamnese_due
-    ? new Date(profileData.next_anamnese_due) <= new Date()
-    : daysSinceAnamnese >= 30;
-
-  const MonthlyAnamnesisBanner = () => {
-    if (!showAnamnese) return null;
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={`${cardBg} rounded-xl border border-accent/40 p-4 relative z-10`}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-            <ClipboardList size={20} className="text-accent" />
-          </div>
-          <div className="flex-1">
-            <p className="font-cinzel text-sm font-bold text-foreground">Nova Anamnese Disponível</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Já se passaram {daysSinceAnamnese} dias. Atualize seus dados para otimizar seu plano.
-            </p>
-          </div>
-        </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => navigate("/reavaliacao")}
-          className="w-full mt-3 py-2.5 rounded-lg font-cinzel text-sm font-semibold text-foreground flex items-center justify-center gap-2"
-          style={{ background: "hsl(var(--accent) / 0.15)", border: "1px solid hsl(var(--accent) / 0.3)" }}
-        >
-          <ClipboardList size={16} />
-          FAZER ANAMNESE MENSAL
-        </motion.button>
-      </motion.div>
-    );
-  };
+  // MonthlyAnamnesisBanner removed — unified into AnamneseRequestAlert
 
   const StoicQuote = ({ compact = false }: { compact?: boolean }) => (
     <div className="rounded-xl border p-4 text-center"
@@ -637,7 +572,6 @@ const Dashboard = () => {
         {/* Aggressive anamnesis request alert (specialist-triggered) */}
         <AnamneseRequestAlert />
 
-        <MonthlyAnamnesisBanner />
 
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="relative z-10">
           <StoicQuote compact />
@@ -719,8 +653,6 @@ const Dashboard = () => {
           <FlameCard state={flameState} streak={streak} adherence={adherence} />
           {/* Aggressive anamnesis request alert (specialist-triggered) */}
           <AnamneseRequestAlert />
-          {/* Monthly Anamnesis CTA */}
-          <MonthlyAnamnesisBanner />
         </div>
 
         {/* CENTER COLUMN */}
