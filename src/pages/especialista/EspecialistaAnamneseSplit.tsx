@@ -3,6 +3,7 @@
  * @dependencies useStudentAnamnese, DietPlanEditor, TrainingPlanEditor, supabase.
  */
 import { useState, useMemo } from "react";
+import { getDisplayableImageUrl } from "@/lib/imageUtils";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
