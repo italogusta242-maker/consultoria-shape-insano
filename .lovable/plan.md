@@ -1,50 +1,74 @@
 
 
-## Plano: Badge de não lidos no Chat + Marcar como não lido
+## Checklist de Ajustes e Melhorias — Plano de Implementação
 
-### O que será feito
+### Status atual
 
-1. **Badge de mensagens não lidas na sidebar do especialista** — O item "Chat" na navegação lateral mostrará um número com a quantidade total de conversas com mensagens não lidas.
+| Item | Status |
+|------|--------|
+| 4. Chat — Badge de não lidos | ✅ Já implementado |
+| 4. Chat — Marcar como não lido | ✅ Já implementado |
+| 2. Inativar/reativar aluno | ✅ Já implementado |
 
-2. **Opção "Marcar como não lido"** — No chat do especialista, ao clicar com botão direito ou via menu de contexto em uma conversa na lista lateral, o especialista poderá marcar aquela conversa como não lida.
+### Itens pendentes (5 tarefas)
 
-### Alterações técnicas
+---
 
-#### 1. Hook `useUnreadConversations` (novo)
-**Arquivo:** `src/hooks/useUnreadConversations.ts`
-- Consulta `chat_messages` para cada conversa do especialista, comparando com `message_reads` para calcular quantas conversas têm mensagens não lidas
-- Retorna o total de conversas não lidas (número para o badge)
-- Escuta realtime em `chat_messages` para atualizar automaticamente
-- Considera também um estado local de "forçar não lido" (para o recurso de marcar como não lido)
+#### 1. Dashboard — Arquivar/dispensar alertas permanentes + limpar pendências
+**Arquivos:** `src/pages/especialista/EspecialistaDashboard.tsx`, `src/hooks/useProactiveAlerts.ts`
 
-#### 2. Badge no nav "Chat" do layout
-**Arquivo:** `src/components/especialista/EspecialistaLayout.tsx`
-- Importar o hook `useUnreadConversations`
-- Passar o count como badge do item "Chat" no `navItems`
+O sistema já tem dismiss individual e por aluno, mas falta:
+- Botão "Limpar todos os alertas" visível no topo da seção de alertas
+- Opção de filtrar apenas alertas críticos (escondendo info/warning)
+- A funcionalidade `restoreAll` já existe no hook — só precisa de um botão no UI
 
-#### 3. Marcar como não lido na lista de conversas
-**Arquivo:** `src/pages/especialista/EspecialistaChat.tsx`
-- Adicionar menu de contexto (long press no mobile / right click no desktop) em cada item da lista
-- Opção "Marcar como não lido" que deleta os `message_reads` do especialista para a última mensagem daquela conversa (ou usa um estado local/tabela auxiliar)
-- Visualmente, a conversa mostrará um indicador de não lido (bolinha azul)
+Também no painel "Sem Resposta" — adicionar botão para dispensar/ocultar conversas sem resposta individualmente (usando `dismissed_alerts` com key `unresponsive-{studentId}`).
 
-#### 4. Contagem de não lidos por conversa no sidebar do chat
-**Arquivo:** `src/pages/especialista/EspecialistaChat.tsx`
-- Calcular `unread` count real para cada `SidebarItem` comparando `message_reads` com mensagens existentes
-- Exibir badge numérico no item da conversa quando `unread > 0`
+---
 
-### Abordagem para "marcar como não lido"
-- Deletar o último `message_read` do usuário para aquela conversa via `supabase.from("message_reads").delete()`
-- Isso faz o sistema recalcular como não lido naturalmente
-- A tabela `message_reads` já permite DELETE pelo próprio usuário? Não — precisa de migration para adicionar policy DELETE.
+#### 2. Perfil — Visualização 360º + Datas do plano/contrato
+**Arquivo:** `src/pages/especialista/EspecialistaAlunos.tsx`
 
-#### Migration SQL
-- Adicionar policy DELETE em `message_reads` para que o usuário possa deletar seus próprios registros
+- No `StudentResumoContent`, adicionar seção "Plano/Contrato" no topo com:
+  - Data de início da assinatura (`subscriptions.started_at`)
+  - Data de término calculada (via `subscription_plans.duration_months`)
+  - Validade do plano de treino/dieta (`training_plans.valid_until` / `diet_plans.valid_until`)
+- Reorganizar o layout para que dados pessoais + plano/contrato fiquem compactos em grid 2 colunas, reduzindo scroll
+
+---
+
+#### 3. Exportação de treino em PDF
+**Arquivos:** Novo `src/lib/exportTrainingPDF.ts`, editar `StudentTrainingTab` em `EspecialistaAlunos.tsx`
+
+- Criar função que gera PDF do plano de treino usando `jspdf` (já disponível ou instalar)
+- Layout: cabeçalho com nome do aluno + título do plano, tabela por grupo com exercícios, séries, reps, descanso
+- Botão "Exportar PDF" no card do plano de treino (ao lado de "Editar")
+- PDF gerado no client-side, download direto
+
+---
+
+#### 4. Notificação automática ao especialista quando aluno preenche anamnese inicial
+**Arquivo:** `src/lib/submitAnamnese.ts`
+
+A função `submitAnamnese` insere a anamnese mas **não notifica os especialistas vinculados**. Adicionar:
+- Buscar `student_specialists` do aluno
+- Inserir notificação tipo `anamnese_submitted` para cada especialista com título "📋 Nova anamnese preenchida" e body com nome do aluno
+- Isso dispara push automaticamente via trigger `trigger_push_on_notification`
+
+---
+
+#### 5. Alerta de reavaliação mensal para o especialista
+**Já parcialmente coberto:** O `submitMonthlyAssessment.ts` já insere notificação `monthly_completed` para especialistas. Verificar se está funcionando corretamente — se sim, este item já está resolvido. Caso o especialista não esteja recebendo, debugar a query de `student_specialists`.
+
+---
+
+### Resumo de arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/hooks/useUnreadConversations.ts` | Novo hook para contar conversas não lidas |
-| `src/components/especialista/EspecialistaLayout.tsx` | Badge no item Chat |
-| `src/pages/especialista/EspecialistaChat.tsx` | Menu "marcar não lido" + badge por conversa |
-| Migration SQL | Policy DELETE em message_reads |
+| `src/pages/especialista/EspecialistaDashboard.tsx` | Botões limpar/restaurar alertas + dispensar sem resposta |
+| `src/pages/especialista/EspecialistaAlunos.tsx` | Seção contrato/plano no resumo + botão exportar PDF |
+| `src/lib/exportTrainingPDF.ts` | Novo — geração de PDF do treino |
+| `src/lib/submitAnamnese.ts` | Notificar especialistas ao preencher anamnese |
+| `package.json` | Adicionar `jspdf` se necessário |
 
