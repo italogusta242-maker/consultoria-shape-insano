@@ -60,6 +60,7 @@ const formatConvTime = (dateStr?: string) => {
 const EspecialistaChat = () => {
   const { user } = useAuth();
   const { data: profile } = useProfile();
+  const { getConversationUnread, markAsRead, markAsUnread } = useUnreadConversations();
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<SidebarItem | null>(null);
