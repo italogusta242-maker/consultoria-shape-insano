@@ -248,6 +248,7 @@ const EspecialistaChat = () => {
   const handleSelect = async (item: SidebarItem) => {
     setSelectedItem(item);
     setReplyTo(null);
+    markAsRead(item.id);
 
     if (item.type === "new" && item.studentId && user) {
       const { data: conv, error } = await supabase
