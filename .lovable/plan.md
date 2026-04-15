@@ -1,37 +1,50 @@
 
 
-## Diagnóstico: Diogo Moreira dos Santos
+## Plano: Badge de não lidos no Chat + Marcar como não lido
 
-### Problema 1 — Banner/popup não aparece
-As duas notificações `anamnese_request` do Diogo estão **`read: true`**. O componente `AnamneseRequestAlert` só exibe quando existe uma notificação com `read: false`. Algo marcou essas notificações como lidas (provavelmente ele clicou na notificação no sino, o que marca como lida sem necessariamente preencher o formulário).
+### O que será feito
 
-**Correção necessária:** O sistema de notificações marca `read: true` ao clicar no sino — mas a lógica do alerta de anamnese depende de `read: false`. Precisamos desacoplar: o alerta deve usar `next_anamnese_due` como fonte de verdade, não o status `read` da notificação.
+1. **Badge de mensagens não lidas na sidebar do especialista** — O item "Chat" na navegação lateral mostrará um número com a quantidade total de conversas com mensagens não lidas.
 
-### Problema 2 — Dois cards de reavaliação
-O dashboard tem **dois componentes independentes** que podem aparecer ao mesmo tempo:
-1. `AnamneseRequestAlert` — banner amarelo (baseado em notificação não lida)
-2. `MonthlyAnamnesisBanner` — card "Nova Anamnese Disponível" (baseado em `next_anamnese_due` vencido **ou** 30+ dias desde última avaliação)
+2. **Opção "Marcar como não lido"** — No chat do especialista, ao clicar com botão direito ou via menu de contexto em uma conversa na lista lateral, o especialista poderá marcar aquela conversa como não lida.
 
-No caso do Diogo, `next_anamnese_due = 22/abr` (futuro), mas a última anamnese/assessment é de fev/mar, então o fallback `daysSinceAnamnese >= 30` ativa o segundo card. E se a notificação estiver não lida, o primeiro também aparece → dois cards.
+### Alterações técnicas
 
-### Plano de correção
+#### 1. Hook `useUnreadConversations` (novo)
+**Arquivo:** `src/hooks/useUnreadConversations.ts`
+- Consulta `chat_messages` para cada conversa do especialista, comparando com `message_reads` para calcular quantas conversas têm mensagens não lidas
+- Retorna o total de conversas não lidas (número para o badge)
+- Escuta realtime em `chat_messages` para atualizar automaticamente
+- Considera também um estado local de "forçar não lido" (para o recurso de marcar como não lido)
 
-#### 1. Unificar em um único componente de alerta
-**Arquivo:** `src/components/AnamneseRequestAlert.tsx`
-- Mudar a lógica: verificar `next_anamnese_due <= hoje` no perfil do usuário **OU** notificação `anamnese_request` não lida
-- Isso garante que o alerta aparece mesmo que a notificação seja marcada como lida no sino
+#### 2. Badge no nav "Chat" do layout
+**Arquivo:** `src/components/especialista/EspecialistaLayout.tsx`
+- Importar o hook `useUnreadConversations`
+- Passar o count como badge do item "Chat" no `navItems`
 
-#### 2. Remover `MonthlyAnamnesisBanner` duplicado
-**Arquivo:** `src/pages/Dashboard.tsx`
-- Remover o componente `MonthlyAnamnesisBanner` e toda a lógica associada (`lastAssessmentDate`, `daysSinceAnamnese`, `showAnamnese`)
-- Manter apenas o `AnamneseRequestAlert` como ponto único de alerta
+#### 3. Marcar como não lido na lista de conversas
+**Arquivo:** `src/pages/especialista/EspecialistaChat.tsx`
+- Adicionar menu de contexto (long press no mobile / right click no desktop) em cada item da lista
+- Opção "Marcar como não lido" que deleta os `message_reads` do especialista para a última mensagem daquela conversa (ou usa um estado local/tabela auxiliar)
+- Visualmente, a conversa mostrará um indicador de não lido (bolinha azul)
 
-#### 3. Fix one-time: reenviar notificação do Diogo
-- Inserir nova notificação `anamnese_request` com `read: false` e ajustar `next_anamnese_due` para hoje
+#### 4. Contagem de não lidos por conversa no sidebar do chat
+**Arquivo:** `src/pages/especialista/EspecialistaChat.tsx`
+- Calcular `unread` count real para cada `SidebarItem` comparando `message_reads` com mensagens existentes
+- Exibir badge numérico no item da conversa quando `unread > 0`
+
+### Abordagem para "marcar como não lido"
+- Deletar o último `message_read` do usuário para aquela conversa via `supabase.from("message_reads").delete()`
+- Isso faz o sistema recalcular como não lido naturalmente
+- A tabela `message_reads` já permite DELETE pelo próprio usuário? Não — precisa de migration para adicionar policy DELETE.
+
+#### Migration SQL
+- Adicionar policy DELETE em `message_reads` para que o usuário possa deletar seus próprios registros
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/components/AnamneseRequestAlert.tsx` | Usar `next_anamnese_due` como fonte de verdade |
-| `src/pages/Dashboard.tsx` | Remover `MonthlyAnamnesisBanner` duplicado |
-| Migration SQL | Fix Diogo: nova notificação + reset `next_anamnese_due` |
+| `src/hooks/useUnreadConversations.ts` | Novo hook para contar conversas não lidas |
+| `src/components/especialista/EspecialistaLayout.tsx` | Badge no item Chat |
+| `src/pages/especialista/EspecialistaChat.tsx` | Menu "marcar não lido" + badge por conversa |
+| Migration SQL | Policy DELETE em message_reads |
 
