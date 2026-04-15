@@ -4,6 +4,9 @@ import { useEffect, useRef } from "react";
  * Silent PWA auto-update hook.
  * When a new SW is installed in background AND the user leaves the tab/app,
  * the page reloads silently so they return to the latest version.
+ *
+ * IMPORTANT: If a workout is in progress (workout-execution-state in localStorage),
+ * the reload is deferred until the workout finishes to prevent data loss.
  */
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
@@ -11,14 +14,12 @@ export function useSilentUpdate() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    // Listen for new SW becoming installed
     const onControllerChange = () => {
       newSwInstalled.current = true;
     };
 
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
-    // Also detect when a waiting SW activates
     const detectWaiting = async () => {
       const reg = await navigator.serviceWorker.getRegistration();
       if (!reg) return;
@@ -42,9 +43,22 @@ export function useSilentUpdate() {
 
     detectWaiting();
 
+    const isWorkoutActive = (): boolean => {
+      try {
+        return !!localStorage.getItem("workout-execution-state");
+      } catch {
+        return false;
+      }
+    };
+
     // When user hides the app (minimise, switch tab, lock screen), reload silently
+    // BUT NOT if a workout is in progress — that would lose their session
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && newSwInstalled.current) {
+        if (isWorkoutActive()) {
+          // Defer reload — will happen next time visibility changes after workout ends
+          return;
+        }
         window.location.reload();
       }
     };

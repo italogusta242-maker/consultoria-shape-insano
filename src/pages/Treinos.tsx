@@ -308,7 +308,7 @@ const RestTimer = ({ seconds, onDone, onSkip }: { seconds: number; onDone: () =>
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/95"
     >
       <div className="bg-card border border-border rounded-2xl p-8 flex flex-col items-center gap-4 w-64 shadow-xl">
         <p className="font-cinzel text-xs uppercase tracking-widest text-muted-foreground">Descanso</p>
