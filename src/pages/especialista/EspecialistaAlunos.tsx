@@ -74,21 +74,21 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string }> = 
 };
 
 const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
-  <div className="space-y-3">
-    <div className="flex items-center gap-2">
-      <div className="p-1.5 rounded-md bg-[hsl(var(--gold)/0.15)]">
+  <div className="space-y-3 min-w-0 overflow-x-hidden">
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="p-1.5 rounded-md bg-[hsl(var(--gold)/0.15)] shrink-0">
         <Icon size={14} className="text-[hsl(var(--gold))]" />
       </div>
-      <h4 className="font-cinzel text-sm font-bold text-foreground">{title}</h4>
+      <h4 className="font-cinzel text-sm font-bold text-foreground min-w-0">{title}</h4>
     </div>
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">{children}</div>
+    <div className="grid min-w-0 grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">{children}</div>
   </div>
 );
 
 const Field = ({ label, value, fullWidth }: { label: string; value: string; fullWidth?: boolean }) => (
-  <div className={fullWidth ? "col-span-2" : ""}>
+  <div className={cn("min-w-0", fullWidth ? "md:col-span-2" : "")}>
     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
-    <p className="text-foreground font-medium break-words">{value}</p>
+    <p className="text-foreground font-medium break-words whitespace-normal leading-relaxed">{value}</p>
   </div>
 );
 
@@ -380,7 +380,7 @@ const StudentResumoContent = ({ aluno, specialty, anamnese, anamneseLoading }: {
   });
 
   return (
-  <div className="space-y-5">
+  <div className="space-y-5 min-w-0 overflow-x-hidden">
     {/* Contract / Plan dates */}
     {contractData && (contractData.subStart || contractData.trainValid || contractData.dietValid) && (
       <>
@@ -572,23 +572,23 @@ const StudentSummaryDialog = ({ aluno, specialty, onEditTraining, onEditDiet }: 
           Ver Resumo
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl w-[95vw] max-h-[85vh] overflow-y-auto bg-card/95 backdrop-blur-xl border-border">
-        <DialogHeader>
-          <DialogTitle className="font-cinzel text-lg gold-text-gradient">{aluno.name}</DialogTitle>
-          <div className="flex gap-2 mt-1">
+      <DialogContent className="w-[96vw] max-w-[1200px] max-h-[85vh] overflow-y-auto overflow-x-hidden bg-card/95 backdrop-blur-xl border-border p-4 sm:p-6">
+        <DialogHeader className="min-w-0 pr-8">
+          <DialogTitle className="font-cinzel text-lg gold-text-gradient break-words">{aluno.name}</DialogTitle>
+          <div className="flex flex-wrap gap-2 mt-1 min-w-0">
             <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", sc.bg, sc.text)}>{aluno.status}</span>
             {aluno.specialty && <Badge variant="outline" className="text-[10px]">{aluno.specialty}</Badge>}
           </div>
         </DialogHeader>
 
         {hasTabs ? (
-          <Tabs defaultValue="resumo" className="mt-2">
+          <Tabs defaultValue="resumo" className="mt-2 min-w-0 overflow-x-hidden">
             <TabsList className="w-full bg-secondary/50">
               <TabsTrigger value="resumo" className="flex-1 text-xs">Resumo</TabsTrigger>
               {showTreino && <TabsTrigger value="treino" className="flex-1 text-xs">Treino</TabsTrigger>}
               {showDieta && <TabsTrigger value="dieta" className="flex-1 text-xs">Dieta</TabsTrigger>}
             </TabsList>
-            <TabsContent value="resumo" className="mt-4">
+            <TabsContent value="resumo" className="mt-4 min-w-0 overflow-x-hidden">
               <StudentResumoContent aluno={aluno} specialty={specialty} anamnese={anamnese} anamneseLoading={anamneseLoading} />
             </TabsContent>
             {showTreino && (
