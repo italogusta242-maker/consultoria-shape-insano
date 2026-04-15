@@ -323,8 +323,85 @@ const StudentResumoContent = ({ aluno, specialty, anamnese, anamneseLoading }: {
   specialty: string | null;
   anamnese: any;
   anamneseLoading: boolean;
-}) => (
+}) => {
+  // Fetch subscription + plan dates
+  const { data: contractData } = useQuery({
+    queryKey: ["student-contract-dates", aluno.id],
+    queryFn: async () => {
+      const [subRes, trainRes, dietRes] = await Promise.all([
+        supabase
+          .from("subscriptions")
+          .select("started_at, plan_price, status, subscription_plan_id")
+          .eq("user_id", aluno.id)
+          .eq("status", "active")
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("training_plans")
+          .select("valid_until")
+          .eq("user_id", aluno.id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("diet_plans")
+          .select("valid_until")
+          .eq("user_id", aluno.id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      let subEnd: string | null = null;
+      if (subRes.data?.subscription_plan_id) {
+        const { data: plan } = await supabase
+          .from("subscription_plans")
+          .select("duration_months")
+          .eq("id", subRes.data.subscription_plan_id)
+          .maybeSingle();
+        if (plan && subRes.data.started_at) {
+          const start = new Date(subRes.data.started_at);
+          start.setMonth(start.getMonth() + plan.duration_months);
+          subEnd = start.toISOString();
+        }
+      }
+
+      return {
+        subStart: subRes.data?.started_at ?? null,
+        subEnd,
+        trainValid: trainRes.data?.valid_until ?? null,
+        dietValid: dietRes.data?.valid_until ?? null,
+      };
+    },
+    enabled: !!aluno.id,
+  });
+
+  return (
   <div className="space-y-5">
+    {/* Contract / Plan dates */}
+    {contractData && (contractData.subStart || contractData.trainValid || contractData.dietValid) && (
+      <>
+        <Section icon={Calendar} title="Plano / Contrato">
+          {contractData.subStart && (
+            <Field label="Início Assinatura" value={new Date(contractData.subStart).toLocaleDateString("pt-BR")} />
+          )}
+          {contractData.subEnd && (
+            <Field label="Término Assinatura" value={new Date(contractData.subEnd).toLocaleDateString("pt-BR")} />
+          )}
+          {contractData.trainValid && (
+            <Field label="Validade Treino" value={new Date(contractData.trainValid).toLocaleDateString("pt-BR")} />
+          )}
+          {contractData.dietValid && (
+            <Field label="Validade Dieta" value={new Date(contractData.dietValid).toLocaleDateString("pt-BR")} />
+          )}
+        </Section>
+        <div className="border-t border-border/50" />
+      </>
+    )}
+
     <Section icon={User} title="Dados Pessoais">
       <Field label="Email" value={aluno.email} />
       <Field label="Telefone" value={aluno.telefone ?? "—"} />
