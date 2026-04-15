@@ -189,7 +189,7 @@ export default function StudentPhotosPanel({ studentId }: Props) {
             onClick={() => setZoomUrl(p.url)}
           >
             <img
-              src={thumbUrl}
+              src={p.url!}
               alt={p.label}
               loading="lazy"
               decoding="async"
