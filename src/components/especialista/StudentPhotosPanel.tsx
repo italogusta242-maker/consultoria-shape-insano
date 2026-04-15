@@ -182,7 +182,6 @@ export default function StudentPhotosPanel({ studentId }: Props) {
     <div className="grid grid-cols-4 gap-2">
       {photos.filter((p) => !!p.url).map((p) => {
         // Append transform query to resize large images for thumbnails
-        const thumbUrl = p.url! + (p.url!.includes('?') ? '&' : '?') + 'width=300&height=400&resize=contain';
         return (
           <div
             key={p.label}
