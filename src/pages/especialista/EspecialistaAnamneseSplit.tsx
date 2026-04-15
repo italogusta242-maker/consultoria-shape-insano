@@ -662,22 +662,11 @@ const EspecialistaAnamneseSplit = () => {
                                     { url: selectedMonthly.foto_perfil_lado, label: "Perfil" },
                                   ].filter(p => p.url).map(({ url, label }) => (
                                     <div key={label} className="space-y-1">
-                                      <div className="rounded-md w-full aspect-[3/4] border border-border overflow-hidden bg-muted flex items-center justify-center">
+                                      <div className="rounded-md w-full aspect-[3/4] border border-border overflow-hidden bg-muted">
                                         <img 
-                                          src={url!} 
+                                          src={getDisplayableImageUrl(url!)} 
                                           alt={label} 
                                           className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            const target = e.currentTarget;
-                                            target.style.display = 'none';
-                                            const parent = target.parentElement;
-                                            if (parent && !parent.querySelector('.heic-fallback')) {
-                                              const fallback = document.createElement('div');
-                                              fallback.className = 'heic-fallback flex flex-col items-center justify-center gap-1 p-2 text-center';
-                                              fallback.innerHTML = `<span class="text-xs text-muted-foreground">Formato HEIC</span><a href="${url}" target="_blank" class="text-[10px] text-primary underline">Baixar foto</a>`;
-                                              parent.appendChild(fallback);
-                                            }
-                                          }}
                                         />
                                       </div>
                                       <p className="text-[9px] text-center text-muted-foreground">{label}</p>
