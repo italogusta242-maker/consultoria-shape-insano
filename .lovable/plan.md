@@ -1,50 +1,41 @@
 
 
-## Correção em lote: `next_anamnese_due` desatualizado para 5 alunos
+## Como funciona o mecanismo de alertas hoje
 
-### Problema
-5 alunos completaram a reavaliação mas o `next_anamnese_due` não foi atualizado (ficou em 21/03). O cron continua disparando notificações de anamnese pendente para todos eles.
+**Não é tempo real.** O sistema usa **polling com React Query**:
 
-### Correção (via insert tool — dados)
+- Hook `useProactiveAlerts` faz uma query agregando dados de 8 tabelas (anamnese, planos, treinos, profiles, monthly_assessments, subscriptions, etc.) e calcula os alertas no cliente.
+- `refetchInterval: 5 * 60 * 1000` → recarrega automaticamente **a cada 5 minutos**.
+- Também recarrega quando a aba volta ao foco (comportamento padrão do React Query).
+- Ao dispensar/limpar/restaurar alertas, é feito `invalidateQueries(["proactive-alerts"])` que dispara refetch imediato.
 
-**1. Atualizar `next_anamnese_due` para cada aluno (30 dias após sua reavaliação):**
+**Botão "Restaurar" atual:** chama `restoreAll` que faz `DELETE` na tabela `dismissed_alerts`, fazendo reaparecer alertas que o especialista havia dispensado. Útil, mas pouco usado e o nome confunde com "atualizar".
 
-| Aluno | Reavaliação em | Novo `next_anamnese_due` |
-|-------|---------------|------------------------|
-| Danilo Victor | 05/04 | 2026-05-05 |
-| Jean Willian | 25/03 | 2026-04-24 |
-| Nicolas Macedo | 27/03 | 2026-04-26 |
-| Paulo Ricardo | 27/03 | 2026-04-26 |
-| Paulo Victor | 23/03 | 2026-04-22 |
+---
 
-**2. Marcar notificações `anamnese_request` como lidas** para todos os 5 alunos.
+## Mudança proposta
 
-```sql
--- Danilo
-UPDATE profiles SET next_anamnese_due = '2026-05-05' WHERE id = 'a85b237e-786b-4dbe-8630-216c1e90ee18';
--- Jean
-UPDATE profiles SET next_anamnese_due = '2026-04-24' WHERE id = '59cd7d50-780c-4067-b1dd-558caa4e1828';
--- Nicolas
-UPDATE profiles SET next_anamnese_due = '2026-04-26' WHERE id = 'd5d24b13-7c0c-4e2a-9ca7-acf903cbe62c';
--- Paulo Ricardo
-UPDATE profiles SET next_anamnese_due = '2026-04-26' WHERE id = 'c7124f4c-42d6-4fbd-b5db-372a361c8caf';
--- Paulo Victor
-UPDATE profiles SET next_anamnese_due = '2026-04-22' WHERE id = 'f7ade0bd-069f-4f95-8ded-660cbdc2445e';
+Transformar o botão "Restaurar" em **"Atualizar"** — força um refetch imediato dos alertas (busca dados novos do banco agora, sem esperar os 5 minutos).
 
--- Limpar notificações pendentes
-UPDATE notifications SET read = true
-WHERE user_id IN (
-  'a85b237e-786b-4dbe-8630-216c1e90ee18',
-  '59cd7d50-780c-4067-b1dd-558caa4e1828',
-  'd5d24b13-7c0c-4e2a-9ca7-acf903cbe62c',
-  'c7124f4c-42d6-4fbd-b5db-372a361c8caf',
-  'f7ade0bd-069f-4f95-8ded-660cbdc2445e'
-) AND type = 'anamnese_request' AND read = false;
-```
+A funcionalidade de "restaurar dispensados" fica preservada como uma ação secundária dentro de um menu (3 pontinhos), para não perdê-la.
 
-### Nota sobre Nicolas
-O Nicolas tem uma reavaliação sem fotos (mesmo bug do Diogo). Com o rollback já implementado, isso não vai mais acontecer.
+### Comportamento do novo botão "Atualizar"
+- Ícone: `RefreshCw` (girando enquanto carrega)
+- Ao clicar: `queryClient.invalidateQueries({ queryKey: ["proactive-alerts"] })`
+- Toast: "Alertas atualizados" quando termina
+- Disabled enquanto `isFetching === true`
 
-### Arquivos
-Nenhum arquivo de código alterado. Apenas correção de dados via insert tool.
+### Onde fica "Restaurar dispensados"
+Adicionar um `DropdownMenu` com ícone `MoreVertical` ao lado dos botões, contendo:
+- Restaurar alertas dispensados (a função `restoreAll` atual)
+
+Assim o especialista mantém acesso à função, mas o botão principal vira o que ele realmente espera: **atualizar agora**.
+
+### Arquivos afetados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/especialista/EspecialistaDashboard.tsx` | Trocar botão "Restaurar" por "Atualizar" (refetch). Mover "Restaurar dispensados" para dropdown menu. |
+
+Nenhuma mudança no hook ou no banco — apenas UI.
 
