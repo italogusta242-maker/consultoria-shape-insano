@@ -23,6 +23,7 @@ import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
 import StudentPhotosPanel from "@/components/especialista/StudentPhotosPanel";
 import PlanVersionTimeline from "@/components/especialista/PlanVersionTimeline";
 import LegacyPhotosUpload from "@/components/especialista/LegacyPhotosUpload";
+import SubscriptionBadge from "@/components/especialista/SubscriptionBadge";
 
 const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
   <div className="space-y-3">
@@ -328,7 +329,10 @@ const EspecialistaAnamneseSplit = () => {
             </Button>
             <div>
               <h2 className="font-cinzel text-lg font-bold text-foreground">{studentName}</h2>
-              <p className="text-xs text-muted-foreground">Análise de Anamnese</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-muted-foreground">Análise de Anamnese</p>
+                {studentId && <SubscriptionBadge studentId={studentId} variant="short" />}
+              </div>
             </div>
           </div>
           <Button
