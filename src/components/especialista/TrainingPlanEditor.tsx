@@ -92,35 +92,45 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
-  // Initialize store when opening.
-  // IMPORTANT: depend on editingPlan?.id (not the object reference) so that
-  // re-renders of the parent (e.g. toggling split/expanded view) do NOT
-  // overwrite an in-progress draft with stale DB data.
+  // Track which (studentId, planId) pair we have already synced from DB into
+  // the Zustand draft, so that:
+  //  - When the editor opens for a saved plan, we DO load the DB data
+  //    (overwriting any leftover empty draft from a previous "new plan" flow).
+  //  - But once loaded, we never overwrite the user's in-progress edits on
+  //    re-renders (e.g. toggling split/expanded view).
+  const syncedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!open || !selectedStudent) return;
 
-    // If editing an existing plan, only seed the store when there is no
-    // existing draft for this student (preserves in-progress edits).
     if (editingPlan) {
-      const existing = getDraft(selectedStudent);
-      if (!existing) {
-        setDraft(selectedStudent, {
-          title: editingPlan.title,
-          totalSessions: editingPlan.total_sessions,
-          groups: editingPlan.groups,
-          avaliacaoPostural: editingPlan.avaliacao_postural || "",
-          pontosMelhoria: editingPlan.pontos_melhoria || "",
-          objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
-        });
-      }
+      const key = `${selectedStudent}::${editingPlan.id}`;
+      if (syncedKeyRef.current === key) return; // already synced this plan
+
+      // Sync DB plan into the draft store. This intentionally overwrites
+      // any prior draft (which would only be a stale empty/template state).
+      setDraft(selectedStudent, {
+        title: editingPlan.title,
+        totalSessions: editingPlan.total_sessions,
+        groups: editingPlan.groups,
+        avaliacaoPostural: editingPlan.avaliacao_postural || "",
+        pontosMelhoria: editingPlan.pontos_melhoria || "",
+        objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
+      });
+      syncedKeyRef.current = key;
       return;
     }
 
-    // If we are creating a new plan, check if there's already a draft
-    const existing = getDraft(selectedStudent);
-    if (existing && existing.groups.length > 0) return;
+    // New-plan flow: keep existing draft if it has content; otherwise seed empty.
+    const newKey = `${selectedStudent}::__new__`;
+    if (syncedKeyRef.current === newKey) return;
 
-    // Otherwise, create an empty draft
+    const existing = getDraft(selectedStudent);
+    if (existing && existing.groups.length > 0) {
+      syncedKeyRef.current = newKey;
+      return;
+    }
+
     setDraft(selectedStudent, {
       title: "Plano Personalizado",
       totalSessions: 50,
@@ -129,8 +139,15 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       pontosMelhoria: "",
       objetivoMesociclo: "",
     });
+    syncedKeyRef.current = newKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedStudent, editingPlan?.id]);
+
+  // Reset sync tracking when the editor closes so reopening re-syncs from DB.
+  useEffect(() => {
+    if (!open) syncedKeyRef.current = null;
+  }, [open]);
+
 
   const generateWithAI = async () => {
     if (!selectedStudent) {
