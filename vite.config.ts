@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    buildVersionPlugin(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "insano-icon-192.png", "insano-icon-512.png"],
@@ -62,6 +63,8 @@ export default defineConfig(({ mode }) => ({
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,jpg,svg,woff2}"],
+        // Never precache version.json — it must always be fetched fresh
+        globIgnores: ["**/version.json"],
         importScripts: ["/push-handler.js"],
         cleanupOutdatedCaches: true,
         skipWaiting: true,
