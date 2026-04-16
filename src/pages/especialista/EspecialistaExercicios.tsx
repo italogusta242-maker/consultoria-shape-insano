@@ -48,6 +48,68 @@ const emptyForm: ExerciseForm = {
   name: "", muscle_group: "Peito", default_sets: "3", default_reps: "10", video_url: "", gif_url: "", instructions: "", equipment: "", level: "",
 };
 
+const ExerciseFormFields = ({ formState, setFormState }: { formState: ExerciseForm; setFormState: (f: ExerciseForm) => void }) => (
+  <div className="space-y-3">
+    <div className="space-y-1.5">
+      <Label className="text-xs">Nome *</Label>
+      <Input value={formState.name} onChange={(e) => setFormState({ ...formState, name: e.target.value })} className="bg-background border-border" placeholder="Ex: Supino Inclinado" />
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Grupo Muscular</Label>
+        <select
+          value={formState.muscle_group}
+          onChange={(e) => setFormState({ ...formState, muscle_group: e.target.value })}
+          className="w-full h-9 text-sm rounded-md border border-border bg-background px-2 text-foreground"
+        >
+          {MUSCLE_GROUPS.map((g) => <option key={g} value={g}>{capitalizeGroup(g)}</option>)}
+        </select>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Séries</Label>
+          <Input type="number" value={formState.default_sets} onChange={(e) => setFormState({ ...formState, default_sets: e.target.value })} className="bg-background border-border" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Reps</Label>
+          <Input value={formState.default_reps} onChange={(e) => setFormState({ ...formState, default_reps: e.target.value })} className="bg-background border-border" />
+        </div>
+      </div>
+    </div>
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Equipamento</Label>
+        <Input value={formState.equipment} onChange={(e) => setFormState({ ...formState, equipment: e.target.value })} className="bg-background border-border" placeholder="Ex: Barra, Halter" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Nível</Label>
+        <select
+          value={formState.level}
+          onChange={(e) => setFormState({ ...formState, level: e.target.value })}
+          className="w-full h-9 text-sm rounded-md border border-border bg-background px-2 text-foreground"
+        >
+          <option value="">—</option>
+          <option value="Iniciante">Iniciante</option>
+          <option value="Intermediário">Intermediário</option>
+          <option value="Avançado">Avançado</option>
+        </select>
+      </div>
+    </div>
+    <div className="space-y-1.5">
+      <Label className="text-xs flex items-center gap-1"><Image size={12} /> URL do GIF (opcional)</Label>
+      <Input value={formState.gif_url} onChange={(e) => setFormState({ ...formState, gif_url: e.target.value })} className="bg-background border-border" placeholder="https://..." />
+    </div>
+    <div className="space-y-1.5">
+      <Label className="text-xs flex items-center gap-1"><Video size={12} /> Link do YouTube (opcional)</Label>
+      <Input value={formState.video_url} onChange={(e) => setFormState({ ...formState, video_url: e.target.value })} className="bg-background border-border" placeholder="https://youtube.com/watch?v=..." />
+    </div>
+    <div className="space-y-1.5">
+      <Label className="text-xs">Instruções (opcional)</Label>
+      <Textarea value={formState.instructions} onChange={(e) => setFormState({ ...formState, instructions: e.target.value })} className="bg-background border-border min-h-[60px]" placeholder="Passo a passo da execução..." />
+    </div>
+  </div>
+);
+
 const EspecialistaExercicios = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
