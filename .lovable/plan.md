@@ -1,71 +1,49 @@
 
 
-## Problema
-Especialista usa PWA instalado no macOS (Safari/Chrome) e não recebe atualizações mesmo após "atualizar a página". O PWA fica preso em uma versão antiga.
+## Onde já existe e o que pode ser melhorado
 
-## Por que acontece
+A informação **já existe** no portal do especialista, mas só aparece dentro de um lugar específico:
 
-O sistema atual depende de **dois gatilhos** para atualizar:
-1. `useSilentUpdate` → recarrega quando `visibilityState === "hidden"` (usuário minimiza/troca de aba)
-2. Service Worker com `skipWaiting` + `clientsClaim`
+### Localização atual
+**`/especialista/alunos`** → ao clicar em um aluno → aba **"Resumo"** → seção **"Plano / Contrato"** (`StudentResumoContent` em `EspecialistaAlunos.tsx`, linhas 320–403).
 
-**No PWA standalone do macOS:**
-- O usuário raramente "esconde" a janela — ele fecha ou deixa aberta o dia inteiro
-- `Cmd+R` em PWA standalone **não força bypass do Service Worker** — o SW continua servindo o cache antigo
-- O `reg.update()` em `main.tsx` só **detecta** atualização, não força ativação imediata se nada disparar `visibilitychange`
+Mostra 4 campos quando disponíveis:
+- Início Assinatura (de `subscriptions.started_at`)
+- Término Assinatura (calculado: `started_at + duration_months` do `subscription_plans`)
+- Validade Treino (`training_plans.valid_until`)
+- Validade Dieta (`diet_plans.valid_until`)
 
-Resultado: o SW novo fica em estado `waiting` indefinidamente.
+### O que provavelmente está faltando
+Essa info só fica visível depois de abrir o drawer/perfil do aluno. Não aparece:
+1. **Na lista/cards de alunos** (`EspecialistaAlunos`) — onde o especialista bate o olho
+2. **No header do perfil do aluno** — aparece só rolando até a seção
+3. **Na anamnese split view** (`EspecialistaAnamneseSplit`) — onde o especialista edita treino/dieta
 
-## Correção
+### Proposta de mudança
 
-**1. Forçar ativação imediata quando detectar SW novo (`useSilentUpdate.ts`)**
+Tornar essas datas mais visíveis em 2 pontos:
 
-Quando `reg.waiting` existir, enviar `skipWaiting` mensagem e recarregar — sem depender de `visibilitychange`. Manter o guard do treino em andamento.
+**1. Header do perfil do aluno (drawer "Resumo")**
+Adicionar um chip/badge compacto no topo do drawer com "Início → Término Assinatura" e dias restantes (ex: `15/03/2026 → 15/03/2027 · 287 dias restantes`). Cor amber se restar < 30 dias.
 
-```ts
-// Quando detectar waiting SW, ativar imediatamente
-if (reg.waiting) {
-  reg.waiting.postMessage({ type: "SKIP_WAITING" });
-}
-// E no controllerchange, recarregar (se não houver treino ativo)
-navigator.serviceWorker.addEventListener("controllerchange", () => {
-  if (!isWorkoutActive()) window.location.reload();
-});
-```
+**2. Card do aluno na listagem**
+Pequeno texto abaixo do nome: `Plano: 15/03 → 15/03/27` (formato curto). Aparece só se houver assinatura ativa.
 
-**2. Adicionar listener de `SKIP_WAITING` no Service Worker**
+**3. Header do `EspecialistaAnamneseSplit`** (tela onde o especialista edita planos)
+Mesma badge compacta com início + término da assinatura, para o especialista saber em que ponto do contrato o aluno está enquanto monta o plano.
 
-O `vite-plugin-pwa` com `skipWaiting: true` já faz isso automaticamente, mas para garantir, adicionar handler explícito no `push-handler.js`:
-
-```js
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
-});
-```
-
-**3. Polling periódico de update (fallback para PWA sempre aberto)**
-
-Adicionar `setInterval` chamando `reg.update()` a cada 30 minutos no `main.tsx` ou `useSilentUpdate`, garantindo que mesmo PWAs abertos por dias detectem novas versões.
-
-```ts
-setInterval(() => reg.update(), 30 * 60 * 1000);
-```
-
-**4. Botão manual "Verificar atualização" no portal do especialista**
-
-No header/menu do especialista, adicionar item discreto "Verificar atualizações" que chama `reg.update()` + reload forçado. Útil quando o especialista suspeita que está numa versão antiga.
-
-## Arquivos
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/hooks/useSilentUpdate.ts` | Forçar `skipWaiting` + reload em `controllerchange`. Adicionar polling de 30min. |
-| `public/push-handler.js` | Listener de mensagem `SKIP_WAITING`. |
-| `src/components/especialista/EspecialistaSidebar.tsx` (ou header) | Item "Verificar atualizações" no menu do usuário. |
+| `src/pages/especialista/EspecialistaAlunos.tsx` | Mover/duplicar datas do contrato para o header do drawer; adicionar mini-info no card do aluno |
+| `src/pages/especialista/EspecialistaAnamneseSplit.tsx` | Adicionar badge "Assinatura: início → término" no header |
 
-## Comunicação ao usuário afetado
-Após deploy, pedir para ele:
-1. Fechar o PWA completamente (Cmd+Q)
-2. Reabrir
-3. A partir daí, atualizações futuras serão automáticas
+Nenhuma mudança de banco — todos os dados já vêm de `subscriptions` + `subscription_plans`.
+
+### Pergunta antes de seguir
+Você quer que eu:
+- (A) Apenas torne mais visível onde já existe (header do drawer + card)
+- (B) Replique também na tela de edição de planos (`AnamneseSplit`)
+- (C) Ambos
 
