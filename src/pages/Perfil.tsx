@@ -303,6 +303,36 @@ const Perfil = () => {
 
       <ChangePasswordSheet />
 
+      {/* Check for updates */}
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.45 }}
+        onClick={async () => {
+          toast.loading("Limpando cache e buscando atualizações...", { id: "pwa-update" });
+          try {
+            await hardPurgeCaches();
+            try {
+              await fetch(window.location.href, { cache: "no-store" });
+            } catch {
+              /* ignore */
+            }
+            toast.success("Recarregando com a versão mais recente...", { id: "pwa-update" });
+            setTimeout(() => window.location.reload(), 400);
+          } catch {
+            toast.error("Falha ao verificar atualizações", { id: "pwa-update" });
+          }
+        }}
+        className="w-full bg-card rounded-xl border border-border p-4 flex items-center gap-3 hover:border-primary/30 transition-colors"
+      >
+        <RefreshCw size={20} className="text-muted-foreground" />
+        <div className="flex-1 text-left">
+          <p className="text-sm text-foreground">Verificar atualizações</p>
+          <p className="text-[11px] text-muted-foreground">Limpa o cache e baixa a versão mais recente</p>
+        </div>
+        <ChevronRight size={16} className="text-muted-foreground/40 shrink-0" />
+      </motion.button>
+
       {/* Sign out */}
       <motion.button
         initial={{ opacity: 0 }}
