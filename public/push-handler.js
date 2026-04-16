@@ -1,4 +1,12 @@
 // Push notification handler for Service Worker
+
+// Allow page to force-activate a waiting SW (used by useSilentUpdate)
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
