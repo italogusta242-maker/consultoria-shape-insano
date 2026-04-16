@@ -426,7 +426,8 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
       setExpandedMeal(0);
     }
     if (!open) setDraftRestored(false);
-  }, [open, editingPlan, preSelectedStudent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingPlan?.id, preSelectedStudent]);
 
   function createEmptyMeal(name: string, time: string): Meal {
     return {
