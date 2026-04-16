@@ -1,11 +1,36 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
+const BUILD_VERSION = String(Date.now());
+
+// Emits /version.json so the running app can detect newer deploys and
+// auto-purge stale caches when the embedded version no longer matches.
+const buildVersionPlugin = (): Plugin => ({
+  name: "build-version-json",
+  generateBundle() {
+    this.emitFile({
+      type: "asset",
+      fileName: "version.json",
+      source: JSON.stringify({ version: BUILD_VERSION }),
+    });
+  },
+  configureServer(server) {
+    server.middlewares.use("/version.json", (_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Cache-Control", "no-store");
+      res.end(JSON.stringify({ version: BUILD_VERSION }));
+    });
+  },
+});
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    __BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
+  },
   server: {
     host: "::",
     port: 5173,
