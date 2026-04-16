@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle } from "lucide-react";
+import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle, RefreshCw, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +11,7 @@ import { useAllowedRoutes } from "@/hooks/useSpecialtyGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useProactiveAlerts, useDismissAlert, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
 import { Button } from "@/components/ui/button";
@@ -253,9 +256,10 @@ const EspecialistaDashboard = () => {
   const studentNames = new Map((students ?? []).map((s) => [s.id, s.name]));
 
   // reviewStats kept for potential future use but efficiency is now alert-based
-  const { data: proactiveAlerts, isLoading: alertsLoading } = useProactiveAlerts(specialty, studentIds, studentNames);
+  const { data: proactiveAlerts, isLoading: alertsLoading, isFetching: alertsFetching } = useProactiveAlerts(specialty, studentIds, studentNames);
   const { data: unresponsiveStudents } = useUnresponsiveStudents(user?.id, studentIds, studentNames);
   const { dismissOne, dismissAllForStudent, restoreAll } = useDismissAlert();
+  const queryClient = useQueryClient();
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
 
   const alertCount = proactiveAlerts?.length ?? 0;
@@ -309,6 +313,11 @@ const EspecialistaDashboard = () => {
     restoreAll.mutate(undefined, {
       onSuccess: () => toast.success("Alertas restaurados"),
     });
+  };
+
+  const handleRefreshAlerts = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["proactive-alerts"] });
+    toast.success("Alertas atualizados");
   };
 
   const filteredCount = filteredAlerts.length;
@@ -440,12 +449,33 @@ const EspecialistaDashboard = () => {
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1"
-                      onClick={handleRestoreAll}
-                      disabled={restoreAll.isPending}
+                      onClick={handleRefreshAlerts}
+                      disabled={alertsFetching}
                     >
-                      <RotateCcw size={10} />
-                      Restaurar
+                      <RefreshCw size={10} className={cn(alertsFetching && "animate-spin")} />
+                      Atualizar
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                        >
+                          <MoreVertical size={12} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover">
+                        <DropdownMenuItem
+                          onClick={handleRestoreAll}
+                          disabled={restoreAll.isPending}
+                          className="text-xs gap-2"
+                        >
+                          <RotateCcw size={12} />
+                          Restaurar dispensados
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>
