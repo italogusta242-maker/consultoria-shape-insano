@@ -216,6 +216,34 @@ const EspecialistaAnamneseSplit = () => {
 
   const [editingPlan, setEditingPlan] = useState<any>(null);
 
+  // Memoize derived editingPlan objects so toggling viewMode does not change
+  // the object identity and trigger the editor's reset effect.
+  const derivedTrainingEditingPlan = useMemo(() => {
+    if (!existingTrainingPlan) return null;
+    return {
+      id: existingTrainingPlan.id,
+      title: existingTrainingPlan.title,
+      user_id: studentId!,
+      groups: Array.isArray(existingTrainingPlan.groups) ? existingTrainingPlan.groups : [],
+      total_sessions: existingTrainingPlan.total_sessions,
+      avaliacao_postural: existingTrainingPlan.avaliacao_postural,
+      pontos_melhoria: existingTrainingPlan.pontos_melhoria,
+      objetivo_mesociclo: existingTrainingPlan.objetivo_mesociclo,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingTrainingPlan?.id, existingTrainingPlan?.updated_at, studentId]);
+
+  const derivedDietEditingPlan = useMemo(() => {
+    if (!existingDietPlan) return null;
+    return {
+      id: existingDietPlan.id,
+      title: existingDietPlan.title,
+      user_id: studentId!,
+      meals: Array.isArray(existingDietPlan.meals) ? existingDietPlan.meals : [],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingDietPlan?.id, existingDietPlan?.updated_at, studentId]);
+
   const openVersionTimeline = (type: "training" | "diet", planId: string) => {
     setVersionTimelineType(type);
     setVersionTimelinePlanId(planId);
@@ -798,9 +826,9 @@ const EspecialistaAnamneseSplit = () => {
       )}
 
       {/* RIGHT: Editor — auto-open */}
-      <div className={`${viewMode === "editor-only" ? "w-full" : "w-1/2"} flex flex-col overflow-hidden`}>
+      <div className={`${viewMode === "editor-only" ? "w-full" : "w-1/2"} flex flex-col overflow-hidden min-h-0`}>
         {viewMode === "editor-only" && (
-          <div className="p-3 border-b border-border flex items-center gap-2">
+          <div className="shrink-0 p-3 border-b border-border flex items-center gap-2">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={goBack}>
               <ArrowLeft size={16} />
             </Button>
@@ -815,39 +843,27 @@ const EspecialistaAnamneseSplit = () => {
             </Button>
           </div>
         )}
-        {isNutri ? (
-          <DietPlanEditor
-            open={true}
-            onClose={handlePlanCreated}
-            students={studentOptions}
-            editingPlan={editingPlan || (existingDietPlan ? {
-              id: existingDietPlan.id,
-              title: existingDietPlan.title,
-              user_id: studentId!,
-              meals: Array.isArray(existingDietPlan.meals) ? existingDietPlan.meals : [],
-            } : null)}
-            embedded
-            preSelectedStudent={studentId}
-          />
-        ) : (
-          <TrainingPlanEditor
-            open={true}
-            onClose={handlePlanCreated}
-            students={studentOptions}
-            editingPlan={editingPlan || (existingTrainingPlan ? {
-              id: existingTrainingPlan.id,
-              title: existingTrainingPlan.title,
-              user_id: studentId!,
-              groups: Array.isArray(existingTrainingPlan.groups) ? existingTrainingPlan.groups : [],
-              total_sessions: existingTrainingPlan.total_sessions,
-              avaliacao_postural: existingTrainingPlan.avaliacao_postural,
-              pontos_melhoria: existingTrainingPlan.pontos_melhoria,
-              objetivo_mesociclo: existingTrainingPlan.objetivo_mesociclo,
-            } : null)}
-            embedded
-            preSelectedStudent={studentId}
-          />
-        )}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {isNutri ? (
+            <DietPlanEditor
+              open={true}
+              onClose={handlePlanCreated}
+              students={studentOptions}
+              editingPlan={editingPlan || derivedDietEditingPlan}
+              embedded
+              preSelectedStudent={studentId}
+            />
+          ) : (
+            <TrainingPlanEditor
+              open={true}
+              onClose={handlePlanCreated}
+              students={studentOptions}
+              editingPlan={editingPlan || derivedTrainingEditingPlan}
+              embedded
+              preSelectedStudent={studentId}
+            />
+          )}
+        </div>
       </div>
 
       <PlanVersionTimeline

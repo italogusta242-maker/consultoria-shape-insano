@@ -1265,7 +1265,7 @@ export default function DietPlanEditor({ open, onClose, students, editingPlan, e
 
   if (embedded) {
     return (
-      <div className="flex flex-col h-full bg-card">
+      <div className="flex flex-col h-full min-h-0 bg-card">
         {editorContent}
         <DietTemplateManager
           open={templateManagerOpen}
