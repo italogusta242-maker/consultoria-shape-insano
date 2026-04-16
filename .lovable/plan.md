@@ -1,41 +1,71 @@
 
 
-## Como funciona o mecanismo de alertas hoje
+## Problema
+Especialista usa PWA instalado no macOS (Safari/Chrome) e não recebe atualizações mesmo após "atualizar a página". O PWA fica preso em uma versão antiga.
 
-**Não é tempo real.** O sistema usa **polling com React Query**:
+## Por que acontece
 
-- Hook `useProactiveAlerts` faz uma query agregando dados de 8 tabelas (anamnese, planos, treinos, profiles, monthly_assessments, subscriptions, etc.) e calcula os alertas no cliente.
-- `refetchInterval: 5 * 60 * 1000` → recarrega automaticamente **a cada 5 minutos**.
-- Também recarrega quando a aba volta ao foco (comportamento padrão do React Query).
-- Ao dispensar/limpar/restaurar alertas, é feito `invalidateQueries(["proactive-alerts"])` que dispara refetch imediato.
+O sistema atual depende de **dois gatilhos** para atualizar:
+1. `useSilentUpdate` → recarrega quando `visibilityState === "hidden"` (usuário minimiza/troca de aba)
+2. Service Worker com `skipWaiting` + `clientsClaim`
 
-**Botão "Restaurar" atual:** chama `restoreAll` que faz `DELETE` na tabela `dismissed_alerts`, fazendo reaparecer alertas que o especialista havia dispensado. Útil, mas pouco usado e o nome confunde com "atualizar".
+**No PWA standalone do macOS:**
+- O usuário raramente "esconde" a janela — ele fecha ou deixa aberta o dia inteiro
+- `Cmd+R` em PWA standalone **não força bypass do Service Worker** — o SW continua servindo o cache antigo
+- O `reg.update()` em `main.tsx` só **detecta** atualização, não força ativação imediata se nada disparar `visibilitychange`
 
----
+Resultado: o SW novo fica em estado `waiting` indefinidamente.
 
-## Mudança proposta
+## Correção
 
-Transformar o botão "Restaurar" em **"Atualizar"** — força um refetch imediato dos alertas (busca dados novos do banco agora, sem esperar os 5 minutos).
+**1. Forçar ativação imediata quando detectar SW novo (`useSilentUpdate.ts`)**
 
-A funcionalidade de "restaurar dispensados" fica preservada como uma ação secundária dentro de um menu (3 pontinhos), para não perdê-la.
+Quando `reg.waiting` existir, enviar `skipWaiting` mensagem e recarregar — sem depender de `visibilitychange`. Manter o guard do treino em andamento.
 
-### Comportamento do novo botão "Atualizar"
-- Ícone: `RefreshCw` (girando enquanto carrega)
-- Ao clicar: `queryClient.invalidateQueries({ queryKey: ["proactive-alerts"] })`
-- Toast: "Alertas atualizados" quando termina
-- Disabled enquanto `isFetching === true`
+```ts
+// Quando detectar waiting SW, ativar imediatamente
+if (reg.waiting) {
+  reg.waiting.postMessage({ type: "SKIP_WAITING" });
+}
+// E no controllerchange, recarregar (se não houver treino ativo)
+navigator.serviceWorker.addEventListener("controllerchange", () => {
+  if (!isWorkoutActive()) window.location.reload();
+});
+```
 
-### Onde fica "Restaurar dispensados"
-Adicionar um `DropdownMenu` com ícone `MoreVertical` ao lado dos botões, contendo:
-- Restaurar alertas dispensados (a função `restoreAll` atual)
+**2. Adicionar listener de `SKIP_WAITING` no Service Worker**
 
-Assim o especialista mantém acesso à função, mas o botão principal vira o que ele realmente espera: **atualizar agora**.
+O `vite-plugin-pwa` com `skipWaiting: true` já faz isso automaticamente, mas para garantir, adicionar handler explícito no `push-handler.js`:
 
-### Arquivos afetados
+```js
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
+```
+
+**3. Polling periódico de update (fallback para PWA sempre aberto)**
+
+Adicionar `setInterval` chamando `reg.update()` a cada 30 minutos no `main.tsx` ou `useSilentUpdate`, garantindo que mesmo PWAs abertos por dias detectem novas versões.
+
+```ts
+setInterval(() => reg.update(), 30 * 60 * 1000);
+```
+
+**4. Botão manual "Verificar atualização" no portal do especialista**
+
+No header/menu do especialista, adicionar item discreto "Verificar atualizações" que chama `reg.update()` + reload forçado. Útil quando o especialista suspeita que está numa versão antiga.
+
+## Arquivos
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/especialista/EspecialistaDashboard.tsx` | Trocar botão "Restaurar" por "Atualizar" (refetch). Mover "Restaurar dispensados" para dropdown menu. |
+| `src/hooks/useSilentUpdate.ts` | Forçar `skipWaiting` + reload em `controllerchange`. Adicionar polling de 30min. |
+| `public/push-handler.js` | Listener de mensagem `SKIP_WAITING`. |
+| `src/components/especialista/EspecialistaSidebar.tsx` (ou header) | Item "Verificar atualizações" no menu do usuário. |
 
-Nenhuma mudança no hook ou no banco — apenas UI.
+## Comunicação ao usuário afetado
+Após deploy, pedir para ele:
+1. Fechar o PWA completamente (Cmd+Q)
+2. Reabrir
+3. A partir daí, atualizações futuras serão automáticas
 
