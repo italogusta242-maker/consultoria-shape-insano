@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
 import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
+import SubscriptionBadge from "@/components/especialista/SubscriptionBadge";
 
 const GOAL_OPTIONS = [
   { key: null, label: "Todos" },
@@ -575,9 +576,10 @@ const StudentSummaryDialog = ({ aluno, specialty, onEditTraining, onEditDiet }: 
       <DialogContent className="w-[96vw] max-w-[1200px] max-h-[85vh] overflow-y-auto overflow-x-hidden bg-card/95 backdrop-blur-xl border-border p-4 sm:p-6">
         <DialogHeader className="min-w-0 pr-8">
           <DialogTitle className="font-cinzel text-lg gold-text-gradient break-words">{aluno.name}</DialogTitle>
-          <div className="flex flex-wrap gap-2 mt-1 min-w-0">
+          <div className="flex flex-wrap gap-2 mt-1 min-w-0 items-center">
             <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", sc.bg, sc.text)}>{aluno.status}</span>
             {aluno.specialty && <Badge variant="outline" className="text-[10px]">{aluno.specialty}</Badge>}
+            <SubscriptionBadge studentId={aluno.id} variant="full" />
           </div>
         </DialogHeader>
 
@@ -699,7 +701,10 @@ const StudentCard = ({
             <div className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-background z-20", sc.dot)} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-foreground truncate text-xs sm:text-sm">{aluno.name}</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-medium text-foreground truncate text-xs sm:text-sm">{aluno.name}</p>
+              <SubscriptionBadge studentId={aluno.id} variant="short" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-1.5 mt-0.5 flex-wrap">
               <span className={cn("px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-medium uppercase tracking-wider whitespace-nowrap", sc.bg, sc.text)}>
                 {aluno.status}
