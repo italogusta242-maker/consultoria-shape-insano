@@ -1,20 +1,23 @@
 import { useEffect, useRef } from "react";
+import { fetchDeployedVersion, hardPurgeCaches } from "@/lib/pwaCache";
 
 /**
- * PWA auto-update hook with aggressive activation for standalone PWAs (macOS, etc).
+ * PWA auto-update hook.
  *
  * Strategy:
- * 1. When new SW is detected (waiting), immediately send SKIP_WAITING.
- * 2. On controllerchange (new SW took control), reload — unless workout is active.
- * 3. Also reload on visibilitychange if a flag was set (legacy behavior).
- * 4. Poll reg.update() every 30 minutes for long-lived PWA windows.
+ * 1. On mount, fetch /version.json fresh and compare with embedded __BUILD_VERSION__.
+ *    If they differ → hard purge caches + unregister SW + reload. This recovers
+ *    users stuck on stale precached HTML without manual intervention.
+ * 2. If no mismatch, follow the normal SW update flow:
+ *    - When a new SW is detected (waiting), send SKIP_WAITING.
+ *    - On controllerchange, reload — unless a workout is active.
+ *    - Poll reg.update() every 30 minutes (cache-busting the HTML first).
  */
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
+  const versionCheckRan = useRef(false);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-
     const isWorkoutActive = (): boolean => {
       try {
         return !!localStorage.getItem("workout-execution-state");
@@ -22,6 +25,45 @@ export function useSilentUpdate() {
         return false;
       }
     };
+
+    // -------- Version check (handles "all users stuck on old build") --------
+    const runVersionCheck = async () => {
+      if (versionCheckRan.current) return;
+      versionCheckRan.current = true;
+
+      const embedded = typeof __BUILD_VERSION__ !== "undefined" ? __BUILD_VERSION__ : null;
+      if (!embedded) return;
+
+      const deployed = await fetchDeployedVersion();
+      if (!deployed || deployed === embedded) return;
+
+      // Stale build detected. Don't yank the rug if the user is mid-workout.
+      if (isWorkoutActive()) return;
+
+      await hardPurgeCaches();
+      // Cache-bust the HTML one more time so the reload definitely pulls fresh
+      try {
+        await fetch(window.location.href, { cache: "no-store" });
+      } catch {
+        /* ignore */
+      }
+      window.location.reload();
+    };
+
+    // Run version check immediately and again on tab focus
+    runVersionCheck();
+    const onFocus = () => {
+      versionCheckRan.current = false;
+      runVersionCheck();
+    };
+    window.addEventListener("focus", onFocus);
+
+    // -------- Standard SW update flow --------
+    if (!("serviceWorker" in navigator)) {
+      return () => {
+        window.removeEventListener("focus", onFocus);
+      };
+    }
 
     const activateWaiting = (reg: ServiceWorkerRegistration) => {
       if (reg.waiting) {
@@ -31,7 +73,6 @@ export function useSilentUpdate() {
 
     const onControllerChange = () => {
       newSwInstalled.current = true;
-      // Reload immediately unless a workout is in progress
       if (!isWorkoutActive()) {
         window.location.reload();
       }
@@ -45,14 +86,12 @@ export function useSilentUpdate() {
       const reg = await navigator.serviceWorker.getRegistration();
       if (!reg) return;
 
-      // If a SW is already waiting, activate it now
       activateWaiting(reg);
 
       const trackInstalling = (sw: ServiceWorker | null) => {
         if (!sw) return;
         sw.addEventListener("statechange", () => {
           if (sw.state === "installed" && navigator.serviceWorker.controller) {
-            // New SW installed and there's an active controller → activate
             activateWaiting(reg);
           }
         });
@@ -64,15 +103,20 @@ export function useSilentUpdate() {
         trackInstalling(reg.installing);
       });
 
-      // Poll for updates every 30 minutes for long-lived PWA windows
-      updateInterval = setInterval(() => {
+      // Poll for updates every 30 minutes — cache-bust HTML first so the
+      // browser actually sees new asset hashes
+      updateInterval = setInterval(async () => {
+        try {
+          await fetch(window.location.href, { cache: "no-store" });
+        } catch {
+          /* ignore */
+        }
         reg.update().catch(() => {});
       }, 30 * 60 * 1000);
     };
 
     setup();
 
-    // Fallback: if reload was deferred (workout active), retry on visibility change
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive()) {
         window.location.reload();
@@ -82,6 +126,7 @@ export function useSilentUpdate() {
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
+      window.removeEventListener("focus", onFocus);
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       if (updateInterval) clearInterval(updateInterval);
