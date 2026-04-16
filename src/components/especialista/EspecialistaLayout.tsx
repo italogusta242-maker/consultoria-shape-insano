@@ -166,20 +166,16 @@ const EspecialistaLayout = () => {
       <div className="p-3 border-t border-border/50 space-y-2">
         <button
           onClick={async () => {
+            toast.loading("Limpando cache e buscando atualizações...", { id: "sw-check" });
             try {
-              const reg = await navigator.serviceWorker?.getRegistration();
-              if (!reg) {
-                toast.info("Atualizações automáticas indisponíveis neste navegador");
-                return;
+              await hardPurgeCaches();
+              try {
+                await fetch(window.location.href, { cache: "no-store" });
+              } catch {
+                /* ignore */
               }
-              toast.loading("Verificando atualizações...", { id: "sw-check" });
-              await reg.update();
-              if (reg.waiting) {
-                reg.waiting.postMessage({ type: "SKIP_WAITING" });
-                toast.success("Nova versão encontrada! Recarregando...", { id: "sw-check" });
-              } else {
-                toast.success("Você já está na versão mais recente", { id: "sw-check" });
-              }
+              toast.success("Recarregando com a versão mais recente...", { id: "sw-check" });
+              setTimeout(() => window.location.reload(), 400);
             } catch {
               toast.error("Falha ao verificar atualizações", { id: "sw-check" });
             }
