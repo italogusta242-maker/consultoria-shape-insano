@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle } from "lucide-react";
+import { Users, AlertTriangle, ClipboardCheck, ArrowUpRight, CheckCircle2, Clock, ExternalLink, Timer, FileWarning, Dumbbell, ClipboardList, CalendarClock, MessageCircleOff, X, ChevronDown, ChevronUp, RotateCcw, XCircle, RefreshCw, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { motion, type Variants } from "framer-motion";
 import { useNavigate } from "react-router-dom";
