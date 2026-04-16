@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Weight, Ruler, Calendar, Percent, Camera, CreditCard, LogOut, ChevronRight, TrendingDown, Upload, Shield, Clock, MessageCircle, AlertTriangle, Bell, KeyRound } from "lucide-react";
+import { User, Weight, Ruler, Calendar, Percent, Camera, CreditCard, LogOut, ChevronRight, TrendingDown, Upload, Shield, Clock, MessageCircle, AlertTriangle, Bell, KeyRound, RefreshCw } from "lucide-react";
+import { hardPurgeCaches } from "@/lib/pwaCache";
 import { useProfile } from "@/hooks/useProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { Badge } from "@/components/ui/badge";
