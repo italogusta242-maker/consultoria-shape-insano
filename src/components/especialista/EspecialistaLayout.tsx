@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useSpecialistStudents } from "@/hooks/useSpecialistStudents";
 import { useAllowedRoutes } from "@/hooks/useSpecialtyGuard";
 import { useUnreadConversations } from "@/hooks/useUnreadConversations";
+import { hardPurgeCaches } from "@/lib/pwaCache";
 
 const SPECIALTY_NAV: Record<string, { title: string; path: string; icon: typeof Dumbbell }[]> = {
   personal: [],
