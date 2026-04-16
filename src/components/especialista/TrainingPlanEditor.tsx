@@ -92,20 +92,27 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
-  // Initialize store when opening
+  // Initialize store when opening.
+  // IMPORTANT: depend on editingPlan?.id (not the object reference) so that
+  // re-renders of the parent (e.g. toggling split/expanded view) do NOT
+  // overwrite an in-progress draft with stale DB data.
   useEffect(() => {
     if (!open || !selectedStudent) return;
 
-    // If we are editing an existing plan, force the store to sync with DB data
+    // If editing an existing plan, only seed the store when there is no
+    // existing draft for this student (preserves in-progress edits).
     if (editingPlan) {
-      setDraft(selectedStudent, {
-        title: editingPlan.title,
-        totalSessions: editingPlan.total_sessions,
-        groups: editingPlan.groups,
-        avaliacaoPostural: editingPlan.avaliacao_postural || "",
-        pontosMelhoria: editingPlan.pontos_melhoria || "",
-        objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
-      });
+      const existing = getDraft(selectedStudent);
+      if (!existing) {
+        setDraft(selectedStudent, {
+          title: editingPlan.title,
+          totalSessions: editingPlan.total_sessions,
+          groups: editingPlan.groups,
+          avaliacaoPostural: editingPlan.avaliacao_postural || "",
+          pontosMelhoria: editingPlan.pontos_melhoria || "",
+          objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
+        });
+      }
       return;
     }
 
@@ -122,7 +129,8 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       pontosMelhoria: "",
       objetivoMesociclo: "",
     });
-  }, [open, selectedStudent, editingPlan]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedStudent, editingPlan?.id]);
 
   const generateWithAI = async () => {
     if (!selectedStudent) {
@@ -871,7 +879,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
 
   if (embedded) {
     return (
-      <div className="flex flex-col h-full bg-card">
+      <div className="flex flex-col h-full min-h-0 bg-card">
         {editorContent}
         <ExerciseSelector
           open={exerciseSelectorOpen}
