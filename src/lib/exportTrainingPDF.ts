@@ -49,19 +49,24 @@ export function exportTrainingPDF(options: ExportOptions) {
 
   doc.setTextColor(0);
 
-  if (objetivoMesociclo) {
-    y += 3;
+  const renderWrappedItalic = (label: string, content: string) => {
     doc.setFontSize(9);
     doc.setFont("helvetica", "italic");
-    doc.text(`Objetivo: ${objetivoMesociclo}`, margin, y);
-    y += 5;
+    const lines = doc.splitTextToSize(`${label}: ${content}`, contentWidth) as string[];
+    for (const line of lines) {
+      checkPageBreak(5);
+      doc.text(line, margin, y);
+      y += 4.5;
+    }
+  };
+
+  if (objetivoMesociclo) {
+    y += 3;
+    renderWrappedItalic("Objetivo", objetivoMesociclo);
   }
 
   if (pontosMelhoria) {
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "italic");
-    doc.text(`Observações: ${pontosMelhoria}`, margin, y);
-    y += 5;
+    renderWrappedItalic("Observações", pontosMelhoria);
   }
 
   // Separator
