@@ -1,47 +1,19 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Silent PWA auto-update hook.
- * When a new SW is installed in background AND the user leaves the tab/app,
- * the page reloads silently so they return to the latest version.
+ * PWA auto-update hook with aggressive activation for standalone PWAs (macOS, etc).
  *
- * IMPORTANT: If a workout is in progress (workout-execution-state in localStorage),
- * the reload is deferred until the workout finishes to prevent data loss.
+ * Strategy:
+ * 1. When new SW is detected (waiting), immediately send SKIP_WAITING.
+ * 2. On controllerchange (new SW took control), reload — unless workout is active.
+ * 3. Also reload on visibilitychange if a flag was set (legacy behavior).
+ * 4. Poll reg.update() every 30 minutes for long-lived PWA windows.
  */
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-
-    const onControllerChange = () => {
-      newSwInstalled.current = true;
-    };
-
-    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-
-    const detectWaiting = async () => {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) return;
-
-      const check = (sw: ServiceWorker | null) => {
-        if (!sw) return;
-        sw.addEventListener("statechange", () => {
-          if (sw.state === "activated") {
-            newSwInstalled.current = true;
-          }
-        });
-      };
-
-      check(reg.installing);
-      check(reg.waiting);
-
-      reg.addEventListener("updatefound", () => {
-        check(reg.installing);
-      });
-    };
-
-    detectWaiting();
 
     const isWorkoutActive = (): boolean => {
       try {
@@ -51,14 +23,58 @@ export function useSilentUpdate() {
       }
     };
 
-    // When user hides the app (minimise, switch tab, lock screen), reload silently
-    // BUT NOT if a workout is in progress — that would lose their session
+    const activateWaiting = (reg: ServiceWorkerRegistration) => {
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+    };
+
+    const onControllerChange = () => {
+      newSwInstalled.current = true;
+      // Reload immediately unless a workout is in progress
+      if (!isWorkoutActive()) {
+        window.location.reload();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    let updateInterval: ReturnType<typeof setInterval> | null = null;
+
+    const setup = async () => {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) return;
+
+      // If a SW is already waiting, activate it now
+      activateWaiting(reg);
+
+      const trackInstalling = (sw: ServiceWorker | null) => {
+        if (!sw) return;
+        sw.addEventListener("statechange", () => {
+          if (sw.state === "installed" && navigator.serviceWorker.controller) {
+            // New SW installed and there's an active controller → activate
+            activateWaiting(reg);
+          }
+        });
+      };
+
+      trackInstalling(reg.installing);
+
+      reg.addEventListener("updatefound", () => {
+        trackInstalling(reg.installing);
+      });
+
+      // Poll for updates every 30 minutes for long-lived PWA windows
+      updateInterval = setInterval(() => {
+        reg.update().catch(() => {});
+      }, 30 * 60 * 1000);
+    };
+
+    setup();
+
+    // Fallback: if reload was deferred (workout active), retry on visibility change
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && newSwInstalled.current) {
-        if (isWorkoutActive()) {
-          // Defer reload — will happen next time visibility changes after workout ends
-          return;
-        }
+      if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive()) {
         window.location.reload();
       }
     };
@@ -68,6 +84,7 @@ export function useSilentUpdate() {
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (updateInterval) clearInterval(updateInterval);
     };
   }, []);
 }

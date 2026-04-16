@@ -2,9 +2,10 @@ import { Outlet, useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Users, MessageSquare, UserCog, ChevronLeft, Menu,
-  Dumbbell, Apple, UtensilsCrossed, BookOpen, X, Brain,
+  Dumbbell, Apple, UtensilsCrossed, BookOpen, X, Brain, RefreshCw,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "sonner";
 import InsanoLogo from "@/components/InsanoLogo";
 import NotificationBell from "@/components/especialista/NotificationBell";
 import { cn } from "@/lib/utils";
@@ -161,8 +162,35 @@ const EspecialistaLayout = () => {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border/50 text-center">
-        <span className="text-[10px] text-muted-foreground/50">Forja</span>
+      <div className="p-3 border-t border-border/50 space-y-2">
+        <button
+          onClick={async () => {
+            try {
+              const reg = await navigator.serviceWorker?.getRegistration();
+              if (!reg) {
+                toast.info("Atualizações automáticas indisponíveis neste navegador");
+                return;
+              }
+              toast.loading("Verificando atualizações...", { id: "sw-check" });
+              await reg.update();
+              if (reg.waiting) {
+                reg.waiting.postMessage({ type: "SKIP_WAITING" });
+                toast.success("Nova versão encontrada! Recarregando...", { id: "sw-check" });
+              } else {
+                toast.success("Você já está na versão mais recente", { id: "sw-check" });
+              }
+            } catch {
+              toast.error("Falha ao verificar atualizações", { id: "sw-check" });
+            }
+          }}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-[hsl(var(--glass-bg))] hover:text-foreground transition-colors"
+        >
+          <RefreshCw size={12} />
+          Verificar atualizações
+        </button>
+        <div className="text-center">
+          <span className="text-[10px] text-muted-foreground/50">Forja</span>
+        </div>
       </div>
     </>
   );
