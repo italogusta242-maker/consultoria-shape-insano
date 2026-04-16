@@ -109,40 +109,47 @@ export function exportTrainingPDF(options: ExportOptions) {
 
     for (let i = 0; i < exercises.length; i++) {
       const ex = exercises[i];
-      checkPageBreak(7);
+      const maxNameWidth = contentWidth * 0.45;
+      const nameLines = doc.splitTextToSize(ex.name, maxNameWidth) as string[];
+      const notesLines = ex.notes
+        ? (doc.splitTextToSize(`↳ ${ex.notes}`, contentWidth - 8) as string[])
+        : [];
+      const rowHeight = Math.max(6, nameLines.length * 4.5) + (notesLines.length ? notesLines.length * 3.5 + 1 : 0);
+
+      checkPageBreak(rowHeight + 2);
 
       // Alternate row bg
       if (i % 2 === 0) {
         doc.setFillColor(248, 248, 248);
-        doc.rect(margin, y - 3.5, contentWidth, 6, "F");
+        doc.rect(margin, y - 3.5, contentWidth, rowHeight, "F");
       }
 
       doc.text(String(i + 1), margin + 1, y);
-      
-      // Truncate long names
-      const maxNameWidth = contentWidth * 0.45;
-      let name = ex.name;
-      while (doc.getTextWidth(name) > maxNameWidth && name.length > 3) {
-        name = name.slice(0, -1);
+
+      // Render multi-line exercise name
+      for (let li = 0; li < nameLines.length; li++) {
+        doc.text(nameLines[li], margin + 8, y + li * 4.5);
       }
-      if (name !== ex.name) name += "…";
-      doc.text(name, margin + 8, y);
-      
+
       doc.text(String(ex.sets), margin + contentWidth * 0.57, y);
       doc.text(String(ex.reps), margin + contentWidth * 0.70, y);
       doc.text(ex.rest || "—", margin + contentWidth * 0.82, y);
 
-      if (ex.notes) {
-        y += 4;
-        checkPageBreak(5);
+      let nextY = y + Math.max(6, nameLines.length * 4.5);
+
+      if (notesLines.length) {
         doc.setFontSize(7);
         doc.setTextColor(120);
-        doc.text(`↳ ${ex.notes}`, margin + 8, y);
+        for (const line of notesLines) {
+          doc.text(line, margin + 8, nextY);
+          nextY += 3.5;
+        }
         doc.setFontSize(9);
         doc.setTextColor(40);
+        nextY += 1;
       }
 
-      y += 6;
+      y = nextY;
     }
 
     y += 6;
