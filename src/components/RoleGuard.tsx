@@ -19,45 +19,71 @@ const RoleGuard = ({ allowedRoles }: RoleGuardProps) => {
   const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const checkRole = async () => {
       if (!user) {
-        setChecking(false);
-        setHasAccess(false);
+        if (!cancelled) {
+          setChecking(false);
+          setHasAccess(false);
+        }
         return;
       }
 
-      // Use cached roles if same user
+      // Use cached roles if same user — instant
       if (rolesCache.userId === user.id && rolesCache.roles.length > 0) {
         const allowed = allowedRoles.some((role) => rolesCache.roles.includes(role));
+        if (!cancelled) {
+          setHasAccess(allowed);
+          setChecking(false);
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error("RoleGuard: error fetching roles", error);
+          setHasAccess(false);
+          setChecking(false);
+          return;
+        }
+
+        const userRoles = (data ?? []).map((r) => r.role);
+        rolesCache.userId = user.id;
+        rolesCache.roles = userRoles;
+
+        const allowed = allowedRoles.some((role) => userRoles.includes(role));
         setHasAccess(allowed);
         setChecking(false);
-        return;
+      } catch (e) {
+        console.error("RoleGuard: crash fetching roles", e);
+        if (!cancelled) {
+          setHasAccess(false);
+          setChecking(false);
+        }
       }
-
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id);
-
-      if (error) {
-        console.error("RoleGuard: error fetching roles", error);
-        setHasAccess(false);
-        setChecking(false);
-        return;
-      }
-
-      const userRoles = (data ?? []).map((r) => r.role);
-      rolesCache.userId = user.id;
-      rolesCache.roles = userRoles;
-
-      const allowed = allowedRoles.some((role) => userRoles.includes(role));
-      setHasAccess(allowed);
-      setChecking(false);
     };
 
     if (!loading) {
       checkRole();
+      // Safety: never stay invisible forever
+      const t = setTimeout(() => {
+        if (!cancelled) setChecking(false);
+      }, 5000);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
     }
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading, allowedRoles]);
 
   if (loading || checking) {
