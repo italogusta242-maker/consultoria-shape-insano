@@ -23,6 +23,7 @@ const MUSCLE_GROUPS = [
   "peito", "costas", "ombros", "bíceps", "tríceps",
   "quadríceps", "posteriores", "glúteos", "panturrilhas", "abdominais",
   "trapezio", "antebraços", "inferior-das-costas", "abdutores", "adutores", "pescoço",
+  "cardio",
 ];
 
 const capitalizeGroup = (g: string) => g.charAt(0).toUpperCase() + g.slice(1);
@@ -138,9 +139,12 @@ const EspecialistaExercicios = () => {
   const createMutation = useMutation({
     mutationFn: async (input: ExerciseForm) => {
       const videoId = input.video_url ? extractYouTubeId(input.video_url) : null;
+      const normalizedGroup = input.muscle_group.toLowerCase();
       const { error } = await supabase.from("exercise_library").insert({
         name: input.name,
         muscle_group: input.muscle_group,
+        // Marca categoria coerente com grupo (importante para "cardio" aparecer nos filtros)
+        category: normalizedGroup === "cardio" ? "cardio" : null,
         default_sets: parseInt(input.default_sets) || 3,
         default_reps: input.default_reps || "10",
         video_id: videoId,
@@ -163,9 +167,11 @@ const EspecialistaExercicios = () => {
   const updateMutation = useMutation({
     mutationFn: async ({ id, input }: { id: string; input: ExerciseForm }) => {
       const videoId = input.video_url ? extractYouTubeId(input.video_url) : null;
+      const normalizedGroup = input.muscle_group.toLowerCase();
       const { error } = await supabase.from("exercise_library").update({
         name: input.name,
         muscle_group: input.muscle_group,
+        category: normalizedGroup === "cardio" ? "cardio" : null,
         default_sets: parseInt(input.default_sets) || 3,
         default_reps: input.default_reps || "10",
         video_id: videoId,

@@ -37,10 +37,13 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onRestore: (version: Version) => void;
+  /** Optional: open the read-only preview modal (training plans only). */
+  onPreview?: (version: Version) => void;
 }
 
-export default function PlanVersionTimeline({ planId, type, open, onClose, onRestore }: Props) {
+export default function PlanVersionTimeline({ planId, type, open, onClose, onRestore, onPreview }: Props) {
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
+  const [confirmApply, setConfirmApply] = useState<Version | null>(null);
 
   const tableName = type === "training" ? "training_plan_versions" : "diet_plan_versions";
 
@@ -59,9 +62,10 @@ export default function PlanVersionTimeline({ planId, type, open, onClose, onRes
     enabled: open && !!planId,
   });
 
-  const handleRestore = (version: Version) => {
+  const handleApply = (version: Version) => {
     onRestore(version);
-    toast.success(`Versão ${version.version_number} restaurada!`);
+    toast.success(`Versão ${version.version_number} aplicada ao editor!`);
+    setConfirmApply(null);
     onClose();
   };
 
@@ -171,13 +175,25 @@ export default function PlanVersionTimeline({ planId, type, open, onClose, onRes
                             <div className="rounded-lg bg-background/50 border border-border p-3">
                               {type === "training" ? renderTrainingSummary(v) : renderDietSummary(v)}
                             </div>
-                            <Button
-                              size="sm"
-                              onClick={() => handleRestore(v)}
-                              className="w-full gap-1.5 gold-gradient text-[hsl(var(--obsidian))] font-medium"
-                            >
-                              <RotateCcw size={14} /> Restaurar esta versão
-                            </Button>
+                            <div className="flex gap-2">
+                              {type === "training" && onPreview && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => onPreview(v)}
+                                  className="flex-1 gap-1.5 border-border"
+                                >
+                                  <Eye size={14} /> Pré-visualizar
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => setConfirmApply(v)}
+                                className="flex-1 gap-1.5 gold-gradient text-[hsl(var(--obsidian))] font-medium"
+                              >
+                                <RotateCcw size={14} /> Aplicar
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -188,6 +204,35 @@ export default function PlanVersionTimeline({ planId, type, open, onClose, onRes
             </div>
           )}
         </ScrollArea>
+
+        {/* Confirmation dialog for Apply */}
+        {confirmApply && (
+          <Dialog open onOpenChange={(o) => !o && setConfirmApply(null)}>
+            <DialogContent className="max-w-sm bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="font-cinzel text-foreground text-base">
+                  Aplicar versão v{confirmApply.version_number}?
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground pt-2">
+                  Isso vai <strong className="text-foreground">substituir o plano atual no editor</strong> pelos dados desta versão.
+                  O plano atual não será perdido — ele continuará disponível no histórico assim que você salvar.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-2 justify-end mt-2">
+                <Button variant="outline" size="sm" onClick={() => setConfirmApply(null)} className="border-border">
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleApply(confirmApply)}
+                  className="gap-1.5 gold-gradient text-[hsl(var(--obsidian))] font-medium"
+                >
+                  <RotateCcw size={14} /> Aplicar mesmo assim
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </DialogContent>
     </Dialog>
   );

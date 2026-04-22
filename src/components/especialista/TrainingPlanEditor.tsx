@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Trash2, Save,
   GripVertical, FolderOpen, Dumbbell, Eye, FileText, History, Sparkles, Loader2, Upload,
+  Undo2, FilePlus2,
 } from "lucide-react";
 import RestTimePicker from "./RestTimePicker";
 import TrainingPreviewModal from "./TrainingPreviewModal";
@@ -92,6 +93,17 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
+  // Snapshot of the editor state when it was opened (or last "Novo do Zero").
+  // Used for the "Desfazer alterações" button to revert in-session edits.
+  const initialSnapshotRef = useRef<WorkoutDraft | null>(null);
+  const [snapshotVersion, setSnapshotVersion] = useState(0); // bumped to force re-render of "isDirty"
+
+  // Read-only preview of an OLD version (from history). Doesn't touch the draft.
+  const [versionPreview, setVersionPreview] = useState<{ groups: Group[]; title: string } | null>(null);
+
+  // Confirmation modal state for "Novo do Zero"
+  const [confirmNewBlank, setConfirmNewBlank] = useState(false);
+
   // Track which (studentId, planId) pair we have already synced from DB into
   // the Zustand draft, so that:
   //  - When the editor opens for a saved plan, we DO load the DB data
@@ -103,20 +115,28 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   useEffect(() => {
     if (!open || !selectedStudent) return;
 
+    const captureSnapshot = (d: WorkoutDraft) => {
+      // Deep clone so later edits to the draft don't mutate the snapshot.
+      initialSnapshotRef.current = JSON.parse(JSON.stringify(d));
+      setSnapshotVersion((v) => v + 1);
+    };
+
     if (editingPlan) {
       const key = `${selectedStudent}::${editingPlan.id}`;
       if (syncedKeyRef.current === key) return; // already synced this plan
 
       // Sync DB plan into the draft store. This intentionally overwrites
       // any prior draft (which would only be a stale empty/template state).
-      setDraft(selectedStudent, {
+      const seeded: WorkoutDraft = {
         title: editingPlan.title,
         totalSessions: editingPlan.total_sessions,
         groups: editingPlan.groups,
         avaliacaoPostural: editingPlan.avaliacao_postural || "",
         pontosMelhoria: editingPlan.pontos_melhoria || "",
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
-      });
+      };
+      setDraft(selectedStudent, seeded);
+      captureSnapshot(seeded);
       syncedKeyRef.current = key;
       return;
     }
@@ -127,26 +147,64 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
 
     const existing = getDraft(selectedStudent);
     if (existing && existing.groups.length > 0) {
+      captureSnapshot(existing);
       syncedKeyRef.current = newKey;
       return;
     }
 
-    setDraft(selectedStudent, {
+    const seeded: WorkoutDraft = {
       title: "Plano Personalizado",
       totalSessions: 50,
       groups: [{ name: "A - Treino A", exercises: [] }],
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
-    });
+    };
+    setDraft(selectedStudent, seeded);
+    captureSnapshot(seeded);
     syncedKeyRef.current = newKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedStudent, editingPlan?.id]);
 
   // Reset sync tracking when the editor closes so reopening re-syncs from DB.
   useEffect(() => {
-    if (!open) syncedKeyRef.current = null;
+    if (!open) {
+      syncedKeyRef.current = null;
+      initialSnapshotRef.current = null;
+    }
   }, [open]);
+
+  // Compare current draft to snapshot — used to enable "Desfazer alterações".
+  const isDirty = useMemo(() => {
+    const snap = initialSnapshotRef.current;
+    if (!snap || !draft) return false;
+    return JSON.stringify(snap) !== JSON.stringify(draft);
+    // snapshotVersion forces recompute when snapshot is replaced
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, snapshotVersion]);
+
+  const resetToBlank = () => {
+    if (!selectedStudent) return;
+    const blank: WorkoutDraft = {
+      title: "Plano Personalizado",
+      totalSessions: 50,
+      groups: [{ name: "A - Treino A", exercises: [] }],
+      avaliacaoPostural: "",
+      pontosMelhoria: "",
+      objetivoMesociclo: "",
+    };
+    setDraft(selectedStudent, blank);
+    initialSnapshotRef.current = JSON.parse(JSON.stringify(blank));
+    setSnapshotVersion((v) => v + 1);
+    setConfirmNewBlank(false);
+    toast.success("Treino em branco. Comece do zero!");
+  };
+
+  const undoChanges = () => {
+    if (!selectedStudent || !initialSnapshotRef.current) return;
+    setDraft(selectedStudent, JSON.parse(JSON.stringify(initialSnapshotRef.current)));
+    toast.success("Alterações desfeitas — voltou ao estado inicial");
+  };
 
 
   const generateWithAI = async () => {
@@ -630,6 +688,15 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
+              onClick={() => setConfirmNewBlank(true)}
+              disabled={!selectedStudent}
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              title="Começar um plano em branco"
+            >
+              <FilePlus2 size={14} /> Novo do Zero
+            </Button>
+            <Button
+              size="sm"
               onClick={generateWithAI}
               disabled={aiGenerating || !selectedStudent}
               className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
@@ -879,9 +946,18 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       </ScrollArea>
 
       {/* Footer */}
-      <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2", embedded && "border-border")}>
+      <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2 flex-wrap", embedded && "border-border")}>
         <Button variant="outline" onClick={onClose} className="border-[hsl(var(--glass-border))]">
           Cancelar
+        </Button>
+        <Button
+          variant="outline"
+          onClick={undoChanges}
+          disabled={!isDirty}
+          className="border-[hsl(var(--glass-border))] gap-1.5"
+          title="Voltar para o estado de quando o editor foi aberto"
+        >
+          <Undo2 size={14} /> Desfazer alterações
         </Button>
         <Button
           onClick={() => saveMutation.mutate()}
@@ -932,6 +1008,12 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           type="training"
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
+          onPreview={(v) => {
+            setVersionPreview({
+              groups: (v.groups as Group[]) ?? [],
+              title: v.title || `Versão v${v.version_number}`,
+            });
+          }}
           onRestore={(v) => {
             if (v.groups) setGroups(v.groups as Group[]);
             if (v.total_sessions) setTotalSessions(v.total_sessions);
@@ -941,6 +1023,39 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             setObjetivoMesociclo(v.objetivo_mesociclo || "");
           }}
         />
+        {/* Read-only preview of an OLD version (does NOT touch the draft) */}
+        <TrainingPreviewModal
+          open={!!versionPreview}
+          onClose={() => setVersionPreview(null)}
+          groups={versionPreview?.groups ?? []}
+          studentName={students.find(s => s.id === selectedStudent)?.name ?? ""}
+          title={versionPreview?.title ?? ""}
+          gifMap={gifMap}
+        />
+        {/* Confirm "Novo do Zero" */}
+        <Dialog open={confirmNewBlank} onOpenChange={(o) => !o && setConfirmNewBlank(false)}>
+          <DialogContent className="bg-card border-border max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="font-cinzel text-base">Começar do zero?</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">
+              Isso vai descartar o plano atual no editor e começar em branco.
+              Você ainda pode usar <strong className="text-foreground">Desfazer alterações</strong> no rodapé para voltar.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirmNewBlank(false)} className="border-border">
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={resetToBlank}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              >
+                <FilePlus2 size={14} /> Sim, começar em branco
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -991,6 +1106,12 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         type="training"
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
+        onPreview={(v) => {
+          setVersionPreview({
+            groups: (v.groups as Group[]) ?? [],
+            title: v.title || `Versão v${v.version_number}`,
+          });
+        }}
         onRestore={(v) => {
           if (v.groups) setGroups(v.groups as Group[]);
           if (v.total_sessions) setTotalSessions(v.total_sessions);
@@ -1000,6 +1121,41 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           setObjetivoMesociclo(v.objetivo_mesociclo || "");
         }}
       />
+
+      {/* Read-only preview of an OLD version (does NOT touch the draft) */}
+      <TrainingPreviewModal
+        open={!!versionPreview}
+        onClose={() => setVersionPreview(null)}
+        groups={versionPreview?.groups ?? []}
+        studentName={students.find(s => s.id === selectedStudent)?.name ?? ""}
+        title={versionPreview?.title ?? ""}
+        gifMap={gifMap}
+      />
+
+      {/* Confirm "Novo do Zero" */}
+      <Dialog open={confirmNewBlank} onOpenChange={(o) => !o && setConfirmNewBlank(false)}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-cinzel text-base">Começar do zero?</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Isso vai descartar o plano atual no editor e começar em branco.
+            Você ainda pode usar <strong className="text-foreground">Desfazer alterações</strong> no rodapé para voltar.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setConfirmNewBlank(false)} className="border-border">
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={resetToBlank}
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+            >
+              <FilePlus2 size={14} /> Sim, começar em branco
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dislike Reason Modal */}
       <Dialog open={dislikeModalOpen} onOpenChange={setDislikeModalOpen}>
