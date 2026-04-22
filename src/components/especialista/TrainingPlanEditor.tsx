@@ -946,9 +946,18 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       </ScrollArea>
 
       {/* Footer */}
-      <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2", embedded && "border-border")}>
+      <div className={cn("p-4 border-t border-[hsl(var(--glass-border))] flex justify-end gap-2 flex-wrap", embedded && "border-border")}>
         <Button variant="outline" onClick={onClose} className="border-[hsl(var(--glass-border))]">
           Cancelar
+        </Button>
+        <Button
+          variant="outline"
+          onClick={undoChanges}
+          disabled={!isDirty}
+          className="border-[hsl(var(--glass-border))] gap-1.5"
+          title="Voltar para o estado de quando o editor foi aberto"
+        >
+          <Undo2 size={14} /> Desfazer alterações
         </Button>
         <Button
           onClick={() => saveMutation.mutate()}
