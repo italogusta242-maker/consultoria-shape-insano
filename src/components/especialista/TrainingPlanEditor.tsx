@@ -92,6 +92,17 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [aiLogId, setAiLogId] = useState<string | null>(null);
   const [aiFeedbackGiven, setAiFeedbackGiven] = useState<string | null>(null);
 
+  // Snapshot of the editor state when it was opened (or last "Novo do Zero").
+  // Used for the "Desfazer alterações" button to revert in-session edits.
+  const initialSnapshotRef = useRef<WorkoutDraft | null>(null);
+  const [snapshotVersion, setSnapshotVersion] = useState(0); // bumped to force re-render of "isDirty"
+
+  // Read-only preview of an OLD version (from history). Doesn't touch the draft.
+  const [versionPreview, setVersionPreview] = useState<{ groups: Group[]; title: string } | null>(null);
+
+  // Confirmation modal state for "Novo do Zero"
+  const [confirmNewBlank, setConfirmNewBlank] = useState(false);
+
   // Track which (studentId, planId) pair we have already synced from DB into
   // the Zustand draft, so that:
   //  - When the editor opens for a saved plan, we DO load the DB data
