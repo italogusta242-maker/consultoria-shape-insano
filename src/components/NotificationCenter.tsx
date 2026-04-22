@@ -169,13 +169,26 @@ const NotificationCenter = () => {
                   )}
                   onClick={() => {
                     if (!n.read) markOneRead.mutate(n.id);
-                    // Navigate to conversation if chat notification
-                    if (n.type === "chat" && n.metadata) {
-                      const meta = n.metadata as any;
-                      if (meta.conversation_id) {
-                        setOpen(false);
-                        navigate(`/chat/${meta.conversation_id}`);
+                    const meta = (n.metadata ?? {}) as any;
+
+                    // Route based on notification type
+                    if (n.type === "chat" && meta.conversation_id) {
+                      setOpen(false);
+                      navigate(`/chat/${meta.conversation_id}`);
+                    } else if (n.type === "anamnese_request") {
+                      setOpen(false);
+                      navigate("/reavaliacao");
+                    } else if (n.type === "plan" || n.type === "new_plan") {
+                      setOpen(false);
+                      const planType = meta.plan_type;
+                      if (planType === "dieta") {
+                        navigate("/dieta");
+                      } else {
+                        navigate("/treinos");
                       }
+                    } else if (n.type === "stale_plan") {
+                      setOpen(false);
+                      navigate("/treinos");
                     }
                   }}
                 >
