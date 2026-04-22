@@ -34,6 +34,7 @@ const MUSCLE_GROUPS = [
   "peito", "costas", "ombros", "bíceps", "tríceps",
   "quadríceps", "posteriores", "glúteos", "panturrilhas", "abdominais",
   "trapezio", "antebraços", "inferior-das-costas", "abdutores", "adutores", "pescoço",
+  "cardio",
 ];
 
 const capitalizeGroup = (g: string) => g.charAt(0).toUpperCase() + g.slice(1);
@@ -103,8 +104,14 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
     const hasSearch = search.trim().length >= 2;
     const searchLower = search.toLowerCase().trim();
     const results = (exercises ?? []).filter((e) => {
+      const exGroup = normalizeGroup((e.muscle_group ?? "").toString());
+      const exCategory = normalizeGroup((e.category ?? "").toString());
+      const targetGroup = normalizeGroup(selectedGroup);
       const matchGroup =
-        !selectedGroup || normalizeGroup((e.muscle_group ?? "").toString()) === normalizeGroup(selectedGroup);
+        !selectedGroup ||
+        exGroup === targetGroup ||
+        // Cardio fallback: also include items tagged as category=cardio even if muscle_group ainda não foi migrado
+        (targetGroup === "cardio" && exCategory === "cardio");
       const matchSearch = !hasSearch || e.name.toLowerCase().includes(searchLower);
       const matchEquipment = !equipmentFilter || (e.equipment ?? "").toLowerCase().includes(equipmentFilter.toLowerCase());
       const matchLevel = !levelFilter || (e.level ?? "").toLowerCase().includes(levelFilter.toLowerCase());
@@ -140,6 +147,8 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
       const { error } = await supabase.from("exercise_library").insert({
         name: newName.trim(),
         muscle_group: newMuscleGroup,
+        // Sempre marcar a categoria coerente com o grupo (importante para "cardio")
+        category: newMuscleGroup === "cardio" ? "cardio" : null,
         default_sets: newSets,
         default_reps: newReps,
         video_id: videoId,
