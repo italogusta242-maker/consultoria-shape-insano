@@ -1008,6 +1008,12 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           type="training"
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
+          onPreview={(v) => {
+            setVersionPreview({
+              groups: (v.groups as Group[]) ?? [],
+              title: v.title || `Versão v${v.version_number}`,
+            });
+          }}
           onRestore={(v) => {
             if (v.groups) setGroups(v.groups as Group[]);
             if (v.total_sessions) setTotalSessions(v.total_sessions);
@@ -1017,6 +1023,39 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             setObjetivoMesociclo(v.objetivo_mesociclo || "");
           }}
         />
+        {/* Read-only preview of an OLD version (does NOT touch the draft) */}
+        <TrainingPreviewModal
+          open={!!versionPreview}
+          onClose={() => setVersionPreview(null)}
+          groups={versionPreview?.groups ?? []}
+          studentName={students.find(s => s.id === selectedStudent)?.name ?? ""}
+          title={versionPreview?.title ?? ""}
+          gifMap={gifMap}
+        />
+        {/* Confirm "Novo do Zero" */}
+        <Dialog open={confirmNewBlank} onOpenChange={(o) => !o && setConfirmNewBlank(false)}>
+          <DialogContent className="bg-card border-border max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="font-cinzel text-base">Começar do zero?</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">
+              Isso vai descartar o plano atual no editor e começar em branco.
+              Você ainda pode usar <strong className="text-foreground">Desfazer alterações</strong> no rodapé para voltar.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirmNewBlank(false)} className="border-border">
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={resetToBlank}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              >
+                <FilePlus2 size={14} /> Sim, começar em branco
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
