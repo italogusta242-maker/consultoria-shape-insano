@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Trash2, Save,
   GripVertical, FolderOpen, Dumbbell, Eye, FileText, History, Sparkles, Loader2, Upload,
+  Undo2, FilePlus2,
 } from "lucide-react";
 import RestTimePicker from "./RestTimePicker";
 import TrainingPreviewModal from "./TrainingPreviewModal";
@@ -114,20 +115,28 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   useEffect(() => {
     if (!open || !selectedStudent) return;
 
+    const captureSnapshot = (d: WorkoutDraft) => {
+      // Deep clone so later edits to the draft don't mutate the snapshot.
+      initialSnapshotRef.current = JSON.parse(JSON.stringify(d));
+      setSnapshotVersion((v) => v + 1);
+    };
+
     if (editingPlan) {
       const key = `${selectedStudent}::${editingPlan.id}`;
       if (syncedKeyRef.current === key) return; // already synced this plan
 
       // Sync DB plan into the draft store. This intentionally overwrites
       // any prior draft (which would only be a stale empty/template state).
-      setDraft(selectedStudent, {
+      const seeded: WorkoutDraft = {
         title: editingPlan.title,
         totalSessions: editingPlan.total_sessions,
         groups: editingPlan.groups,
         avaliacaoPostural: editingPlan.avaliacao_postural || "",
         pontosMelhoria: editingPlan.pontos_melhoria || "",
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
-      });
+      };
+      setDraft(selectedStudent, seeded);
+      captureSnapshot(seeded);
       syncedKeyRef.current = key;
       return;
     }
@@ -138,26 +147,64 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
 
     const existing = getDraft(selectedStudent);
     if (existing && existing.groups.length > 0) {
+      captureSnapshot(existing);
       syncedKeyRef.current = newKey;
       return;
     }
 
-    setDraft(selectedStudent, {
+    const seeded: WorkoutDraft = {
       title: "Plano Personalizado",
       totalSessions: 50,
       groups: [{ name: "A - Treino A", exercises: [] }],
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
-    });
+    };
+    setDraft(selectedStudent, seeded);
+    captureSnapshot(seeded);
     syncedKeyRef.current = newKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, selectedStudent, editingPlan?.id]);
 
   // Reset sync tracking when the editor closes so reopening re-syncs from DB.
   useEffect(() => {
-    if (!open) syncedKeyRef.current = null;
+    if (!open) {
+      syncedKeyRef.current = null;
+      initialSnapshotRef.current = null;
+    }
   }, [open]);
+
+  // Compare current draft to snapshot — used to enable "Desfazer alterações".
+  const isDirty = useMemo(() => {
+    const snap = initialSnapshotRef.current;
+    if (!snap || !draft) return false;
+    return JSON.stringify(snap) !== JSON.stringify(draft);
+    // snapshotVersion forces recompute when snapshot is replaced
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, snapshotVersion]);
+
+  const resetToBlank = () => {
+    if (!selectedStudent) return;
+    const blank: WorkoutDraft = {
+      title: "Plano Personalizado",
+      totalSessions: 50,
+      groups: [{ name: "A - Treino A", exercises: [] }],
+      avaliacaoPostural: "",
+      pontosMelhoria: "",
+      objetivoMesociclo: "",
+    };
+    setDraft(selectedStudent, blank);
+    initialSnapshotRef.current = JSON.parse(JSON.stringify(blank));
+    setSnapshotVersion((v) => v + 1);
+    setConfirmNewBlank(false);
+    toast.success("Treino em branco. Comece do zero!");
+  };
+
+  const undoChanges = () => {
+    if (!selectedStudent || !initialSnapshotRef.current) return;
+    setDraft(selectedStudent, JSON.parse(JSON.stringify(initialSnapshotRef.current)));
+    toast.success("Alterações desfeitas — voltou ao estado inicial");
+  };
 
 
   const generateWithAI = async () => {
