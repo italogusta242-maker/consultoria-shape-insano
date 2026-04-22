@@ -688,6 +688,15 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
+              onClick={() => setConfirmNewBlank(true)}
+              disabled={!selectedStudent}
+              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+              title="Começar um plano em branco"
+            >
+              <FilePlus2 size={14} /> Novo do Zero
+            </Button>
+            <Button
+              size="sm"
               onClick={generateWithAI}
               disabled={aiGenerating || !selectedStudent}
               className="gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-0"
