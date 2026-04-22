@@ -1,68 +1,54 @@
 
-Objetivo: corrigir o “carregando sem parar / não loga” que está afetando todos os usuários, atacando o fluxo global de bootstrap da autenticação e eliminando pontos onde a app pode ficar presa sem fallback.
 
-Diagnóstico mais provável a partir do código:
-- O splash global vem de `App.tsx` quando `useAuth().loading` fica `true`.
-- Em `src/contexts/AuthContext.tsx`, o loading só termina depois de `fetchOnboarded()` e `checkRoleAndRedirect()`.
-- Essas chamadas assíncronas não estão protegidas com `try/catch/finally`. Se uma delas falhar, travar, ou rejeitar, o app pode ficar preso para sempre no splash.
-- Há um agravante: quando existe sessão (`hasSession = true`), o timeout de segurança de 3s deixa de destravar o app. Ou seja: basta existir sessão + falha em query para congelar indefinidamente.
-- Nos guards (`RoleGuard` e `StudentGuard`), quando a checagem demora/falha eles retornam `null`, o que pode virar tela vazia para áreas protegidas.
-- Como o projeto é PWA e já teve problema estrutural de build/cache, usuários podem continuar vendo um bundle antigo que mantém esse comportamento.
+## Dois bugs distintos identificados
 
-Plano de implementação:
-1. Blindar o bootstrap do `AuthContext`
-- Envolver `fetchOnboarded` + `checkRoleAndRedirect` em `try/catch/finally`.
-- Garantir `setLoading(false)` sempre, mesmo com erro.
-- Separar “resolver sessão” de “buscar dados auxiliares”, para a app não depender dessas queries para sair do splash.
-- Adicionar timeout real também para sessão existente, não só para “sem sessão”.
+### Bug 1 — Fotos da reavaliação não aparecem para o especialista (afeta TODOS desde 14/abr)
 
-2. Tornar `fetchOnboarded` e redirecionamento fail-safe
-- `fetchOnboarded`: se falhar, assumir `false` e seguir.
-- `checkRoleAndRedirect`: se falhar, não bloquear a renderização; apenas registrar erro e continuar na rota atual.
-- Evitar `setTimeout(async () => ...)` sem proteção, porque rejeições ali escapam fácil.
+**Confirmado no banco:** todas as 6 reavaliações enviadas a partir de 14/abr têm os campos `foto_frente`, `foto_costas`, `foto_lado_direito`, `foto_lado_esquerdo`, `foto_perfil_lado` como `NULL`.
 
-3. Melhorar guards para não virarem tela vazia
-- Em `RoleGuard` e `StudentGuard`, trocar `return null` por um fallback visível e temporizado.
-- Se a consulta de roles falhar, redirecionar ou mostrar estado de erro controlado, em vez de ficar invisível.
+**Confirmado no storage:** os arquivos das fotos **estão lá**, no caminho correto: `anamnese-photos/{user_id}/monthly/{assessment_id}/frente.jpg` etc. Ou seja, o upload funciona, o que falha é o `UPDATE` que grava a URL pública nas colunas da `monthly_assessments` depois do upload.
 
-4. Revisar o fluxo de login
-- No `signIn`, impedir que `postLoginLoading` sustente a splash por tempo desnecessário.
-- Fazer o pós-login depender da resolução real do bootstrap, não de timer fixo.
-- Garantir que erro de login sempre remova qualquer estado pendente.
+**Causa:** o fluxo em `src/lib/submitMonthlyAssessment.ts` faz primeiro `INSERT` da reavaliação, depois sobe as fotos, depois faz `UPDATE` das colunas `foto_*` com as URLs. Esse `UPDATE` está silenciosamente falhando (provavelmente por sessão expirando entre as etapas, especialmente em mobile lento), e o código apenas loga o erro sem tentar de novo nem registrar nada visível ao usuário.
 
-5. Validar o caminho PWA/cache junto com essa correção
-- Conferir se o fluxo atual de versionamento/purge continua ativo para produção.
-- Se necessário, reforçar o “fail-open” para usuários presos em build antigo: ao detectar mismatch, limpar cache/SW e recarregar sem depender do bootstrap auth.
+**Correção:**
+1. Em `submitMonthlyAssessment.ts`, em vez de `INSERT` vazio + `UPDATE` no fim, mudar para:
+   - Subir todas as fotos primeiro (gerando URLs).
+   - Fazer um único `INSERT` já com todas as colunas `foto_*` preenchidas.
+   - Manter o rollback caso TODOS os uploads falhem.
+2. Refrescar a sessão (`refreshSession`) também imediatamente antes do INSERT, não só no início.
+3. Logar erro do INSERT/UPDATE de forma visível (toast) em vez de só `console.error`.
 
-Arquivos principais a ajustar:
-- `src/contexts/AuthContext.tsx`
-- `src/components/RoleGuard.tsx`
-- `src/components/StudentGuard.tsx`
-- possivelmente `src/App.tsx` para um fallback global mais resiliente
-- revisar também `src/hooks/useSilentUpdate.ts` e `src/lib/pwaCache.ts` só para confirmar que o mecanismo de recuperação de cache não está regressando
+**Recuperação dos dados existentes:** as fotos das 6 reavaliações órfãs ainda estão no bucket. Vou rodar uma migração de dados (script único) que percorre cada `monthly_assessment` recente sem fotos, lista os arquivos em `anamnese-photos/{user_id}/monthly/{assessment_id}/` e preenche os campos `foto_*` com as URLs públicas. Isso vai restaurar as fotos para o especialista sem precisar pedir nada aos alunos.
 
-Resultado esperado:
-- mesmo que backend/roles/profile falhem, o app não fica mais preso em “Carregando...”
-- login passa a falhar de forma explícita ou entrar normalmente
-- áreas protegidas deixam de ficar em branco
-- usuários presos em bundle antigo têm caminho automático/manual de recuperação
+### Bug 2 — Nicolas Rocha não consegue abrir a reavaliação
 
-Detalhes técnicos:
-- O bug central é de “bootstrap blocking”: hoje a UI depende de queries secundárias para sair do estado inicial.
-- A correção deve transformar o fluxo em “auth first, enrichment later”:
-```text
-resolver sessão
-  -> liberar app
-  -> buscar perfil/roles em paralelo
-  -> redirecionar se necessário
-  -> se falhar, seguir com fallback seguro
-```
-- Isso reduz o risco de travamento global e combina com o histórico recente de problemas de cache/deploy.
+**Causa:** o `NotificationCenter` (sino) só faz navegação para notificações de `type === "chat"`. Para `type === "anamnese_request"` ele apenas marca como lida e fica parado — nenhum redirecionamento. Como o `next_anamnese_due` do Nicolas é 26/abr (futuro), o banner amarelo "PREENCHER AGORA" também não aparece pra ele. Resultado: ele vê a notificação na sininha, clica, e nada acontece.
 
-Depois de implementar:
-- testar login sem sessão
-- testar login com sessão persistida
-- testar usuário aluno
-- testar usuário especialista/admin
-- testar com falha simulada em `profiles` / `user_roles`
-- validar no publicado e no PWA instalado, para garantir que não existe mais loop de carregamento
+Isso afeta qualquer aluno cuja anamnese foi solicitada manualmente pelo especialista (sem ter atingido a data de vencimento automática).
+
+**Correção em `src/components/NotificationCenter.tsx`:**
+- Adicionar roteamento por tipo:
+  - `anamnese_request` → fecha o sheet e navega para `/reavaliacao`.
+  - `plan` / `new_plan` → navega para `/treinos` ou `/dieta` conforme `metadata.plan_type`.
+  - mantém o `chat` atual.
+- Isso já é o comportamento documentado em memória (`mem://features/notifications/routing`) e estava regredido.
+
+**Reforço opcional, mas recomendado:** quando o especialista solicitar anamnese manualmente em `EspecialistaAlunos.tsx`, além de criar a notificação, também atualizar `profiles.next_anamnese_due` para a data de hoje, para que o banner amarelo grande também apareça para o aluno (caminho redundante, à prova de erro).
+
+### Arquivos afetados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/lib/submitMonthlyAssessment.ts` | Subir fotos antes do INSERT; INSERT único com URLs; refresh de sessão; toast em erro |
+| `src/components/NotificationCenter.tsx` | Roteamento por tipo (anamnese_request → /reavaliacao, plan → /treinos|/dieta) |
+| `src/pages/especialista/EspecialistaAlunos.tsx` | Ao solicitar anamnese, também setar `next_anamnese_due = hoje` |
+| Script único de recuperação | Repreenche `foto_*` das reavaliações órfãs a partir do storage |
+
+Sem mudanças de schema. Sem mudanças de RLS.
+
+### Validação após implementar
+
+- Aluno abre `/reavaliacao` pela notificação → carrega.
+- Aluno envia reavaliação com 5 fotos → no especialista as 5 fotos aparecem imediatamente.
+- Reavaliações já enviadas desde 14/abr passam a mostrar as fotos no portal do especialista após o script de recuperação.
+
