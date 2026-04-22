@@ -954,6 +954,14 @@ const EspecialistaAlunos = () => {
         metadata: { requested_by: user?.id },
       });
       if (error) throw error;
+
+      // Also set next_anamnese_due to today so the dashboard banner appears
+      // (redundant fallback in case the student doesn't click the bell notification)
+      const today = new Date().toISOString().split("T")[0];
+      await supabase
+        .from("profiles")
+        .update({ next_anamnese_due: today })
+        .eq("id", studentId);
     },
     onSuccess: (_, { studentName }) => toast.success(`Anamnese solicitada para ${studentName}`),
     onError: () => toast.error("Erro ao solicitar anamnese"),
