@@ -209,7 +209,45 @@ function calcIMC(peso?: string | null, altura?: string | null): string {
   return (p / (a * a)).toFixed(1);
 }
 
-async function urlToImageData(url: string): Promise<{ data: string; w: number; h: number } | null> {
+/**
+ * Detect "all-black" / single-color JPEGs that come from failed HEIC decodes
+ * on the student's device. Returns true if the image is monochrome (broken).
+ */
+function isMonochromeImage(dataUrl: string, w: number, h: number): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    const tempImg = new Image();
+    tempImg.src = dataUrl;
+    // Image is already loaded (we just measured it); draw synchronously.
+    ctx.drawImage(tempImg, 0, 0, w, h);
+    const samples = 24;
+    const stepX = Math.max(1, Math.floor(w / samples));
+    const stepY = Math.max(1, Math.floor(h / samples));
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let firstR = -1, firstG = -1, firstB = -1;
+    for (let y = 0; y < h; y += stepY) {
+      for (let x = 0; x < w; x += stepX) {
+        const i = (y * w + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (firstR === -1) { firstR = r; firstG = g; firstB = b; continue; }
+        if (Math.abs(r - firstR) > 6 || Math.abs(g - firstG) > 6 || Math.abs(b - firstB) > 6) {
+          return false;
+        }
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function urlToImageData(
+  url: string
+): Promise<{ data: string; w: number; h: number; broken?: boolean } | null> {
   try {
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) return null;
@@ -227,7 +265,8 @@ async function urlToImageData(url: string): Promise<{ data: string; w: number; h
       img.src = dataUrl;
     });
     if (dims.w === 0 || dims.h === 0) return null;
-    return { data: dataUrl, w: dims.w, h: dims.h };
+    const broken = isMonochromeImage(dataUrl, dims.w, dims.h);
+    return { data: dataUrl, w: dims.w, h: dims.h, broken };
   } catch {
     return null;
   }
