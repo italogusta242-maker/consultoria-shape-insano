@@ -1617,6 +1617,7 @@ const Treinos = () => {
               updated[setPickerData.exIdx].setsData[setPickerData.setIdx].actualReps = reps;
               updated[setPickerData.exIdx].setsData[setPickerData.setIdx].weight = weight;
               setExercises(updated);
+              persistExercisesNow(updated);
               setSetPickerData(null);
             }}
           />
