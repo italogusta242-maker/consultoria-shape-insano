@@ -457,7 +457,7 @@ const Treinos = () => {
 
   // Timer computed from startedAt (survives tab changes)
   const [timer, setTimer] = useState(() => {
-    if (persisted?.startedAt) {
+    if (persistedBelongsToUser && persisted?.startedAt) {
       return Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000);
     }
     return 0;
