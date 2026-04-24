@@ -108,6 +108,7 @@ export async function submitMonthlyAssessment(
     ];
 
     const photoUpdates: Record<string, string> = {};
+    const failedLabels: string[] = [];
     const photosToUpload = photoFields.filter(({ key }) => formData[key] instanceof File);
 
     const uploads = photosToUpload.map(async ({ key, label, column }) => {
@@ -115,6 +116,8 @@ export async function submitMonthlyAssessment(
       if (url) {
         photoUpdates[column] = url;
         console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${url}`);
+      } else {
+        failedLabels.push(label);
       }
     });
 
@@ -124,6 +127,11 @@ export async function submitMonthlyAssessment(
     if (photosToUpload.length > 0 && Object.keys(photoUpdates).length === 0) {
       console.error("[submitMonthlyAssessment] ALL photo uploads failed");
       throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
+    }
+
+    // Warn if some failed
+    if (failedLabels.length > 0) {
+      console.warn(`[submitMonthlyAssessment] Some photos failed: ${failedLabels.join(", ")}`);
     }
 
     // 2. Refresh session AGAIN right before INSERT (in case uploads took long)
