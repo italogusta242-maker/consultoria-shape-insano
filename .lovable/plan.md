@@ -1,58 +1,62 @@
-## Problema
+## Diagnóstico Real (não é o que parecia)
 
-O usuário relata "Dupla Anamnese" — dois cards/entradas aparecendo ao mesmo tempo para a mesma anamnese. Após investigação, identifiquei **três fontes de duplicação distintas**, todas com o mesmo padrão raiz: lógicas independentes que disparam em paralelo sem uma "fonte única da verdade".
+Antes de implementar, fui ver o estado atual:
 
-### 1. Timeline de Fotos (o caso do print)
+- **Bucket `anamnese-photos` está PÚBLICO** (`public = true`) ✅
+- **Políticas SELECT do Storage permitem qualquer autenticado lê-las** ✅
+- **`getPublicUrl` retorna URLs públicas que não dependem de RLS** ✅
 
-Em `src/lib/photoTimeline.ts`, a função `buildPhotoTimeline` lista **um item separado por registro** na tabela `anamnese`. Como o aluno do print tem 2 registros (24/abril vazio + 26/fevereiro com fotos), aparecem dois cards rotulados igual: "Anamnese". Pior: o de 24/abril mostra **4 quadrados pretos** porque entradas com URL "vazia mas truthy" ou storage inacessível ainda passam o filtro.
-
-### 2. Alertas Proativos do Especialista
-
-Em `src/hooks/useProactiveAlerts.ts`, o mesmo aluno pode gerar até 3 alertas paralelos sobre reavaliação:
-- `assessment_overdue` (baseado em "30 dias desde a anamnese inicial")
-- `monthly_pending` (baseado em `next_anamnese_due` vencido)
-- `monthly_awaiting_review` (assessment já enviado, aguardando análise)
-
-### 3. Banner do Dashboard do Aluno
-
-Já está unificado (existe só `AnamneseRequestAlert`, comentário "MonthlyAnamnesisBanner removed — unified"), mas vou adicionar uma trava de segurança para garantir que não "ressuscite".
-
-## O que fazer
-
-### A. Timeline de Fotos — Single Source of Truth por data
-
-Refatorar `buildPhotoTimeline` para:
-
-1. **Deduplicar por dia**: agrupar todas as fotos do mesmo dia (anamnese + reavaliação) em UMA entrada de timeline. Se o dia tem reavaliação, o rótulo passa a ser "Reavaliação"; senão "Anamnese".
-2. **Filtrar entradas vazias**: descartar registros de anamnese sem nenhuma foto realmente carregável (URL não vazia, não claramente quebrada). Eliminar os "quadrados pretos" do print.
-3. **Marcar a entrada inicial**: a primeira anamnese histórica ganha um badge "Anamnese Inicial" para diferenciá-la das mensais.
-
-### B. Alertas do Especialista — Prioridade única por aluno
-
-Refatorar a seção "Monthly assessment" em `useProactiveAlerts.ts` para que cada aluno gere **no máximo 1 alerta de reavaliação por vez**, na seguinte ordem de prioridade:
+Ou seja, **NÃO É um problema de RLS/bucket privado**. As fotos pretas têm outra causa que descobri checando o banco:
 
 ```text
-Prioridade 1: monthly_awaiting_review  (atleta cumpriu, especialista precisa revisar)
-Prioridade 2: monthly_pending          (atleta atrasou — next_anamnese_due vencido)
-Prioridade 3: assessment_overdue       (legado: nunca preencheu nenhuma)
+55e04e2d-186b-4e07-8ee5-5e25cb2b809e | 2026-04-24 | foto_frente: NULL
+17eb749d-1ad4-4231-bc94-bcb1bf95ee02 | 2026-04-24 | foto_frente: NULL
+191924d3-7e28-4a37-b30a-d8d05b204438 | 2026-04-23 | foto_frente: NULL
 ```
 
-Se o aluno cai na Prioridade 1, os outros dois alertas não são gerados. Isso elimina o "card duplicado" no painel do especialista.
+A causa raiz das "fotos pretas" são **registros `monthly_assessments` salvos sem URLs**, ou então arquivos no Storage que existem mas estão corrompidos/vazios (uploads que falharam silenciosamente). O código de upload (`submitMonthlyAssessment.ts`) já tem retry, mas alguns ainda escapam. E quando a foto chega como string vazia ou arquivo quebrado, o `<img>` renderiza um quadrado preto **sem disparar `onError`**, então o `SafeImage` não detecta a falha.
 
-### C. Dashboard do Aluno — Trava de unicidade
+(Boa notícia: a refatoração que fiz na resposta anterior ao `photoTimeline.ts` já filtra entradas inválidas — então o problema dos "quadrados pretos" do print **já foi resolvido em parte**. Mas vou completar o blindamento.)
 
-Em `AnamneseRequestAlert.tsx`, adicionar uma flag `data-anamnese-alert="single"` no elemento raiz e um `useEffect` que detecta se mais de um alerta está montado simultaneamente (defensivo contra regressões futuras). Se detectar, loga warning e renderiza apenas um.
+## O Plano
 
-## Arquivos a modificar
+### A. Endurecer detecção de fotos quebradas
 
-- `src/lib/photoTimeline.ts` — agrupamento por dia + filtro de fotos válidas + flag "inicial"
-- `src/components/especialista/StudentPhotosPanel.tsx` — exibir badge "Anamnese Inicial" e ajustar contagem na timeline modal
-- `src/pages/MinhaEvolucao.tsx` — mesma melhoria visual da timeline
-- `src/hooks/useProactiveAlerts.ts` — prioridade única para alertas de reavaliação
-- `src/components/AnamneseRequestAlert.tsx` — trava defensiva de instância única
+1. **`SafeImage`**: adicionar detecção pós-load via `naturalWidth === 0` (captura imagens "0x0" / corrompidas que não disparam `onError`). Já mostra fallback "Indisponível".
+2. **`monthly_assessments` sanitization**: na hora de ler do banco (no editor do especialista e no `photoTimeline`), validar URLs antes de exibir — se vazia/quebrada, ocultar o quadrado completamente em vez de renderizar caixa preta.
+3. **Limpeza retroativa (opcional, comentado no código)**: incluir migration que zere `foto_*` para strings vazias (NULL). Não roda automaticamente; documentado para o admin executar se quiser.
+
+### B. Botão "Exportar Anamnese em PDF"
+
+Adicionar um botão **"Exportar PDF"** no header da tela `EspecialistaAnamneseSplit` (tela completa de anamnese do aluno).
+
+**Implementação técnica (não-print, profissional):**
+
+- **Sem `html2canvas`** — geração de bitmap fica feia em A4 e não é selecionável/copiável.
+- Usar **`jspdf` + `jspdf-autotable`** (libs leves, sem dependências pesadas) para gerar PDF nativo com texto vetorial:
+  - Cabeçalho: logo Shape Insano, nome do aluno, data, especialista
+  - Seções estruturadas (Objetivo & Treino, Academia, Saúde, Nutricional, Estilo de Vida) — mesmas que aparecem na tela
+  - Tabelas formatadas com `jspdf-autotable`
+  - Fotos da anamnese embedadas como imagens reais (uma página dedicada com grid 2x3)
+  - Rodapé com paginação e marca d'água sutil
+- Texto **selecionável e pesquisável** (não é screenshot)
+- Nome do arquivo: `Anamnese_${nomeAluno}_${data}.pdf`
+
+### C. Mensagem de erro melhor no upload de fotos
+
+Pequeno ajuste em `submitMonthlyAssessment.ts`: quando uma foto falha após retry, registrar no toast **qual** foto falhou em vez de erro genérico, para o aluno saber exatamente o que reenviar.
+
+## Arquivos
+
+- **`src/components/ui/SafeImage.tsx`** — detecção de imagens corrompidas via `naturalWidth`
+- **`src/lib/photoTimeline.ts`** — já endurecido na resposta anterior; pequeno ajuste para coerência
+- **`src/pages/especialista/EspecialistaAnamneseSplit.tsx`** — botão "Exportar PDF" no header
+- **`src/lib/exportAnamnesePdf.ts`** *(novo)* — função de geração do PDF com jspdf
+- **`src/lib/submitMonthlyAssessment.ts`** — mensagens de erro mais granulares
+- **package.json** — adicionar `jspdf` e `jspdf-autotable`
 
 ## Resultado esperado
 
-- O print do usuário passa a mostrar **1 entrada de Anamnese** (a inicial real, com fotos visíveis), e a entrada de 24/abril vira corretamente "Reavaliação" (se houver `monthly_assessment`) ou some (se for registro vazio).
-- Painel do especialista mostra **1 card** por aluno para reavaliação, com a ação certa: "Revisar", "Cobrar atleta" ou "Solicitar primeira".
-- O banner no Dashboard do aluno permanece único (já estava, agora protegido).
+- **Painel do especialista**: zero "quadrados pretos" — fotos quebradas viram cards "Indisponível" claros.
+- **Botão "Exportar PDF"**: clique gera um PDF profissional com toda a anamnese (texto selecionável + fotos), sem precisar tirar print.
+- **Aluno**: se um upload falhar, sabe exatamente qual foto reenviar.
