@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -13,16 +13,40 @@ import {
 import { Button } from "@/components/ui/button";
 
 /**
- * Unified anamnesis alert.
+ * Unified anamnesis alert (Single Source of Truth).
  * Shows when next_anamnese_due <= today (source of truth from profile).
  * - Sticky banner always visible when due.
  * - Blocking modal if overdue by 2+ days.
+ * - Includes a defensive guard: if multiple instances are accidentally
+ *   mounted at once (e.g. mobile + desktop layouts both rendering),
+ *   only the first one renders to prevent visual duplication.
  */
+
+// Module-level mount counter — survives across re-renders within the same page.
+let mountedInstances = 0;
+
 const AnamneseRequestAlert = () => {
   const { data: profile } = useProfile();
   const navigate = useNavigate();
   const [modalDismissed, setModalDismissed] = useState(false);
+  const [isPrimary, setIsPrimary] = useState(false);
 
+  // Claim the "primary" slot on mount; release it on unmount.
+  useEffect(() => {
+    mountedInstances += 1;
+    const claimed = mountedInstances === 1;
+    setIsPrimary(claimed);
+    if (!claimed && import.meta.env.DEV) {
+      console.warn(
+        "[AnamneseRequestAlert] Multiple instances detected — rendering only the first to avoid duplicate cards."
+      );
+    }
+    return () => {
+      mountedInstances = Math.max(0, mountedInstances - 1);
+    };
+  }, []);
+
+  if (!isPrimary) return null;
   if (!profile?.next_anamnese_due) return null;
 
   const dueDate = new Date(profile.next_anamnese_due + "T00:00:00");
