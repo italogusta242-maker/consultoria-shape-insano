@@ -85,7 +85,7 @@ async function uploadPhoto(
 
 export async function submitMonthlyAssessment(
   formData: MonthlyFormData
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     // Refresh session to avoid expired token issues
     await supabase.auth.refreshSession();
@@ -108,6 +108,7 @@ export async function submitMonthlyAssessment(
     ];
 
     const photoUpdates: Record<string, string> = {};
+    const failedLabels: string[] = [];
     const photosToUpload = photoFields.filter(({ key }) => formData[key] instanceof File);
 
     const uploads = photosToUpload.map(async ({ key, label, column }) => {
@@ -115,6 +116,8 @@ export async function submitMonthlyAssessment(
       if (url) {
         photoUpdates[column] = url;
         console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${url}`);
+      } else {
+        failedLabels.push(label);
       }
     });
 
@@ -124,6 +127,11 @@ export async function submitMonthlyAssessment(
     if (photosToUpload.length > 0 && Object.keys(photoUpdates).length === 0) {
       console.error("[submitMonthlyAssessment] ALL photo uploads failed");
       throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
+    }
+
+    // Warn if some failed
+    if (failedLabels.length > 0) {
+      console.warn(`[submitMonthlyAssessment] Some photos failed: ${failedLabels.join(", ")}`);
     }
 
     // 2. Refresh session AGAIN right before INSERT (in case uploads took long)
@@ -271,7 +279,10 @@ export async function submitMonthlyAssessment(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
-    return { success: true };
+    const warning = failedLabels.length > 0
+      ? `As seguintes fotos não foram enviadas: ${failedLabels.join(", ")}. Você pode enviar uma nova reavaliação para complementar.`
+      : undefined;
+    return { success: true, warning };
   } catch (error: any) {
     console.error("Erro ao salvar reavaliação:", error);
     return { success: false, error: error.message || "Erro desconhecido. Verifique sua conexão e tente novamente." };

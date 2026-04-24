@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, Loader2, User, Dumbbell, Apple, Brain, ClipboardCheck, Camera, Save, ChevronLeft, ChevronRight, History, ChevronDown, ChevronUp, ImagePlus, Maximize2, Minimize2, FileDown } from "lucide-react";
+import { exportAnamnesePdf } from "@/lib/exportAnamnesePdf";
 import { Input } from "@/components/ui/input";
 import DietPlanEditor from "@/components/especialista/DietPlanEditor";
 import TrainingPlanEditor from "@/components/especialista/TrainingPlanEditor";
@@ -145,6 +146,29 @@ const EspecialistaAnamneseSplit = () => {
   const studentName = profile?.nome ?? "Aluno";
   const studentOptions = profile ? [{ id: profile.id, name: studentName }] : [];
   const isNutri = mySpecialty === "nutricionista";
+
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (!anamnese && !selectedMonthly) {
+      toast.error("Sem dados para exportar");
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      await exportAnamnesePdf({
+        profile: profile as any,
+        anamnese: anamnese as any,
+        latestMonthly: (selectedMonthly ?? monthlyAssessments?.[0] ?? null) as any,
+        specialistName: user?.user_metadata?.name || user?.email,
+      });
+      toast.success("PDF gerado com sucesso");
+    } catch (e: any) {
+      console.error("[exportAnamnesePdf]", e);
+      toast.error("Erro ao gerar PDF");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   // Fetch existing training plan for this student
   const { data: existingTrainingPlan } = useQuery({
@@ -363,14 +387,31 @@ const EspecialistaAnamneseSplit = () => {
               </div>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs gap-1.5"
-            onClick={() => setViewMode("editor-only")}
-          >
-            <Maximize2 size={14} /> Expandir Editor
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              title="Exportar anamnese completa em PDF"
+            >
+              {exportingPdf ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileDown size={14} />
+              )}
+              {exportingPdf ? "Gerando..." : "Exportar PDF"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={() => setViewMode("editor-only")}
+            >
+              <Maximize2 size={14} /> Expandir Editor
+            </Button>
+          </div>
         </div>
 
         {/* Anamnese Timeline */}
