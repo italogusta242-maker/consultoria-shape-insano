@@ -1403,8 +1403,10 @@ const Treinos = () => {
                                 onClick={() => {
                                   const updated = [...exercises];
                                   updated[exIdx] = { ...updated[exIdx], _freeTextDone: true } as any;
+                                  const nextExpanded = exIdx < exercises.length - 1 ? exIdx + 1 : expandedExercise;
                                   setExercises(updated);
                                   if (exIdx < exercises.length - 1) setExpandedExercise(exIdx + 1);
+                                  persistExercisesNow(updated, undefined, nextExpanded);
                                   toast.success("Instrução concluída!");
                                 }}
                                 className="w-full py-2 rounded-lg gold-gradient text-[hsl(var(--obsidian))] text-sm font-semibold"
@@ -1455,6 +1457,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                   }
                                   setSetPickerData({ exIdx, setIdx });
                                 }}
@@ -1469,6 +1472,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                   }
                                   setSetPickerData({ exIdx, setIdx });
                                 }}
@@ -1482,6 +1486,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                     toast("Série reaberta para edição", { icon: "✏️" });
                                   }}
                                   className="flex justify-center h-8 items-center"
