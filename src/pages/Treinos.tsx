@@ -751,8 +751,14 @@ const Treinos = () => {
         const todayStr = getToday();
         const safeExercises = sanitizeExercises(parsed.exercises);
         const matchesGroupName = typeof parsed.groupName !== "string" || parsed.groupName === group.name;
+        const matchesUser = parsed.userId == null || parsed.userId === user?.id;
 
-        if (parsed.date === todayStr && matchesGroupName && safeExercises.length === group.exercises.length) {
+        if (
+          parsed.date === todayStr &&
+          matchesGroupName &&
+          matchesUser &&
+          safeExercises.length === group.exercises.length
+        ) {
           setExercises(safeExercises);
           setSelectedGroup(index);
           setExpandedExercise(null);
@@ -760,8 +766,8 @@ const Treinos = () => {
           return;
         }
 
-        if (!matchesGroupName) {
-          localStorage.removeItem(storageKey);
+        if (!matchesGroupName || !matchesUser) {
+          clearWorkoutInProgress(index);
         }
       }
     } catch { }
@@ -788,28 +794,67 @@ const Treinos = () => {
     setSelectedGroup(index);
     setExpandedExercise(null);
     setView("detail");
+    // Synchronous first save so even an immediate crash preserves the draft.
+    saveWorkoutInProgress(index, {
+      userId: user?.id ?? null,
+      groupName: group.name,
+      exercises: exs,
+    });
   };
 
-  // Auto-save exercises to localStorage whenever they change
+  // Auto-save exercises to localStorage whenever they change (safety net).
   useEffect(() => {
     if (!hasValidSelectedGroup || exercises.length === 0) return;
     if (view !== "detail" && view !== "execution") return;
-    const storageKey = `workout-in-progress-${selectedGroup}`;
-    localStorage.setItem(storageKey, JSON.stringify({
-      date: getToday(),
-      groupName: workoutGroups[selectedGroup].name,
+    saveWorkoutInProgress(selectedGroup as number, {
+      userId: user?.id ?? null,
+      groupName: workoutGroups[selectedGroup as number].name,
       exercises,
-    }));
-  }, [exercises, hasValidSelectedGroup, selectedGroup, view, workoutGroups]);
+    });
+  }, [exercises, hasValidSelectedGroup, selectedGroup, view, workoutGroups, user?.id]);
+
+  /**
+   * Synchronously persist a fresh exercises snapshot the moment a user action
+   * happens. This is the core of the "lose nothing" guarantee — we don't wait
+   * for React's next render cycle.
+   */
+  const persistExercisesNow = useCallback(
+    (nextExercises: Exercise[], nextStartedAt?: string, nextExpanded?: number | null) => {
+      if (selectedGroup === null) return;
+      const groupName = workoutGroups[selectedGroup]?.name;
+      if (!groupName) return;
+      saveWorkoutInProgress(selectedGroup, {
+        userId: user?.id ?? null,
+        groupName,
+        exercises: nextExercises,
+      });
+      const effectiveStartedAt = nextStartedAt ?? startedAt;
+      if (effectiveStartedAt) {
+        saveWorkoutExecutionSnapshot({
+          view: "execution",
+          userId: user?.id ?? null,
+          selectedGroup,
+          groupName,
+          startedAt: effectiveStartedAt,
+          exercises: nextExercises,
+          expandedExercise: nextExpanded ?? expandedExercise,
+        });
+      }
+    },
+    [selectedGroup, workoutGroups, user?.id, startedAt, expandedExercise]
+  );
 
   const startWorkout = () => {
+    const startIso = new Date().toISOString();
     setView("execution");
     setTimerRunning(true);
     setTimer(0);
-    setStartedAt(new Date().toISOString());
+    setStartedAt(startIso);
     setExpandedExercise(0);
     // 10% chance "Igor is watching" notification
     if (user) onWorkoutStart(user.id);
+    // Immediate snapshot so the very first second of the workout is recoverable.
+    persistExercisesNow(exercises, startIso, 0);
   };
 
   const updateSet = (exIdx: number, setIdx: number, field: "weight" | "actualReps", value: string) => {
@@ -817,6 +862,7 @@ const Treinos = () => {
     const num = value === "" ? null : Number(value);
     updated[exIdx].setsData[setIdx][field] = num;
     setExercises(updated);
+    persistExercisesNow(updated);
   };
 
   const confirmSet = (exIdx: number, setIdx: number) => {
@@ -828,6 +874,7 @@ const Treinos = () => {
     }
     set.done = true;
     setExercises(updated);
+    persistExercisesNow(updated);
     try { SFX.confirm(); } catch { }
 
     // Start rest timer if there are more sets remaining (in this exercise or next)
@@ -843,8 +890,10 @@ const Treinos = () => {
     const ex = exercises[exIdx];
     const updated = [...exercises];
     updated[exIdx].setsData.forEach((s) => { if (!s.done) s.done = true; });
+    const nextExpanded = exIdx < exercises.length - 1 ? exIdx + 1 : expandedExercise;
     setExercises(updated);
     if (exIdx < exercises.length - 1) setExpandedExercise(exIdx + 1);
+    persistExercisesNow(updated, undefined, nextExpanded);
     toast.success(`${ex?.name || "Exercício"} concluído!`);
     try { SFX.xp(); } catch { }
   };
