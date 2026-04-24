@@ -1,92 +1,58 @@
-## Ajuste solicitado
+## Problema
 
-Resolver a perda de progresso no treino quando o aluno sai para WhatsApp/Spotify, perde sinal ou o navegador/PWA é encerrado em segundo plano. O comportamento esperado é simples: cada série marcada precisa ficar salva no próprio aparelho imediatamente e o treino deve reabrir exatamente de onde parou.
+O usuário relata "Dupla Anamnese" — dois cards/entradas aparecendo ao mesmo tempo para a mesma anamnese. Após investigação, identifiquei **três fontes de duplicação distintas**, todas com o mesmo padrão raiz: lógicas independentes que disparam em paralelo sem uma "fonte única da verdade".
 
-## O que será feito
+### 1. Timeline de Fotos (o caso do print)
 
-### 1. Fortalecer a persistência local do treino em execução
-Hoje a tela de `Treinos` já usa `localStorage`, mas a gravação principal acontece em `useEffect`, ou seja: depois da mudança de estado já ter sido aplicada. Em celulares com pouca memória isso abre uma janela em que o app pode ser morto antes da persistência terminar.
+Em `src/lib/photoTimeline.ts`, a função `buildPhotoTimeline` lista **um item separado por registro** na tabela `anamnese`. Como o aluno do print tem 2 registros (24/abril vazio + 26/fevereiro com fotos), aparecem dois cards rotulados igual: "Anamnese". Pior: o de 24/abril mostra **4 quadrados pretos** porque entradas com URL "vazia mas truthy" ou storage inacessível ainda passam o filtro.
 
-Vou mudar isso para uma persistência imediata, no próprio evento da ação do usuário:
-- iniciar treino
-- alterar carga/repetições
-- confirmar série
-- reabrir série concluída
-- concluir exercício
-- marcar bloco de texto como feito
-- cancelar ou finalizar treino
+### 2. Alertas Proativos do Especialista
 
-Assim, o snapshot do treino será salvo no milissegundo do clique, e não apenas “na próxima renderização”.
+Em `src/hooks/useProactiveAlerts.ts`, o mesmo aluno pode gerar até 3 alertas paralelos sobre reavaliação:
+- `assessment_overdue` (baseado em "30 dias desde a anamnese inicial")
+- `monthly_pending` (baseado em `next_anamnese_due` vencido)
+- `monthly_awaiting_review` (assessment já enviado, aguardando análise)
 
-### 2. Salvar um snapshot completo e seguro da sessão
-O snapshot local passará a guardar, de forma consistente:
-- aluno atual
-- data da sessão
-- grupo de treino selecionado
-- nome do grupo
-- `startedAt`
-- view atual (`detail` ou `execution`)
-- exercício expandido
-- exercícios com `setsData` completos
-- estado de descanso, quando existir
+### 3. Banner do Dashboard do Aluno
 
-Também vou padronizar as chaves e validações para evitar restaurar dados inválidos ou de outro treino.
+Já está unificado (existe só `AnamneseRequestAlert`, comentário "MonthlyAnamnesisBanner removed — unified"), mas vou adicionar uma trava de segurança para garantir que não "ressuscite".
 
-### 3. Restaurar automaticamente ao reabrir o app
-Na entrada da página de `Treinos`, o app vai:
-- verificar se existe sessão local válida do dia
-- conferir se ela pertence ao mesmo aluno e ao mesmo treino/grupo
-- restaurar o estado completo
-- retomar a execução sem zerar séries já marcadas
+## O que fazer
 
-Se os dados estiverem inconsistentes (por exemplo, plano alterado pelo especialista), o app limpa apenas a sessão corrompida e volta ao estado seguro.
+### A. Timeline de Fotos — Single Source of Truth por data
 
-### 4. Gravar também nos eventos de ciclo de vida do celular
-Além da persistência imediata por clique, vou adicionar flush/backup quando a aba/app for para segundo plano:
-- `visibilitychange`
-- `pagehide`
-- desmontagem do componente
+Refatorar `buildPhotoTimeline` para:
 
-Isso reduz ainda mais o risco de perda quando Android/iPhone suspendem ou encerram o navegador/PWA.
+1. **Deduplicar por dia**: agrupar todas as fotos do mesmo dia (anamnese + reavaliação) em UMA entrada de timeline. Se o dia tem reavaliação, o rótulo passa a ser "Reavaliação"; senão "Anamnese".
+2. **Filtrar entradas vazias**: descartar registros de anamnese sem nenhuma foto realmente carregável (URL não vazia, não claramente quebrada). Eliminar os "quadrados pretos" do print.
+3. **Marcar a entrada inicial**: a primeira anamnese histórica ganha um badge "Anamnese Inicial" para diferenciá-la das mensais.
 
-### 5. Blindar a recuperação contra reload automático do app
-O projeto já possui lógica de atualização silenciosa do PWA. Vou garantir que, enquanto houver treino em andamento salvo localmente, a tela não seja recarregada de forma automática no retorno ao app.
+### B. Alertas do Especialista — Prioridade única por aluno
 
-Isso evita o cenário em que o app até detecta atualização, mas interfere numa sessão que ainda precisa ser retomada.
+Refatorar a seção "Monthly assessment" em `useProactiveAlerts.ts` para que cada aluno gere **no máximo 1 alerta de reavaliação por vez**, na seguinte ordem de prioridade:
+
+```text
+Prioridade 1: monthly_awaiting_review  (atleta cumpriu, especialista precisa revisar)
+Prioridade 2: monthly_pending          (atleta atrasou — next_anamnese_due vencido)
+Prioridade 3: assessment_overdue       (legado: nunca preencheu nenhuma)
+```
+
+Se o aluno cai na Prioridade 1, os outros dois alertas não são gerados. Isso elimina o "card duplicado" no painel do especialista.
+
+### C. Dashboard do Aluno — Trava de unicidade
+
+Em `AnamneseRequestAlert.tsx`, adicionar uma flag `data-anamnese-alert="single"` no elemento raiz e um `useEffect` que detecta se mais de um alerta está montado simultaneamente (defensivo contra regressões futuras). Se detectar, loga warning e renderiza apenas um.
+
+## Arquivos a modificar
+
+- `src/lib/photoTimeline.ts` — agrupamento por dia + filtro de fotos válidas + flag "inicial"
+- `src/components/especialista/StudentPhotosPanel.tsx` — exibir badge "Anamnese Inicial" e ajustar contagem na timeline modal
+- `src/pages/MinhaEvolucao.tsx` — mesma melhoria visual da timeline
+- `src/hooks/useProactiveAlerts.ts` — prioridade única para alertas de reavaliação
+- `src/components/AnamneseRequestAlert.tsx` — trava defensiva de instância única
 
 ## Resultado esperado
 
-Depois dessa mudança:
-- o aluno marca uma série e ela fica salva imediatamente no aparelho
-- se o app fechar, perder foco ou recarregar, o treino volta do ponto exato
-- trocar para WhatsApp/Spotify não deve mais zerar o treino
-- oscilações de sinal não afetam o progresso local da sessão
-- o banco continua sendo usado apenas no momento de registrar oficialmente o treino concluído
-
-## Arquivos envolvidos
-
-- `src/pages/Treinos.tsx`
-- `src/hooks/useSilentUpdate.ts`
-- possivelmente um helper novo para centralizar a persistência do treino local, se isso deixar a lógica mais segura e reutilizável
-
-## Detalhes técnicos
-
-- Não precisa de migração no banco para este ajuste.
-- A solução será local-first: persistência no aparelho antes de qualquer dependência de internet.
-- A restauração seguirá o padrão já existente de limpeza defensiva para snapshots incompatíveis.
-- Vou preservar a lógica atual de histórico/salvamento final no backend, mas separar melhor “sessão local em andamento” de “treino oficialmente concluído”.
-- Se fizer sentido durante a implementação, transformarei a persistência em um pequeno utilitário com funções como:
-  - `saveWorkoutExecutionSnapshot()`
-  - `loadWorkoutExecutionSnapshot()`
-  - `clearWorkoutExecutionSnapshot()`
-  - `isWorkoutSnapshotValid()`
-
-## Validação após implementação
-
-Vou validar estes cenários:
-- iniciar treino, marcar séries e recarregar manualmente
-- iniciar treino, sair da aba e voltar
-- abrir outro app e retornar
-- restaurar treino no mesmo dia
-- impedir restauração indevida quando o grupo/plano mudou
-- finalizar ou cancelar treino e confirmar que o snapshot local foi limpo
+- O print do usuário passa a mostrar **1 entrada de Anamnese** (a inicial real, com fotos visíveis), e a entrada de 24/abril vira corretamente "Reavaliação" (se houver `monthly_assessment`) ou some (se for registro vazio).
+- Painel do especialista mostra **1 card** por aluno para reavaliação, com a ação certa: "Revisar", "Cobrar atleta" ou "Solicitar primeira".
+- O banner no Dashboard do aluno permanece único (já estava, agora protegido).
