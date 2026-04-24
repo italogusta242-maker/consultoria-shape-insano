@@ -672,22 +672,58 @@ const Treinos = () => {
     }
   }, [hasValidSelectedGroup, persistedGroupMismatch, selectedGroup, view]);
 
-  // Persist execution state to localStorage
+  // Persist execution state to localStorage (kept as a safety net — the
+  // critical writes happen synchronously inside each user action below).
   useEffect(() => {
     if (view === "execution" && hasValidSelectedGroup && startedAt) {
-      localStorage.setItem("workout-execution-state", JSON.stringify({
-        date: getToday(),
-        view,
-        selectedGroup,
-        groupName: workoutGroups[selectedGroup].name,
+      saveWorkoutExecutionSnapshot({
+        view: "execution",
+        userId: user?.id ?? null,
+        selectedGroup: selectedGroup as number,
+        groupName: workoutGroups[selectedGroup as number].name,
         startedAt,
         exercises,
         expandedExercise,
-      }));
+      });
     } else if (view !== "execution") {
-      localStorage.removeItem("workout-execution-state");
+      clearWorkoutExecutionSnapshot();
     }
-  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups]);
+  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
+
+  // Lifecycle backup: when the tab is hidden or the page is being unloaded
+  // (Android killing the PWA, user switching to WhatsApp/Spotify, etc.),
+  // flush the latest state synchronously so nothing is lost.
+  useEffect(() => {
+    const flush = () => {
+      if (view === "execution" && hasValidSelectedGroup && startedAt) {
+        saveWorkoutExecutionSnapshot({
+          view: "execution",
+          userId: user?.id ?? null,
+          selectedGroup: selectedGroup as number,
+          groupName: workoutGroups[selectedGroup as number].name,
+          startedAt,
+          exercises,
+          expandedExercise,
+        });
+      }
+      if (hasValidSelectedGroup && exercises.length > 0 && (view === "detail" || view === "execution")) {
+        saveWorkoutInProgress(selectedGroup as number, {
+          userId: user?.id ?? null,
+          groupName: workoutGroups[selectedGroup as number].name,
+          exercises,
+        });
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      // Also flush on unmount
+      flush();
+    };
+  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
 
   // Determine next group
   const getNextGroupIndex = useCallback(() => {
