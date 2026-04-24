@@ -645,8 +645,8 @@ const Treinos = () => {
     });
 
     // Clear persisted state
-    localStorage.removeItem("workout-execution-state");
-    localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+    clearWorkoutExecutionSnapshot();
+    clearWorkoutInProgress(selectedGroup);
 
     toast.success("⏱️ Treino finalizado automaticamente após 3h!");
     setView("list");
@@ -657,8 +657,8 @@ const Treinos = () => {
     if (selectedGroup === null) return;
     if (hasValidSelectedGroup && !persistedGroupMismatch) return;
 
-    localStorage.removeItem("workout-execution-state");
-    localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+    clearWorkoutExecutionSnapshot();
+    clearWorkoutInProgress(selectedGroup);
     setSelectedGroup(null);
     setExpandedExercise(null);
     setExercises([]);
