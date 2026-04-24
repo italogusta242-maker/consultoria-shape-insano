@@ -345,8 +345,8 @@ export async function submitMonthlyAssessment(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
-    const warning = failedLabels.length > 0
-      ? `As seguintes fotos não foram enviadas: ${failedLabels.join(", ")}. Você pode enviar uma nova reavaliação para complementar.`
+    const warning = failedDetails.length > 0
+      ? `Algumas fotos não foram enviadas (${failedDetails.map((f) => f.label).join(", ")}). Motivo: ${failedDetails[0].reason}`
       : undefined;
     return { success: true, warning };
   } catch (error: any) {
