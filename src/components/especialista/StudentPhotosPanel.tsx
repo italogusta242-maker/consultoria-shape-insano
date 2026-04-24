@@ -65,7 +65,11 @@ export default function StudentPhotosPanel({ studentId }: Props) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {latestPhotos.source === "reavaliação" ? "Última Reavaliação" : "Anamnese"} · {new Date(latestPhotos.date).toLocaleDateString("pt-BR")}
+              {latestPhotos.source === "reavaliação"
+                ? "Última Reavaliação"
+                : latestPhotos.isInitial
+                  ? "Anamnese Inicial"
+                  : "Anamnese"} · {new Date(latestPhotos.date).toLocaleDateString("pt-BR")}
             </p>
           </div>
           {renderPhotoGrid(latestPhotos.photos)}
@@ -139,9 +143,15 @@ export default function StudentPhotosPanel({ studentId }: Props) {
                           <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
                             entry.source === "reavaliação"
                               ? "bg-primary/20 text-primary"
-                              : "bg-accent/20 text-accent-foreground"
+                              : entry.isInitial
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-accent/20 text-accent-foreground"
                           }`}>
-                            {entry.source === "reavaliação" ? "Reavaliação" : "Anamnese"}
+                            {entry.source === "reavaliação"
+                              ? "Reavaliação"
+                              : entry.isInitial
+                                ? "Anamnese Inicial"
+                                : "Anamnese"}
                           </span>
                         </div>
                         {renderPhotoGrid(entry.photos)}
