@@ -85,7 +85,7 @@ async function uploadPhoto(
 
 export async function submitMonthlyAssessment(
   formData: MonthlyFormData
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
     // Refresh session to avoid expired token issues
     await supabase.auth.refreshSession();
@@ -279,7 +279,10 @@ export async function submitMonthlyAssessment(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
-    return { success: true };
+    const warning = failedLabels.length > 0
+      ? `As seguintes fotos não foram enviadas: ${failedLabels.join(", ")}. Você pode enviar uma nova reavaliação para complementar.`
+      : undefined;
+    return { success: true, warning };
   } catch (error: any) {
     console.error("Erro ao salvar reavaliação:", error);
     return { success: false, error: error.message || "Erro desconhecido. Verifique sua conexão e tente novamente." };
