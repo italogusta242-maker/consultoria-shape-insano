@@ -923,9 +923,9 @@ const Treinos = () => {
     setShowFinishDialog(false);
     // Clear persisted state without saving
     if (selectedGroup !== null) {
-      localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+      clearWorkoutInProgress(selectedGroup);
     }
-    localStorage.removeItem("workout-execution-state");
+    clearWorkoutExecutionSnapshot();
     setView("list");
     setSelectedGroup(null);
     setExercises([]);
@@ -954,8 +954,8 @@ const Treinos = () => {
       const totalVolume = exercises.reduce((sum, ex) => 
         sum + ex.setsData.reduce((s, set) => s + ((set.weight || 0) * (set.actualReps || 0)), 0), 0);
       if (user) onWorkoutFinish(user.id, totalVolume);
-      localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
-      localStorage.removeItem("workout-execution-state");
+      clearWorkoutInProgress(selectedGroup);
+      clearWorkoutExecutionSnapshot();
       // Go to share view instead of list
       setView("share" as any);
     } catch {
