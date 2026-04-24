@@ -112,9 +112,17 @@ async function uploadPhoto(
   file: File,
   label: string,
   folderId: string
-): Promise<string | null> {
-  // Compress before upload
-  const compressed = await compressImage(file);
+): Promise<{ url: string | null; reason?: string }> {
+  // Compress before upload — may throw with a user-friendly message (HEIC etc.)
+  let compressed: File;
+  try {
+    compressed = await compressImage(file);
+  } catch (err: any) {
+    const reason = err?.message || "falha ao processar a imagem";
+    console.error(`[uploadPhoto] compressão falhou para ${label}:`, reason);
+    return { url: null, reason };
+  }
+
   const ext = compressed.name.split(".").pop() || "jpg";
   const path = `${userId}/monthly/${folderId}/${label}.${ext}`;
 
@@ -126,7 +134,7 @@ async function uploadPhoto(
 
     if (!error) {
       const { data } = supabase.storage.from("anamnese-photos").getPublicUrl(path);
-      return data.publicUrl;
+      return { url: data.publicUrl };
     }
 
     console.error(`Erro upload ${label} (tentativa ${attempt + 1}):`, error);
@@ -135,7 +143,7 @@ async function uploadPhoto(
     }
   }
 
-  return null;
+  return { url: null, reason: "falha de conexão com o servidor" };
 }
 
 export async function submitMonthlyAssessment(
