@@ -361,6 +361,37 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
             }
           }
         }
+
+        // 7. Churn risk
+        const expiry = subscriptionExpiry.get(sid);
+        if (expiry) {
+          const daysUntilExpiry = differenceInCalendarDays(expiry, today);
+          if (daysUntilExpiry < 0) {
+            const daysOverdue = Math.abs(daysUntilExpiry);
+            const key = `churn-overdue-${sid}`;
+            if (!dismissedKeys.has(key)) {
+              alerts.push({
+                id: key, type: "churn_risk", studentId: sid, studentName: name,
+                severity: daysOverdue >= 7 ? "critical" : "warning",
+                title: "Assinatura vencida", daysRelative: daysOverdue,
+                timeLabel: `venceu ${buildTimeLabel(daysOverdue, "overdue")}`,
+                navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+              });
+            }
+          } else if (daysUntilExpiry <= 10) {
+            const key = `churn-expiring-${sid}`;
+            if (!dismissedKeys.has(key)) {
+              alerts.push({
+                id: key, type: "churn_risk", studentId: sid, studentName: name,
+                severity: daysUntilExpiry <= 3 ? "warning" : "info",
+                title: `Assinatura vence ${buildTimeLabel(daysUntilExpiry, "remaining")}`,
+                daysRelative: -daysUntilExpiry,
+                timeLabel: `vence ${buildTimeLabel(daysUntilExpiry, "remaining")}`,
+                navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+              });
+            }
+          }
+        }
       }
 
       const severityOrder: Record<AlertSeverity, number> = { critical: 0, warning: 1, info: 2 };
