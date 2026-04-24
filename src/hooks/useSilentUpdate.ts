@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { fetchDeployedVersion, hardPurgeCaches } from "@/lib/pwaCache";
+import { hasWorkoutExecutionSnapshot } from "@/lib/workoutSnapshot";
 
 /**
  * PWA auto-update hook.
@@ -12,19 +13,18 @@ import { fetchDeployedVersion, hardPurgeCaches } from "@/lib/pwaCache";
  *    - When a new SW is detected (waiting), send SKIP_WAITING.
  *    - On controllerchange, reload — unless a workout is active.
  *    - Poll reg.update() every 30 minutes (cache-busting the HTML first).
+ *
+ * IMPORTANT: We never auto-reload while a workout is in progress; pulling
+ * the rug under the user mid-execution would wipe the in-memory state.
+ * The local snapshot would survive, but reloading is still disruptive.
  */
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
   const versionCheckRan = useRef(false);
 
   useEffect(() => {
-    const isWorkoutActive = (): boolean => {
-      try {
-        return !!localStorage.getItem("workout-execution-state");
-      } catch {
-        return false;
-      }
-    };
+    const isWorkoutActive = (): boolean => hasWorkoutExecutionSnapshot();
+
 
     // -------- Version check (handles "all users stuck on old build") --------
     const runVersionCheck = async () => {
