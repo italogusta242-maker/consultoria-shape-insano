@@ -171,30 +171,33 @@ export async function submitMonthlyAssessment(
     ];
 
     const photoUpdates: Record<string, string> = {};
-    const failedLabels: string[] = [];
+    const failedDetails: Array<{ label: string; reason: string }> = [];
     const photosToUpload = photoFields.filter(({ key }) => formData[key] instanceof File);
 
     const uploads = photosToUpload.map(async ({ key, label, column }) => {
-      const url = await uploadPhoto(user.id, formData[key] as File, label, folderId);
-      if (url) {
-        photoUpdates[column] = url;
-        console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${url}`);
+      const result = await uploadPhoto(user.id, formData[key] as File, label, folderId);
+      if (result.url) {
+        photoUpdates[column] = result.url;
+        console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${result.url}`);
       } else {
-        failedLabels.push(label);
+        failedDetails.push({ label, reason: result.reason || "erro desconhecido" });
       }
     });
 
     await Promise.all(uploads);
 
-    // Abort if user provided photos but ALL failed
+    // Abort if user provided photos but ALL failed — return the most informative reason.
     if (photosToUpload.length > 0 && Object.keys(photoUpdates).length === 0) {
-      console.error("[submitMonthlyAssessment] ALL photo uploads failed");
-      throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
+      console.error("[submitMonthlyAssessment] ALL photo uploads failed", failedDetails);
+      const heicReason = failedDetails.find((f) => /HEIC|iPhone|Compatível/i.test(f.reason));
+      const message = heicReason?.reason
+        || failedDetails[0]?.reason
+        || "Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.";
+      throw new Error(message);
     }
 
-    // Warn if some failed
-    if (failedLabels.length > 0) {
-      console.warn(`[submitMonthlyAssessment] Some photos failed: ${failedLabels.join(", ")}`);
+    if (failedDetails.length > 0) {
+      console.warn(`[submitMonthlyAssessment] Some photos failed:`, failedDetails);
     }
 
     // 2. Refresh session AGAIN right before INSERT (in case uploads took long)
