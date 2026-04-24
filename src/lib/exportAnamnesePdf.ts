@@ -1,6 +1,9 @@
 /**
  * @purpose Generate a professional, vector-based PDF of an athlete's anamnese.
  *          Text is selectable & searchable (not a screenshot).
+ *          Inclui TODOS os campos preenchidos pelo aluno (anamnese inicial + reavaliação),
+ *          mais um bloco final que captura quaisquer campos extras de `dados_extras`
+ *          que não estejam na lista canônica — garantindo zero perda de informação.
  * @dependencies jspdf, jspdf-autotable
  */
 import jsPDF from "jspdf";
@@ -43,19 +46,58 @@ interface ProfileLike {
   cidade_estado?: string | null;
 }
 
-interface MonthlyPhotos {
+interface MonthlyAssessmentLike {
   foto_frente?: string | null;
   foto_costas?: string | null;
   foto_lado_direito?: string | null;
   foto_lado_esquerdo?: string | null;
   foto_perfil_lado?: string | null;
   created_at?: string;
+  peso?: string | null;
+  altura?: string | null;
+  modalidade?: string | null;
+  nivel_fadiga?: number | null;
+  objetivo_atual?: string | null;
+  frequencia_compromisso?: string | null;
+  tempo_disponivel?: string | null;
+  dias_disponiveis?: string[] | null;
+  adesao_treinos?: number | null;
+  motivo_adesao_treinos?: string | null;
+  adesao_cardios?: number | null;
+  motivo_adesao_cardios?: string | null;
+  adesao_dieta?: string | null;
+  horario_treino?: string | null;
+  horario_treino_outro?: string | null;
+  refeicoes_horarios?: string | null;
+  alongamentos_corretos?: boolean | null;
+  competicao_fisiculturismo?: string | null;
+  restricao_alimentar?: string | null;
+  alimentos_proibidos?: string | null;
+  prioridades_fisicas?: string | null;
+  notas_progressao?: string | null;
+  motivo_nao_dieta?: string | null;
+  sugestao_dieta?: string | null;
+  sugestao_melhoria?: string | null;
+  autoriza_publicacao?: boolean | null;
+  maquinas_indisponiveis?: string[] | null;
+  progresso_peitoral?: boolean | null;
+  progresso_costas?: boolean | null;
+  progresso_deltoide?: boolean | null;
+  progresso_triceps?: boolean | null;
+  progresso_biceps?: boolean | null;
+  progresso_quadriceps?: boolean | null;
+  progresso_posteriores?: boolean | null;
+  progresso_gluteos?: boolean | null;
+  progresso_panturrilha?: boolean | null;
+  progresso_abdomen?: string | null;
+  progresso_antebraco?: string | null;
+  [key: string]: any;
 }
 
 interface ExportPayload {
   profile: ProfileLike | null;
   anamnese: AnamneseLike | null;
-  latestMonthly?: MonthlyPhotos | null;
+  latestMonthly?: MonthlyAssessmentLike | null;
   specialistName?: string;
 }
 
@@ -63,10 +105,40 @@ const GOLD: [number, number, number] = [212, 175, 55];
 const DARK: [number, number, number] = [30, 30, 32];
 const MUTED: [number, number, number] = [120, 120, 125];
 
+/** Lista canônica de chaves de `dados_extras` que já são exibidas em alguma seção.
+ *  Usada para detectar campos "órfãos" preenchidos pelo aluno e incluí-los
+ *  no bloco de "Informações Complementares". */
+const KNOWN_EXTRA_KEYS = new Set<string>([
+  "objetivo", "objetivo_outro",
+  "fisiculturismo", "pratica_musculacao",
+  "local_treino", "frequencia", "dias_semana", "horario_treino",
+  "tempo_treino", "faz_cardio", "tempo_cardio",
+  "experiencia_treino", "motivacao",
+  "grupos_prioritarios", "tem_dor", "tem_dor_desc",
+  "exercicio_nao_gosta", "exercicio_nao_gosta_desc",
+  "maquinas_nao_tem", "maquina_outra",
+  "doencas", "doenca_outra",
+  "historico_familiar", "historico_familiar_desc",
+  "medicamentos", "medicamento_outro",
+  "alergias", "alergia_outra",
+  "uso_hormonios",
+  "nivel_atividade", "refeicoes_dia", "horario_refeicoes",
+  "calorias", "tempo_calorias", "passos_calorias",
+  "restricoes", "frutas", "fruta_outra",
+  "suplementos", "suplemento_outro", "dieta_atual",
+  "horario_sono", "qualidade_sono", "horas_sono",
+  "nivel_estresse", "alimentos_diarios", "alimentos_nao_come",
+  "agua", "agua_outra", "liquido_refeicao", "liquido_qual",
+  "investimento_dieta", "frequencia_evacuacao",
+  "sintomas_digestao", "escala_bristol",
+  "ocupacao", "faixa_salarial", "influenciador_favorito",
+]);
+
 function val(extras: Record<string, any>, key: string, fallback?: string | null): string {
   const v = extras[key];
   if (v != null && v !== "") {
     if (Array.isArray(v)) return v.join(", ") || "—";
+    if (typeof v === "boolean") return v ? "Sim" : "Não";
     return String(v);
   }
   if (fallback != null && fallback !== "") return String(fallback);
@@ -83,6 +155,33 @@ function valWithOther(extras: Record<string, any>, mainKey: string, otherKey: st
   }
   if (main === "—" && otherStr) return otherStr;
   return main;
+}
+
+/** Converte boolean/array/null em string apresentável; retorna null se "vazio". */
+function presentable(v: any): string | null {
+  if (v == null) return null;
+  if (typeof v === "boolean") return v ? "Sim" : "Não";
+  if (Array.isArray(v)) {
+    const joined = v.filter((x) => x != null && x !== "").join(", ");
+    return joined || null;
+  }
+  if (typeof v === "object") {
+    try {
+      const j = JSON.stringify(v);
+      return j === "{}" ? null : j;
+    } catch {
+      return null;
+    }
+  }
+  const s = String(v).trim();
+  return s === "" ? null : s;
+}
+
+/** Humaniza uma chave snake_case em "Snake Case". */
+function humanize(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function calcAge(nascimento?: string | null): string {
@@ -121,7 +220,6 @@ async function urlToImageData(url: string): Promise<{ data: string; w: number; h
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-    // Get dimensions
     const dims = await new Promise<{ w: number; h: number }>((resolve) => {
       const img = new Image();
       img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
@@ -137,7 +235,6 @@ async function urlToImageData(url: string): Promise<{ data: string; w: number; h
 
 function drawHeader(doc: jsPDF, profile: ProfileLike | null, specialistName?: string) {
   const pageW = doc.internal.pageSize.getWidth();
-  // Top gold bar
   doc.setFillColor(...GOLD);
   doc.rect(0, 0, pageW, 8, "F");
 
@@ -153,13 +250,11 @@ function drawHeader(doc: jsPDF, profile: ProfileLike | null, specialistName?: st
 
   doc.setFontSize(9);
   const dateStr = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
-  const exportLine = `Exportado em: ${dateStr}`;
-  doc.text(exportLine, pageW - 14, 22, { align: "right" });
+  doc.text(`Exportado em: ${dateStr}`, pageW - 14, 22, { align: "right" });
   if (specialistName) {
     doc.text(`Por: ${specialistName}`, pageW - 14, 28, { align: "right" });
   }
 
-  // Athlete name
   doc.setFontSize(14);
   doc.setTextColor(...DARK);
   doc.setFont("helvetica", "bold");
@@ -183,8 +278,31 @@ function drawFooter(doc: jsPDF) {
   }
 }
 
-function section(doc: jsPDF, title: string, rows: [string, string][], startY: number): number {
-  // Section title bar
+/** Renderiza uma seção com auto-pagebreak. Aceita rows mistas (string ou null para pular). */
+function section(
+  doc: jsPDF,
+  title: string,
+  rows: Array<[string, string | null | undefined]>,
+  startY: number,
+  profile: ProfileLike | null,
+  specialistName?: string,
+): number {
+  // Filtra linhas com valor nulo/vazio? Mantemos "—" para registrar campo não preenchido,
+  // mas pulamos quando o valor é null (usado para campos só renderizados se houver dados).
+  const filteredRows = rows
+    .filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => [k, v as string] as [string, string]);
+
+  if (filteredRows.length === 0) return startY;
+
+  // Quebra de página antecipada se restar pouco espaço
+  const pageH = doc.internal.pageSize.getHeight();
+  if (startY > pageH - 40) {
+    doc.addPage();
+    drawHeader(doc, profile, specialistName);
+    startY = 50;
+  }
+
   doc.setFillColor(245, 240, 220);
   doc.rect(14, startY, doc.internal.pageSize.getWidth() - 28, 7, "F");
   doc.setFontSize(11);
@@ -194,14 +312,18 @@ function section(doc: jsPDF, title: string, rows: [string, string][], startY: nu
 
   autoTable(doc, {
     startY: startY + 9,
-    body: rows,
+    body: filteredRows,
     theme: "plain",
-    styles: { fontSize: 9, cellPadding: 1.5, textColor: DARK },
+    styles: { fontSize: 9, cellPadding: 1.5, textColor: DARK, overflow: "linebreak" },
     columnStyles: {
       0: { fontStyle: "bold", cellWidth: 55, textColor: MUTED },
       1: { cellWidth: "auto" },
     },
     margin: { left: 14, right: 14 },
+    didDrawPage: () => {
+      // Header is drawn manually after pagebreak inside this loop; jspdf-autotable
+      // already starts at top of new page automatically.
+    },
   });
 
   return (doc as any).lastAutoTable.finalY + 6;
@@ -217,27 +339,31 @@ export async function exportAnamnesePdf({
   const extras = (anamnese?.dados_extras as Record<string, any>) ?? {};
 
   drawHeader(doc, profile, specialistName);
-
   let y = 50;
 
-  // Bio data
+  // ---------- DADOS DO ATLETA ----------
   y = section(doc, "DADOS DO ATLETA", [
     ["Nome", profile?.nome || "—"],
     ["Idade", calcAge(profile?.nascimento)],
+    ["Data de nascimento", profile?.nascimento || "—"],
     ["Sexo", profile?.sexo || "—"],
     ["Peso atual", profile?.peso ? `${profile.peso} kg` : "—"],
     ["Altura", profile?.altura ? `${profile.altura} ${parseFloat(profile.altura) > 3 ? "cm" : "m"}` : "—"],
     ["Meta de peso", profile?.meta_peso ? `${profile.meta_peso} kg` : "—"],
     ["IMC (calculado)", calcIMC(profile?.peso, profile?.altura)],
     ["BF % (gordura)", profile?.body_fat != null ? `${profile.body_fat}%` : "—"],
+    ["E-mail", profile?.email || "—"],
+    ["Telefone", profile?.telefone || "—"],
+    ["CPF", profile?.cpf || "—"],
     ["Cidade / Estado", profile?.cidade_estado || "—"],
-  ], y);
+  ], y, profile, specialistName);
 
   if (anamnese) {
     const dataPreenchimento = anamnese.created_at
       ? new Date(anamnese.created_at).toLocaleDateString("pt-BR")
       : "—";
 
+    // ---------- OBJETIVO E TREINO ----------
     y = section(doc, "OBJETIVO E TREINO", [
       ["Objetivo", valWithOther(extras, "objetivo", "objetivo_outro", anamnese.objetivo)],
       ["Fisiculturismo", val(extras, "fisiculturismo")],
@@ -251,29 +377,26 @@ export async function exportAnamnesePdf({
       ["Tempo de cardio", val(extras, "tempo_cardio")],
       ["Experiência", val(extras, "experiencia_treino", anamnese.experiencia_treino)],
       ["Motivação", val(extras, "motivacao", anamnese.motivacao)],
-    ], y);
+    ], y, profile, specialistName);
 
-    if (y > 240) { doc.addPage(); drawHeader(doc, profile, specialistName); y = 50; }
-
+    // ---------- ACADEMIA E LIMITAÇÕES ----------
     y = section(doc, "ACADEMIA E LIMITAÇÕES", [
       ["Grupos prioritários", val(extras, "grupos_prioritarios")],
-      ["Tem dor / lesão", val(extras, "tem_dor", anamnese.lesoes)],
+      ["Tem dor / lesão", valWithOther(extras, "tem_dor", "tem_dor_desc", anamnese.lesoes)],
       ["Exercício que não gosta", valWithOther(extras, "exercicio_nao_gosta", "exercicio_nao_gosta_desc")],
       ["Máquinas indisponíveis", valWithOther(extras, "maquinas_nao_tem", "maquina_outra", anamnese.equipamentos)],
-    ], y);
+    ], y, profile, specialistName);
 
-    if (y > 240) { doc.addPage(); drawHeader(doc, profile, specialistName); y = 50; }
-
+    // ---------- SAÚDE ----------
     y = section(doc, "SAÚDE", [
       ["Doenças", valWithOther(extras, "doencas", "doenca_outra", anamnese.condicoes_saude)],
       ["Histórico familiar", valWithOther(extras, "historico_familiar", "historico_familiar_desc")],
       ["Medicamentos", valWithOther(extras, "medicamentos", "medicamento_outro", anamnese.medicamentos)],
       ["Alergias", valWithOther(extras, "alergias", "alergia_outra")],
       ["Uso de hormônios", val(extras, "uso_hormonios")],
-    ], y);
+    ], y, profile, specialistName);
 
-    if (y > 240) { doc.addPage(); drawHeader(doc, profile, specialistName); y = 50; }
-
+    // ---------- PERFIL NUTRICIONAL ----------
     y = section(doc, "PERFIL NUTRICIONAL", [
       ["Nível de atividade", val(extras, "nivel_atividade")],
       ["Refeições por dia", val(extras, "refeicoes_dia")],
@@ -285,10 +408,9 @@ export async function exportAnamnesePdf({
       ["Frutas preferidas", valWithOther(extras, "frutas", "fruta_outra")],
       ["Suplementos", valWithOther(extras, "suplementos", "suplemento_outro", anamnese.suplementos)],
       ["Dieta atual", val(extras, "dieta_atual", anamnese.dieta_atual)],
-    ], y);
+    ], y, profile, specialistName);
 
-    if (y > 220) { doc.addPage(); drawHeader(doc, profile, specialistName); y = 50; }
-
+    // ---------- ESTILO DE VIDA ----------
     y = section(doc, "ESTILO DE VIDA", [
       ["Horário do sono", val(extras, "horario_sono")],
       ["Qualidade do sono", val(extras, "qualidade_sono")],
@@ -298,17 +420,110 @@ export async function exportAnamnesePdf({
       ["Alimentos que não come", val(extras, "alimentos_nao_come")],
       ["Água diária", valWithOther(extras, "agua", "agua_outra", anamnese.agua_diaria)],
       ["Líquido nas refeições", val(extras, "liquido_refeicao")],
+      ["Qual líquido", val(extras, "liquido_qual")],
       ["Investimento em dieta", val(extras, "investimento_dieta")],
       ["Frequência de evacuação", val(extras, "frequencia_evacuacao")],
+      ["Sintomas de digestão", val(extras, "sintomas_digestao")],
+      ["Escala de Bristol", val(extras, "escala_bristol")],
       ["Ocupação", val(extras, "ocupacao", anamnese.ocupacao)],
-    ], y);
+      ["Faixa salarial", val(extras, "faixa_salarial")],
+      ["Influenciador favorito", val(extras, "influenciador_favorito")],
+    ], y, profile, specialistName);
+
+    // ---------- INFORMAÇÕES COMPLEMENTARES ----------
+    // Captura QUALQUER outro campo preenchido em `dados_extras` que ainda não
+    // tenha sido renderizado nas seções acima — garante zero perda de dado.
+    const orphanRows: Array<[string, string]> = [];
+    for (const [key, raw] of Object.entries(extras)) {
+      if (KNOWN_EXTRA_KEYS.has(key)) continue;
+      const value = presentable(raw);
+      if (value) orphanRows.push([humanize(key), value]);
+    }
+    if (orphanRows.length > 0) {
+      y = section(doc, "INFORMAÇÕES COMPLEMENTARES", orphanRows, y, profile, specialistName);
+    }
 
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
+    if (y > doc.internal.pageSize.getHeight() - 15) {
+      doc.addPage();
+      drawHeader(doc, profile, specialistName);
+      y = 50;
+    }
     doc.text(`Anamnese preenchida em: ${dataPreenchimento}`, 14, y + 4);
+    y += 8;
   }
 
-  // Photos page
+  // ---------- REAVALIAÇÃO MENSAL (DADOS) ----------
+  if (latestMonthly) {
+    doc.addPage();
+    drawHeader(doc, profile, specialistName);
+    y = 50;
+
+    const dataReav = latestMonthly.created_at
+      ? new Date(latestMonthly.created_at).toLocaleDateString("pt-BR")
+      : "—";
+
+    doc.setFontSize(9);
+    doc.setTextColor(...MUTED);
+    doc.text(`Reavaliação realizada em: ${dataReav}`, 14, y);
+    y += 6;
+
+    // Métricas e adesão
+    const metricRows: Array<[string, string | null]> = [
+      ["Peso", latestMonthly.peso ? `${latestMonthly.peso} kg` : null],
+      ["Altura", latestMonthly.altura || null],
+      ["Modalidade", latestMonthly.modalidade || null],
+      ["Nível de fadiga", latestMonthly.nivel_fadiga != null ? `${latestMonthly.nivel_fadiga}/10` : null],
+      ["Objetivo atual", latestMonthly.objetivo_atual || null],
+      ["Frequência de compromisso", latestMonthly.frequencia_compromisso || null],
+      ["Tempo disponível", latestMonthly.tempo_disponivel || null],
+      ["Dias disponíveis", latestMonthly.dias_disponiveis?.length ? latestMonthly.dias_disponiveis.join(", ") : null],
+      ["Horário do treino", [latestMonthly.horario_treino, latestMonthly.horario_treino_outro].filter(Boolean).join(" / ") || null],
+      ["Refeições / horários", latestMonthly.refeicoes_horarios || null],
+      ["Adesão aos treinos", latestMonthly.adesao_treinos != null ? `${latestMonthly.adesao_treinos}%` : null],
+      ["Motivo (treinos)", latestMonthly.motivo_adesao_treinos || null],
+      ["Adesão ao cardio", latestMonthly.adesao_cardios != null ? `${latestMonthly.adesao_cardios}%` : null],
+      ["Motivo (cardio)", latestMonthly.motivo_adesao_cardios || null],
+      ["Adesão à dieta", latestMonthly.adesao_dieta || null],
+      ["Motivo (não dieta)", latestMonthly.motivo_nao_dieta || null],
+      ["Alongamentos corretos", latestMonthly.alongamentos_corretos === true ? "Sim" : latestMonthly.alongamentos_corretos === false ? "Não" : null],
+      ["Competição fisiculturismo", latestMonthly.competicao_fisiculturismo || null],
+      ["Restrição alimentar", latestMonthly.restricao_alimentar || null],
+      ["Alimentos proibidos", latestMonthly.alimentos_proibidos || null],
+      ["Prioridades físicas", latestMonthly.prioridades_fisicas || null],
+      ["Notas de progressão", latestMonthly.notas_progressao || null],
+      ["Sugestão de dieta", latestMonthly.sugestao_dieta || null],
+      ["Sugestão de melhoria", latestMonthly.sugestao_melhoria || null],
+      ["Autoriza publicação", latestMonthly.autoriza_publicacao === true ? "Sim" : latestMonthly.autoriza_publicacao === false ? "Não" : null],
+      ["Máquinas indisponíveis", latestMonthly.maquinas_indisponiveis?.length ? latestMonthly.maquinas_indisponiveis.join(", ") : null],
+    ];
+
+    y = section(doc, "REAVALIAÇÃO MENSAL · MÉTRICAS E ADESÃO", metricRows, y, profile, specialistName);
+
+    // Progressão muscular
+    const progressGroups: Array<[string, boolean | string | null | undefined]> = [
+      ["Peitoral", latestMonthly.progresso_peitoral],
+      ["Costas", latestMonthly.progresso_costas],
+      ["Deltóide", latestMonthly.progresso_deltoide],
+      ["Tríceps", latestMonthly.progresso_triceps],
+      ["Bíceps", latestMonthly.progresso_biceps],
+      ["Quadríceps", latestMonthly.progresso_quadriceps],
+      ["Posteriores", latestMonthly.progresso_posteriores],
+      ["Glúteos", latestMonthly.progresso_gluteos],
+      ["Panturrilha", latestMonthly.progresso_panturrilha],
+      ["Abdômen", latestMonthly.progresso_abdomen],
+      ["Antebraço", latestMonthly.progresso_antebraco],
+    ];
+    const progressRows: Array<[string, string | null]> = progressGroups.map(([label, v]) => {
+      if (v == null || v === "") return [label, null];
+      if (typeof v === "boolean") return [label, v ? "Evoluiu ✓" : "Sem evolução ✗"];
+      return [label, String(v)];
+    });
+    y = section(doc, "REAVALIAÇÃO MENSAL · PROGRESSÃO MUSCULAR", progressRows, y, profile, specialistName);
+  }
+
+  // ---------- FOTOS DA REAVALIAÇÃO ----------
   const photoSources = [
     { url: latestMonthly?.foto_frente, label: "Frente" },
     { url: latestMonthly?.foto_costas, label: "Costas" },
@@ -339,12 +554,11 @@ export async function exportAnamnesePdf({
       );
     }
 
-    // Grid 3 cols × 2 rows on A4
     const cellW = 58;
     const cellH = 78;
     const gap = 6;
     const startX = 14;
-    let startY2 = 68;
+    const startY2 = 68;
 
     let i = 0;
     for (const photo of photoSources) {
@@ -355,7 +569,6 @@ export async function exportAnamnesePdf({
 
       const img = await urlToImageData(photo.url!);
       if (img) {
-        // Compute aspect-fit dimensions
         const aspect = img.w / img.h;
         let w = cellW;
         let h = cellW / aspect;
@@ -371,7 +584,6 @@ export async function exportAnamnesePdf({
         try {
           doc.addImage(img.data, "JPEG", offX, offY, w, h, undefined, "FAST");
         } catch {
-          // Fallback if format detection fails
           try {
             doc.addImage(img.data, "PNG", offX, offY, w, h, undefined, "FAST");
           } catch {
