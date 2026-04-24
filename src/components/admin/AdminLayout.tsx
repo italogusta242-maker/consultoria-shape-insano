@@ -10,8 +10,7 @@ import {
   Menu,
   UserPlus,
   ShieldCheck,
-  
-  
+  Wallet,
   Briefcase,
 } from "lucide-react";
 import { useState } from "react";
