@@ -46,6 +46,7 @@ const AdminRelatorios = lazy(() => import("./pages/admin/AdminRelatorios"));
 const AdminImportarAlunos = lazy(() => import("./pages/admin/AdminImportarAlunos"));
 const AdminPermissoes = lazy(() => import("./pages/admin/AdminPermissoes"));
 const AdminAnamneses = lazy(() => import("./pages/admin/AdminAnamneses"));
+const AdminFinanceiro = lazy(() => import("./pages/admin/AdminFinanceiro"));
 
 const AdminClosers = lazy(() => import("./pages/admin/AdminClosers"));
 const EspecialistaDashboard = lazy(() => import("./pages/especialista/EspecialistaDashboard"));
