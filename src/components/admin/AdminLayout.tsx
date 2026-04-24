@@ -10,8 +10,7 @@ import {
   Menu,
   UserPlus,
   ShieldCheck,
-  
-  
+  Wallet,
   Briefcase,
 } from "lucide-react";
 import { useState } from "react";
@@ -32,7 +31,7 @@ const navItems = [
   { title: "Closers", path: "/admin/closers", icon: Briefcase },
   { title: "Comunicação", path: "/admin/comunicacao", icon: MessageSquare },
   { title: "Anamneses", path: "/admin/anamneses", icon: ClipboardEdit },
-  
+  { title: "Financeiro", path: "/admin/financeiro", icon: Wallet },
   { title: "Relatórios", path: "/admin/relatorios", icon: BarChart3 },
 ];
 
