@@ -2,42 +2,94 @@ import { supabase } from "@/integrations/supabase/client";
 import type { MonthlyFormData } from "@/pages/monthly-assessment/constants";
 
 const MAX_IMAGE_DIM = 1200;
-const JPEG_QUALITY = 0.8;
+const JPEG_QUALITY = 0.85;
+
+/** Heuristic check: did the canvas actually receive pixel data, or is it
+ *  filled with a single color (the classic "all-black" symptom that happens
+ *  when the browser can't decode HEIC/HEIF and silently fires onload anyway)? */
+function canvasHasRealContent(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    // Sample a 32x32 grid of pixels — fast and reliable.
+    const samples = 32;
+    const stepX = Math.max(1, Math.floor(width / samples));
+    const stepY = Math.max(1, Math.floor(height / samples));
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let firstR = -1, firstG = -1, firstB = -1;
+    let varied = false;
+    for (let y = 0; y < height; y += stepY) {
+      for (let x = 0; x < width; x += stepX) {
+        const i = (y * width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (firstR === -1) { firstR = r; firstG = g; firstB = b; continue; }
+        if (Math.abs(r - firstR) > 4 || Math.abs(g - firstG) > 4 || Math.abs(b - firstB) > 4) {
+          varied = true;
+          break;
+        }
+      }
+      if (varied) break;
+    }
+    return varied;
+  } catch {
+    // getImageData can fail on tainted canvases; assume content is OK.
+    return true;
+  }
+}
 
 function compressImage(file: File): Promise<File> {
-  // Always convert through canvas to ensure JPEG output (handles HEIC, WEBP, etc.)
-  const needsConversion = !file.type || !file.type.startsWith("image/jpeg");
-  
-  return new Promise((resolve) => {
+  const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
+  const needsConversion = isHeic || !file.type || !file.type.startsWith("image/jpeg");
+
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
       let { width, height } = img;
-      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
-      
-      if (!needsResize && !needsConversion) {
-        URL.revokeObjectURL(img.src);
-        resolve(file);
+
+      // 1) Browser couldn't even decode dimensions → HEIC failure on Android/Chrome.
+      if (!width || !height) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error(
+          `Não foi possível ler a foto "${file.name}". ` +
+          `Se a foto foi tirada em iPhone, ative no app Câmera: Ajustes → Câmera → Formatos → "Mais Compatível" (JPEG). ` +
+          `Ou converta a imagem para JPG/PNG antes de enviar.`
+        ));
         return;
       }
-      
+
+      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
       if (needsResize) {
         const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
-      
+
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d")!;
+      // Paint a non-black background first so a true blank canvas would show as white,
+      // not as a "valid" black photo.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
+
+      // 2) Detect the silent-decode-failure case → canvas has only one color.
+      if (!canvasHasRealContent(ctx, width, height)) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error(
+          `A foto "${file.name}" não pôde ser processada (provavelmente formato HEIC do iPhone). ` +
+          `Ative em Ajustes → Câmera → Formatos → "Mais Compatível", ou envie a foto em JPG/PNG.`
+        ));
+        return;
+      }
+
       canvas.toBlob(
         (blob) => {
-          URL.revokeObjectURL(img.src);
-          if (blob) {
+          URL.revokeObjectURL(objectUrl);
+          if (blob && blob.size > 1024) {
             resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
           } else {
-            resolve(file);
+            reject(new Error(`Falha ao comprimir "${file.name}". Tente uma foto menor ou outro formato.`));
           }
         },
         "image/jpeg",
@@ -45,10 +97,13 @@ function compressImage(file: File): Promise<File> {
       );
     };
     img.onerror = () => {
-      URL.revokeObjectURL(img.src);
-      resolve(file); // fallback to original
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(
+        `Não foi possível abrir "${file.name}". ` +
+        `Verifique se é uma imagem JPG, PNG ou WebP válida (HEIC do iPhone pode falhar em alguns dispositivos).`
+      ));
     };
-    img.src = URL.createObjectURL(file);
+    img.src = objectUrl;
   });
 }
 
@@ -57,9 +112,17 @@ async function uploadPhoto(
   file: File,
   label: string,
   folderId: string
-): Promise<string | null> {
-  // Compress before upload
-  const compressed = await compressImage(file);
+): Promise<{ url: string | null; reason?: string }> {
+  // Compress before upload — may throw with a user-friendly message (HEIC etc.)
+  let compressed: File;
+  try {
+    compressed = await compressImage(file);
+  } catch (err: any) {
+    const reason = err?.message || "falha ao processar a imagem";
+    console.error(`[uploadPhoto] compressão falhou para ${label}:`, reason);
+    return { url: null, reason };
+  }
+
   const ext = compressed.name.split(".").pop() || "jpg";
   const path = `${userId}/monthly/${folderId}/${label}.${ext}`;
 
@@ -71,7 +134,7 @@ async function uploadPhoto(
 
     if (!error) {
       const { data } = supabase.storage.from("anamnese-photos").getPublicUrl(path);
-      return data.publicUrl;
+      return { url: data.publicUrl };
     }
 
     console.error(`Erro upload ${label} (tentativa ${attempt + 1}):`, error);
@@ -80,7 +143,7 @@ async function uploadPhoto(
     }
   }
 
-  return null;
+  return { url: null, reason: "falha de conexão com o servidor" };
 }
 
 export async function submitMonthlyAssessment(
@@ -108,30 +171,33 @@ export async function submitMonthlyAssessment(
     ];
 
     const photoUpdates: Record<string, string> = {};
-    const failedLabels: string[] = [];
+    const failedDetails: Array<{ label: string; reason: string }> = [];
     const photosToUpload = photoFields.filter(({ key }) => formData[key] instanceof File);
 
     const uploads = photosToUpload.map(async ({ key, label, column }) => {
-      const url = await uploadPhoto(user.id, formData[key] as File, label, folderId);
-      if (url) {
-        photoUpdates[column] = url;
-        console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${url}`);
+      const result = await uploadPhoto(user.id, formData[key] as File, label, folderId);
+      if (result.url) {
+        photoUpdates[column] = result.url;
+        console.log(`[submitMonthlyAssessment] Photo uploaded: ${column} → ${result.url}`);
       } else {
-        failedLabels.push(label);
+        failedDetails.push({ label, reason: result.reason || "erro desconhecido" });
       }
     });
 
     await Promise.all(uploads);
 
-    // Abort if user provided photos but ALL failed
+    // Abort if user provided photos but ALL failed — return the most informative reason.
     if (photosToUpload.length > 0 && Object.keys(photoUpdates).length === 0) {
-      console.error("[submitMonthlyAssessment] ALL photo uploads failed");
-      throw new Error("Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.");
+      console.error("[submitMonthlyAssessment] ALL photo uploads failed", failedDetails);
+      const heicReason = failedDetails.find((f) => /HEIC|iPhone|Compatível/i.test(f.reason));
+      const message = heicReason?.reason
+        || failedDetails[0]?.reason
+        || "Nenhuma foto foi enviada com sucesso. Verifique sua conexão e tente novamente.";
+      throw new Error(message);
     }
 
-    // Warn if some failed
-    if (failedLabels.length > 0) {
-      console.warn(`[submitMonthlyAssessment] Some photos failed: ${failedLabels.join(", ")}`);
+    if (failedDetails.length > 0) {
+      console.warn(`[submitMonthlyAssessment] Some photos failed:`, failedDetails);
     }
 
     // 2. Refresh session AGAIN right before INSERT (in case uploads took long)
@@ -279,8 +345,8 @@ export async function submitMonthlyAssessment(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
-    const warning = failedLabels.length > 0
-      ? `As seguintes fotos não foram enviadas: ${failedLabels.join(", ")}. Você pode enviar uma nova reavaliação para complementar.`
+    const warning = failedDetails.length > 0
+      ? `Algumas fotos não foram enviadas (${failedDetails.map((f) => f.label).join(", ")}). Motivo: ${failedDetails[0].reason}`
       : undefined;
     return { success: true, warning };
   } catch (error: any) {
