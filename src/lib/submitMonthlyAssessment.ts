@@ -2,42 +2,94 @@ import { supabase } from "@/integrations/supabase/client";
 import type { MonthlyFormData } from "@/pages/monthly-assessment/constants";
 
 const MAX_IMAGE_DIM = 1200;
-const JPEG_QUALITY = 0.8;
+const JPEG_QUALITY = 0.85;
+
+/** Heuristic check: did the canvas actually receive pixel data, or is it
+ *  filled with a single color (the classic "all-black" symptom that happens
+ *  when the browser can't decode HEIC/HEIF and silently fires onload anyway)? */
+function canvasHasRealContent(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  try {
+    // Sample a 32x32 grid of pixels — fast and reliable.
+    const samples = 32;
+    const stepX = Math.max(1, Math.floor(width / samples));
+    const stepY = Math.max(1, Math.floor(height / samples));
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let firstR = -1, firstG = -1, firstB = -1;
+    let varied = false;
+    for (let y = 0; y < height; y += stepY) {
+      for (let x = 0; x < width; x += stepX) {
+        const i = (y * width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (firstR === -1) { firstR = r; firstG = g; firstB = b; continue; }
+        if (Math.abs(r - firstR) > 4 || Math.abs(g - firstG) > 4 || Math.abs(b - firstB) > 4) {
+          varied = true;
+          break;
+        }
+      }
+      if (varied) break;
+    }
+    return varied;
+  } catch {
+    // getImageData can fail on tainted canvases; assume content is OK.
+    return true;
+  }
+}
 
 function compressImage(file: File): Promise<File> {
-  // Always convert through canvas to ensure JPEG output (handles HEIC, WEBP, etc.)
-  const needsConversion = !file.type || !file.type.startsWith("image/jpeg");
-  
-  return new Promise((resolve) => {
+  const isHeic = /\.(heic|heif)$/i.test(file.name) || /heic|heif/i.test(file.type);
+  const needsConversion = isHeic || !file.type || !file.type.startsWith("image/jpeg");
+
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
       let { width, height } = img;
-      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
-      
-      if (!needsResize && !needsConversion) {
-        URL.revokeObjectURL(img.src);
-        resolve(file);
+
+      // 1) Browser couldn't even decode dimensions → HEIC failure on Android/Chrome.
+      if (!width || !height) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error(
+          `Não foi possível ler a foto "${file.name}". ` +
+          `Se a foto foi tirada em iPhone, ative no app Câmera: Ajustes → Câmera → Formatos → "Mais Compatível" (JPEG). ` +
+          `Ou converta a imagem para JPG/PNG antes de enviar.`
+        ));
         return;
       }
-      
+
+      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
       if (needsResize) {
         const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
-      
+
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d")!;
+      // Paint a non-black background first so a true blank canvas would show as white,
+      // not as a "valid" black photo.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
+
+      // 2) Detect the silent-decode-failure case → canvas has only one color.
+      if (!canvasHasRealContent(ctx, width, height)) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error(
+          `A foto "${file.name}" não pôde ser processada (provavelmente formato HEIC do iPhone). ` +
+          `Ative em Ajustes → Câmera → Formatos → "Mais Compatível", ou envie a foto em JPG/PNG.`
+        ));
+        return;
+      }
+
       canvas.toBlob(
         (blob) => {
-          URL.revokeObjectURL(img.src);
-          if (blob) {
+          URL.revokeObjectURL(objectUrl);
+          if (blob && blob.size > 1024) {
             resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
           } else {
-            resolve(file);
+            reject(new Error(`Falha ao comprimir "${file.name}". Tente uma foto menor ou outro formato.`));
           }
         },
         "image/jpeg",
@@ -45,10 +97,13 @@ function compressImage(file: File): Promise<File> {
       );
     };
     img.onerror = () => {
-      URL.revokeObjectURL(img.src);
-      resolve(file); // fallback to original
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(
+        `Não foi possível abrir "${file.name}". ` +
+        `Verifique se é uma imagem JPG, PNG ou WebP válida (HEIC do iPhone pode falhar em alguns dispositivos).`
+      ));
     };
-    img.src = URL.createObjectURL(file);
+    img.src = objectUrl;
   });
 }
 
