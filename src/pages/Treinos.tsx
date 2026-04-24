@@ -29,6 +29,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getToday } from "@/lib/dateUtils";
+import {
+  saveWorkoutExecutionSnapshot,
+  loadWorkoutExecutionSnapshot,
+  clearWorkoutExecutionSnapshot,
+  saveWorkoutInProgress,
+  clearWorkoutInProgress,
+} from "@/lib/workoutSnapshot";
 
 // ─── Types ───────────────────────────────────────────────────
 interface ExerciseSet {
