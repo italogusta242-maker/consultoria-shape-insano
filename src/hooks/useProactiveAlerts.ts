@@ -309,76 +309,32 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
           }
         }
 
-        // 6. Assessment overdue
+        // 6. Reavaliação — UM ÚNICO alerta por aluno (Single Source of Truth)
+        // Prioridade: monthly_awaiting_review > monthly_pending > assessment_overdue
         const assessment = latestAssessment.get(sid);
-        if (profile && profile.onboarded && anam) {
-          const daysSinceAnamnese = differenceInCalendarDays(today, new Date(anam.created_at));
-          if (daysSinceAnamnese >= 30) {
-            if (!assessment) {
-              const key = `assessment-never-${sid}`;
-              if (!dismissedKeys.has(key)) {
-                alerts.push({
-                  id: key, type: "assessment_overdue", studentId: sid, studentName: name,
-                  severity: "warning", title: "Reavaliação nunca preenchida",
-                  daysRelative: daysSinceAnamnese - 30, timeLabel: "nunca feita",
-                  navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
-                });
-              }
-            } else {
-              const daysSinceAssessment = differenceInCalendarDays(today, new Date(assessment.created_at));
-              if (daysSinceAssessment > 30) {
-                const key = `assessment-overdue-${sid}`;
-                if (!dismissedKeys.has(key)) {
-                  alerts.push({
-                    id: key, type: "assessment_overdue", studentId: sid, studentName: name,
-                    severity: getSeverity(daysSinceAssessment - 30, { warn: 1, critical: 30 }),
-                    title: "Reavaliação mensal pendente", daysRelative: daysSinceAssessment,
-                    timeLabel: `última ${buildTimeLabel(daysSinceAssessment, "overdue")}`,
-                    navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
-                  });
-                }
-              }
-            }
-          }
-        }
-
-        // 7. Churn risk
-        const expiry = subscriptionExpiry.get(sid);
-        if (expiry) {
-          const daysUntilExpiry = differenceInCalendarDays(expiry, today);
-          if (daysUntilExpiry < 0) {
-            const daysOverdue = Math.abs(daysUntilExpiry);
-            const key = `churn-overdue-${sid}`;
-            if (!dismissedKeys.has(key)) {
-              alerts.push({
-                id: key, type: "churn_risk", studentId: sid, studentName: name,
-                severity: daysOverdue >= 7 ? "critical" : "warning",
-                title: "Assinatura vencida", daysRelative: daysOverdue,
-                timeLabel: `venceu ${buildTimeLabel(daysOverdue, "overdue")}`,
-                navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
-              });
-            }
-          } else if (daysUntilExpiry <= 10) {
-            const key = `churn-expiring-${sid}`;
-            if (!dismissedKeys.has(key)) {
-              alerts.push({
-                id: key, type: "churn_risk", studentId: sid, studentName: name,
-                severity: daysUntilExpiry <= 3 ? "warning" : "info",
-                title: `Assinatura vence ${buildTimeLabel(daysUntilExpiry, "remaining")}`,
-                daysRelative: -daysUntilExpiry,
-                timeLabel: `vence ${buildTimeLabel(daysUntilExpiry, "remaining")}`,
-                navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
-              });
-            }
-          }
-        }
-
-        // 8. Monthly assessment
         const nextDue = (profile as any)?.next_anamnese_due;
-        if (nextDue) {
+
+        // Prioridade 1: aluno já enviou e o especialista precisa revisar
+        const assessmentNeedsReview = assessment && !(assessment as any).reviewed;
+
+        if (assessmentNeedsReview) {
+          const daysSinceSubmit = differenceInCalendarDays(today, new Date(assessment!.created_at));
+          const key = `monthly-review-${sid}`;
+          if (!dismissedKeys.has(key)) {
+            alerts.push({
+              id: key, type: "monthly_awaiting_review", studentId: sid, studentName: name,
+              severity: getSeverity(daysSinceSubmit, { warn: 2, critical: 5 }),
+              title: "Mensal aguardando análise", daysRelative: daysSinceSubmit,
+              timeLabel: `enviada ${buildTimeLabel(daysSinceSubmit, "overdue")}`,
+              navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+            });
+          }
+        } else if (nextDue) {
+          // Prioridade 2: ciclo mensal vencido sem resposta nova
           const dueDate = new Date(nextDue);
           const daysOverdue = differenceInCalendarDays(today, dueDate);
-          if (daysOverdue >= 0 && (!assessment || new Date(assessment.created_at) < dueDate)) {
+          const cycleHasResponse = assessment && new Date(assessment.created_at) >= dueDate;
+          if (daysOverdue >= 0 && !cycleHasResponse) {
             const key = `monthly-pending-${sid}`;
             if (!dismissedKeys.has(key)) {
               alerts.push({
@@ -390,18 +346,19 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
               });
             }
           }
-        }
-        if (assessment && !(assessment as any).reviewed) {
-          const daysSinceSubmit = differenceInCalendarDays(today, new Date(assessment.created_at));
-          const key = `monthly-review-${sid}`;
-          if (!dismissedKeys.has(key)) {
-            alerts.push({
-              id: key, type: "monthly_awaiting_review", studentId: sid, studentName: name,
-              severity: getSeverity(daysSinceSubmit, { warn: 2, critical: 5 }),
-              title: "Mensal aguardando análise", daysRelative: daysSinceSubmit,
-              timeLabel: `enviada ${buildTimeLabel(daysSinceSubmit, "overdue")}`,
-              navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
-            });
+        } else if (profile && profile.onboarded && anam) {
+          // Prioridade 3 (legado): nunca houve reavaliação E next_anamnese_due não está setado
+          const daysSinceAnamnese = differenceInCalendarDays(today, new Date(anam.created_at));
+          if (daysSinceAnamnese >= 30 && !assessment) {
+            const key = `assessment-never-${sid}`;
+            if (!dismissedKeys.has(key)) {
+              alerts.push({
+                id: key, type: "assessment_overdue", studentId: sid, studentName: name,
+                severity: "warning", title: "Reavaliação nunca preenchida",
+                daysRelative: daysSinceAnamnese - 30, timeLabel: "nunca feita",
+                navigateTo: `/especialista/alunos?aluno=${encodeURIComponent(name)}`,
+              });
+            }
           }
         }
       }
