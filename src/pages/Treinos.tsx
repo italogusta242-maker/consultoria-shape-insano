@@ -414,40 +414,38 @@ const Treinos = () => {
   const MAX_WORKOUT_SECONDS = 3 * 60 * 60; // 3 hours
 
   // ─── Restore execution state from localStorage ─────────────
-  const getPersistedExecution = () => {
-    try {
-      const raw = localStorage.getItem("workout-execution-state");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed.date !== getToday()) {
-        localStorage.removeItem("workout-execution-state");
-        return null;
-      }
-      return parsed as {
-        date: string;
-        view: View;
-        selectedGroup: number;
-        groupName?: string;
-        startedAt: string;
-        exercises: Exercise[];
-        expandedExercise: number | null;
-      };
-    } catch { return null; }
-  };
+  // Local-first: every set/click is persisted *immediately* (synchronous) so
+  // the workout survives the OS killing the tab when the user opens WhatsApp,
+  // Spotify, loses signal, or the PWA is suspended in the background.
+  const persisted = loadWorkoutExecutionSnapshot();
+  // Only restore if it belongs to the same authenticated user. If userId is
+  // null (older snapshot from before this change), still allow it for the
+  // current user — best-effort recovery.
+  const persistedBelongsToUser = persisted
+    ? persisted.userId == null || persisted.userId === user?.id
+    : false;
+  const persistedExercises = persistedBelongsToUser ? sanitizeExercises(persisted!.exercises) : [];
 
-  const persisted = getPersistedExecution();
-  const persistedExercises = sanitizeExercises(persisted?.exercises);
-
-  const [view, setView] = useState<View>(persisted?.view === "execution" ? "execution" : "list");
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(persisted?.selectedGroup ?? null);
-  const [expandedExercise, setExpandedExercise] = useState<number | null>(persisted?.expandedExercise ?? null);
+  const [view, setView] = useState<View>(
+    persistedBelongsToUser && persisted!.view === "execution" ? "execution" : "list"
+  );
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(
+    persistedBelongsToUser ? persisted!.selectedGroup : null
+  );
+  const [expandedExercise, setExpandedExercise] = useState<number | null>(
+    persistedBelongsToUser ? persisted!.expandedExercise : null
+  );
   const [exercises, setExercises] = useState<Exercise[]>(persistedExercises);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [effortRating, setEffortRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
-  const [startedAt, setStartedAt] = useState<string>(persisted?.startedAt ?? "");
-  const [timerRunning, setTimerRunning] = useState(!!persisted?.startedAt && persisted?.view === "execution");
+  const [startedAt, setStartedAt] = useState<string>(
+    persistedBelongsToUser ? persisted!.startedAt : ""
+  );
+  const [timerRunning, setTimerRunning] = useState(
+    persistedBelongsToUser && !!persisted!.startedAt && persisted!.view === "execution"
+  );
   const [restTimerData, setRestTimerData] = useState<{ seconds: number } | null>(null);
   const [setPickerData, setSetPickerData] = useState<{ exIdx: number; setIdx: number } | null>(null);
 
