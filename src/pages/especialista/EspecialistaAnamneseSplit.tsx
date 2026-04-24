@@ -147,6 +147,29 @@ const EspecialistaAnamneseSplit = () => {
   const studentOptions = profile ? [{ id: profile.id, name: studentName }] : [];
   const isNutri = mySpecialty === "nutricionista";
 
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const handleExportPdf = async () => {
+    if (!anamnese && !selectedMonthly) {
+      toast.error("Sem dados para exportar");
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      await exportAnamnesePdf({
+        profile: profile as any,
+        anamnese: anamnese as any,
+        latestMonthly: (selectedMonthly ?? monthlyAssessments?.[0] ?? null) as any,
+        specialistName: user?.user_metadata?.name || user?.email,
+      });
+      toast.success("PDF gerado com sucesso");
+    } catch (e: any) {
+      console.error("[exportAnamnesePdf]", e);
+      toast.error("Erro ao gerar PDF");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   // Fetch existing training plan for this student
   const { data: existingTrainingPlan } = useQuery({
     queryKey: ["split-training-plan", studentId],
