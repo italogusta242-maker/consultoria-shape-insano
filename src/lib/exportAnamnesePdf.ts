@@ -607,7 +607,7 @@ export async function exportAnamnesePdf({
       const yPos = startY2 + row * (cellH + gap + 5);
 
       const img = await urlToImageData(photo.url!);
-      if (img) {
+      if (img && !img.broken) {
         const aspect = img.w / img.h;
         let w = cellW;
         let h = cellW / aspect;
@@ -631,6 +631,20 @@ export async function exportAnamnesePdf({
             doc.text("Indisponível", x + cellW / 2, yPos + cellH / 2, { align: "center" });
           }
         }
+      } else if (img && img.broken) {
+        // Photo uploaded but is all-black (HEIC decode failure on student device)
+        doc.setDrawColor(220, 180, 180);
+        doc.setFillColor(252, 245, 245);
+        doc.rect(x, yPos, cellW, cellH, "FD");
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(180, 60, 60);
+        doc.text("Foto corrompida", x + cellW / 2, yPos + cellH / 2 - 6, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(...MUTED);
+        doc.text("(falha no upload)", x + cellW / 2, yPos + cellH / 2, { align: "center" });
+        doc.text("Solicitar reenvio", x + cellW / 2, yPos + cellH / 2 + 5, { align: "center" });
       } else {
         doc.setDrawColor(220, 220, 220);
         doc.setFillColor(248, 248, 248);
