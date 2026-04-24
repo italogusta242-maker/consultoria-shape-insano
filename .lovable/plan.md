@@ -1,50 +1,92 @@
-## O que aconteceu
+## Ajuste solicitado
 
-A tela de erro que você viu mostra:
+Resolver a perda de progresso no treino quando o aluno sai para WhatsApp/Spotify, perde sinal ou o navegador/PWA é encerrado em segundo plano. O comportamento esperado é simples: cada série marcada precisa ficar salva no próprio aparelho imediatamente e o treino deve reabrir exatamente de onde parou.
 
-> Failed to fetch dynamically imported module: .../assets/ChatNotificationToast-6_u1kG9M.js
+## O que será feito
 
-Isso é um sintoma clássico de **chunk antigo após deploy novo**:
+### 1. Fortalecer a persistência local do treino em execução
+Hoje a tela de `Treinos` já usa `localStorage`, mas a gravação principal acontece em `useEffect`, ou seja: depois da mudança de estado já ter sido aplicada. Em celulares com pouca memória isso abre uma janela em que o app pode ser morto antes da persistência terminar.
 
-1. Seu navegador tinha o `index.html` antigo carregado em memória, que apontava para o arquivo `ChatNotificationToast-6_u1kG9M.js`.
-2. Um deploy novo foi publicado → o Lovable subiu o app com hashes novos (`ChatNotificationToast-XXXXX.js`) e apagou os antigos.
-3. Quando o React tentou carregar o componente `ChatNotificationToast` (via `lazy()` em `App.tsx:33`), o arquivo antigo já não existia mais → `Failed to fetch`.
-4. O `ErrorBoundary` capturou e mostrou a tela "Algo deu errado".
+Vou mudar isso para uma persistência imediata, no próprio evento da ação do usuário:
+- iniciar treino
+- alterar carga/repetições
+- confirmar série
+- reabrir série concluída
+- concluir exercício
+- marcar bloco de texto como feito
+- cancelar ou finalizar treino
 
-Já existe o mecanismo `useSilentUpdate` que compara `__BUILD_VERSION__` com `/version.json` e faz hard-purge do cache, mas ele só roda no mount inicial e no focus da aba — não é acionado quando uma importação dinâmica falha no meio da navegação.
+Assim, o snapshot do treino será salvo no milissegundo do clique, e não apenas “na próxima renderização”.
 
-## O que vou ajustar
+### 2. Salvar um snapshot completo e seguro da sessão
+O snapshot local passará a guardar, de forma consistente:
+- aluno atual
+- data da sessão
+- grupo de treino selecionado
+- nome do grupo
+- `startedAt`
+- view atual (`detail` ou `execution`)
+- exercício expandido
+- exercícios com `setsData` completos
+- estado de descanso, quando existir
 
-### 1. Auto-recover no ErrorBoundary
-Em `src/components/ErrorBoundary.tsx`, detectar mensagens típicas de chunk stale:
-- `Failed to fetch dynamically imported module`
-- `Importing a module script failed`
-- `error loading dynamically imported module`
-- `ChunkLoadError`
+Também vou padronizar as chaves e validações para evitar restaurar dados inválidos ou de outro treino.
 
-Quando detectar uma dessas, **uma única vez** (com flag em `sessionStorage` para evitar loop):
-- Chamar `hardPurgeCaches()` de `@/lib/pwaCache` (limpa Cache Storage + desregistra SW).
-- Fazer `window.location.reload()` automaticamente.
+### 3. Restaurar automaticamente ao reabrir o app
+Na entrada da página de `Treinos`, o app vai:
+- verificar se existe sessão local válida do dia
+- conferir se ela pertence ao mesmo aluno e ao mesmo treino/grupo
+- restaurar o estado completo
+- retomar a execução sem zerar séries já marcadas
 
-Se já tentou recarregar uma vez e ainda assim deu o mesmo erro, mostra a tela atual com botão "Recarregar" (fallback manual), evitando loop infinito.
+Se os dados estiverem inconsistentes (por exemplo, plano alterado pelo especialista), o app limpa apenas a sessão corrompida e volta ao estado seguro.
 
-### 2. Listener global para promises rejeitadas
-Adicionar em `src/main.tsx` um listener `window.addEventListener("unhandledrejection", ...)` que detecta o mesmo padrão de erro de chunk e dispara o mesmo fluxo de hard-purge + reload. Isso cobre casos em que o erro acontece fora do ciclo de render do React (ex: dentro de um `useEffect` async, prefetch de rota etc.).
+### 4. Gravar também nos eventos de ciclo de vida do celular
+Além da persistência imediata por clique, vou adicionar flush/backup quando a aba/app for para segundo plano:
+- `visibilitychange`
+- `pagehide`
+- desmontagem do componente
 
-### 3. Mensagem mais clara na tela de erro
-Quando o erro for de chunk stale e o auto-recover não conseguir resolver (improvável, mas garantia), trocar a mensagem genérica por algo como:
+Isso reduz ainda mais o risco de perda quando Android/iPhone suspendem ou encerram o navegador/PWA.
 
-> "Detectamos uma versão nova do app. Recarregando…"
+### 5. Blindar a recuperação contra reload automático do app
+O projeto já possui lógica de atualização silenciosa do PWA. Vou garantir que, enquanto houver treino em andamento salvo localmente, a tela não seja recarregada de forma automática no retorno ao app.
 
-Com um spinner durante o auto-reload, em vez do balão de erro técnico.
-
-## Arquivos alterados
-
-- `src/components/ErrorBoundary.tsx` — detecção + auto-recover + flag anti-loop.
-- `src/main.tsx` — listener global de `unhandledrejection` para chunks.
-
-Sem mudanças de schema, RLS, edge functions ou rotas. É puramente client-side.
+Isso evita o cenário em que o app até detecta atualização, mas interfere numa sessão que ainda precisa ser retomada.
 
 ## Resultado esperado
 
-Da próxima vez que houver deploy novo enquanto Nicolas (ou qualquer usuário) estiver com a aba aberta, em vez de aparecer "Algo deu errado" o app vai automaticamente limpar o cache, recarregar e voltar a funcionar — sem ele precisar clicar em nada.
+Depois dessa mudança:
+- o aluno marca uma série e ela fica salva imediatamente no aparelho
+- se o app fechar, perder foco ou recarregar, o treino volta do ponto exato
+- trocar para WhatsApp/Spotify não deve mais zerar o treino
+- oscilações de sinal não afetam o progresso local da sessão
+- o banco continua sendo usado apenas no momento de registrar oficialmente o treino concluído
+
+## Arquivos envolvidos
+
+- `src/pages/Treinos.tsx`
+- `src/hooks/useSilentUpdate.ts`
+- possivelmente um helper novo para centralizar a persistência do treino local, se isso deixar a lógica mais segura e reutilizável
+
+## Detalhes técnicos
+
+- Não precisa de migração no banco para este ajuste.
+- A solução será local-first: persistência no aparelho antes de qualquer dependência de internet.
+- A restauração seguirá o padrão já existente de limpeza defensiva para snapshots incompatíveis.
+- Vou preservar a lógica atual de histórico/salvamento final no backend, mas separar melhor “sessão local em andamento” de “treino oficialmente concluído”.
+- Se fizer sentido durante a implementação, transformarei a persistência em um pequeno utilitário com funções como:
+  - `saveWorkoutExecutionSnapshot()`
+  - `loadWorkoutExecutionSnapshot()`
+  - `clearWorkoutExecutionSnapshot()`
+  - `isWorkoutSnapshotValid()`
+
+## Validação após implementação
+
+Vou validar estes cenários:
+- iniciar treino, marcar séries e recarregar manualmente
+- iniciar treino, sair da aba e voltar
+- abrir outro app e retornar
+- restaurar treino no mesmo dia
+- impedir restauração indevida quando o grupo/plano mudou
+- finalizar ou cancelar treino e confirmar que o snapshot local foi limpo

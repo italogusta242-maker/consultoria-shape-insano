@@ -29,6 +29,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getToday } from "@/lib/dateUtils";
+import {
+  saveWorkoutExecutionSnapshot,
+  loadWorkoutExecutionSnapshot,
+  clearWorkoutExecutionSnapshot,
+  saveWorkoutInProgress,
+  clearWorkoutInProgress,
+} from "@/lib/workoutSnapshot";
 
 // ─── Types ───────────────────────────────────────────────────
 interface ExerciseSet {
@@ -407,40 +414,38 @@ const Treinos = () => {
   const MAX_WORKOUT_SECONDS = 3 * 60 * 60; // 3 hours
 
   // ─── Restore execution state from localStorage ─────────────
-  const getPersistedExecution = () => {
-    try {
-      const raw = localStorage.getItem("workout-execution-state");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed.date !== getToday()) {
-        localStorage.removeItem("workout-execution-state");
-        return null;
-      }
-      return parsed as {
-        date: string;
-        view: View;
-        selectedGroup: number;
-        groupName?: string;
-        startedAt: string;
-        exercises: Exercise[];
-        expandedExercise: number | null;
-      };
-    } catch { return null; }
-  };
+  // Local-first: every set/click is persisted *immediately* (synchronous) so
+  // the workout survives the OS killing the tab when the user opens WhatsApp,
+  // Spotify, loses signal, or the PWA is suspended in the background.
+  const persisted = loadWorkoutExecutionSnapshot();
+  // Only restore if it belongs to the same authenticated user. If userId is
+  // null (older snapshot from before this change), still allow it for the
+  // current user — best-effort recovery.
+  const persistedBelongsToUser = persisted
+    ? persisted.userId == null || persisted.userId === user?.id
+    : false;
+  const persistedExercises = persistedBelongsToUser ? sanitizeExercises(persisted!.exercises) : [];
 
-  const persisted = getPersistedExecution();
-  const persistedExercises = sanitizeExercises(persisted?.exercises);
-
-  const [view, setView] = useState<View>(persisted?.view === "execution" ? "execution" : "list");
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(persisted?.selectedGroup ?? null);
-  const [expandedExercise, setExpandedExercise] = useState<number | null>(persisted?.expandedExercise ?? null);
+  const [view, setView] = useState<View>(
+    persistedBelongsToUser && persisted!.view === "execution" ? "execution" : "list"
+  );
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(
+    persistedBelongsToUser ? persisted!.selectedGroup : null
+  );
+  const [expandedExercise, setExpandedExercise] = useState<number | null>(
+    persistedBelongsToUser ? persisted!.expandedExercise : null
+  );
   const [exercises, setExercises] = useState<Exercise[]>(persistedExercises);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [effortRating, setEffortRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
-  const [startedAt, setStartedAt] = useState<string>(persisted?.startedAt ?? "");
-  const [timerRunning, setTimerRunning] = useState(!!persisted?.startedAt && persisted?.view === "execution");
+  const [startedAt, setStartedAt] = useState<string>(
+    persistedBelongsToUser ? persisted!.startedAt : ""
+  );
+  const [timerRunning, setTimerRunning] = useState(
+    persistedBelongsToUser && !!persisted!.startedAt && persisted!.view === "execution"
+  );
   const [restTimerData, setRestTimerData] = useState<{ seconds: number } | null>(null);
   const [setPickerData, setSetPickerData] = useState<{ exIdx: number; setIdx: number } | null>(null);
 
@@ -452,7 +457,7 @@ const Treinos = () => {
 
   // Timer computed from startedAt (survives tab changes)
   const [timer, setTimer] = useState(() => {
-    if (persisted?.startedAt) {
+    if (persistedBelongsToUser && persisted?.startedAt) {
       return Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000);
     }
     return 0;
@@ -640,8 +645,8 @@ const Treinos = () => {
     });
 
     // Clear persisted state
-    localStorage.removeItem("workout-execution-state");
-    localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+    clearWorkoutExecutionSnapshot();
+    clearWorkoutInProgress(selectedGroup);
 
     toast.success("⏱️ Treino finalizado automaticamente após 3h!");
     setView("list");
@@ -652,8 +657,8 @@ const Treinos = () => {
     if (selectedGroup === null) return;
     if (hasValidSelectedGroup && !persistedGroupMismatch) return;
 
-    localStorage.removeItem("workout-execution-state");
-    localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+    clearWorkoutExecutionSnapshot();
+    clearWorkoutInProgress(selectedGroup);
     setSelectedGroup(null);
     setExpandedExercise(null);
     setExercises([]);
@@ -667,22 +672,58 @@ const Treinos = () => {
     }
   }, [hasValidSelectedGroup, persistedGroupMismatch, selectedGroup, view]);
 
-  // Persist execution state to localStorage
+  // Persist execution state to localStorage (kept as a safety net — the
+  // critical writes happen synchronously inside each user action below).
   useEffect(() => {
     if (view === "execution" && hasValidSelectedGroup && startedAt) {
-      localStorage.setItem("workout-execution-state", JSON.stringify({
-        date: getToday(),
-        view,
-        selectedGroup,
-        groupName: workoutGroups[selectedGroup].name,
+      saveWorkoutExecutionSnapshot({
+        view: "execution",
+        userId: user?.id ?? null,
+        selectedGroup: selectedGroup as number,
+        groupName: workoutGroups[selectedGroup as number].name,
         startedAt,
         exercises,
         expandedExercise,
-      }));
+      });
     } else if (view !== "execution") {
-      localStorage.removeItem("workout-execution-state");
+      clearWorkoutExecutionSnapshot();
     }
-  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups]);
+  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
+
+  // Lifecycle backup: when the tab is hidden or the page is being unloaded
+  // (Android killing the PWA, user switching to WhatsApp/Spotify, etc.),
+  // flush the latest state synchronously so nothing is lost.
+  useEffect(() => {
+    const flush = () => {
+      if (view === "execution" && hasValidSelectedGroup && startedAt) {
+        saveWorkoutExecutionSnapshot({
+          view: "execution",
+          userId: user?.id ?? null,
+          selectedGroup: selectedGroup as number,
+          groupName: workoutGroups[selectedGroup as number].name,
+          startedAt,
+          exercises,
+          expandedExercise,
+        });
+      }
+      if (hasValidSelectedGroup && exercises.length > 0 && (view === "detail" || view === "execution")) {
+        saveWorkoutInProgress(selectedGroup as number, {
+          userId: user?.id ?? null,
+          groupName: workoutGroups[selectedGroup as number].name,
+          exercises,
+        });
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+      // Also flush on unmount
+      flush();
+    };
+  }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
 
   // Determine next group
   const getNextGroupIndex = useCallback(() => {
@@ -710,8 +751,14 @@ const Treinos = () => {
         const todayStr = getToday();
         const safeExercises = sanitizeExercises(parsed.exercises);
         const matchesGroupName = typeof parsed.groupName !== "string" || parsed.groupName === group.name;
+        const matchesUser = parsed.userId == null || parsed.userId === user?.id;
 
-        if (parsed.date === todayStr && matchesGroupName && safeExercises.length === group.exercises.length) {
+        if (
+          parsed.date === todayStr &&
+          matchesGroupName &&
+          matchesUser &&
+          safeExercises.length === group.exercises.length
+        ) {
           setExercises(safeExercises);
           setSelectedGroup(index);
           setExpandedExercise(null);
@@ -719,8 +766,8 @@ const Treinos = () => {
           return;
         }
 
-        if (!matchesGroupName) {
-          localStorage.removeItem(storageKey);
+        if (!matchesGroupName || !matchesUser) {
+          clearWorkoutInProgress(index);
         }
       }
     } catch { }
@@ -747,28 +794,67 @@ const Treinos = () => {
     setSelectedGroup(index);
     setExpandedExercise(null);
     setView("detail");
+    // Synchronous first save so even an immediate crash preserves the draft.
+    saveWorkoutInProgress(index, {
+      userId: user?.id ?? null,
+      groupName: group.name,
+      exercises: exs,
+    });
   };
 
-  // Auto-save exercises to localStorage whenever they change
+  // Auto-save exercises to localStorage whenever they change (safety net).
   useEffect(() => {
     if (!hasValidSelectedGroup || exercises.length === 0) return;
     if (view !== "detail" && view !== "execution") return;
-    const storageKey = `workout-in-progress-${selectedGroup}`;
-    localStorage.setItem(storageKey, JSON.stringify({
-      date: getToday(),
-      groupName: workoutGroups[selectedGroup].name,
+    saveWorkoutInProgress(selectedGroup as number, {
+      userId: user?.id ?? null,
+      groupName: workoutGroups[selectedGroup as number].name,
       exercises,
-    }));
-  }, [exercises, hasValidSelectedGroup, selectedGroup, view, workoutGroups]);
+    });
+  }, [exercises, hasValidSelectedGroup, selectedGroup, view, workoutGroups, user?.id]);
+
+  /**
+   * Synchronously persist a fresh exercises snapshot the moment a user action
+   * happens. This is the core of the "lose nothing" guarantee — we don't wait
+   * for React's next render cycle.
+   */
+  const persistExercisesNow = useCallback(
+    (nextExercises: Exercise[], nextStartedAt?: string, nextExpanded?: number | null) => {
+      if (selectedGroup === null) return;
+      const groupName = workoutGroups[selectedGroup]?.name;
+      if (!groupName) return;
+      saveWorkoutInProgress(selectedGroup, {
+        userId: user?.id ?? null,
+        groupName,
+        exercises: nextExercises,
+      });
+      const effectiveStartedAt = nextStartedAt ?? startedAt;
+      if (effectiveStartedAt) {
+        saveWorkoutExecutionSnapshot({
+          view: "execution",
+          userId: user?.id ?? null,
+          selectedGroup,
+          groupName,
+          startedAt: effectiveStartedAt,
+          exercises: nextExercises,
+          expandedExercise: nextExpanded ?? expandedExercise,
+        });
+      }
+    },
+    [selectedGroup, workoutGroups, user?.id, startedAt, expandedExercise]
+  );
 
   const startWorkout = () => {
+    const startIso = new Date().toISOString();
     setView("execution");
     setTimerRunning(true);
     setTimer(0);
-    setStartedAt(new Date().toISOString());
+    setStartedAt(startIso);
     setExpandedExercise(0);
     // 10% chance "Igor is watching" notification
     if (user) onWorkoutStart(user.id);
+    // Immediate snapshot so the very first second of the workout is recoverable.
+    persistExercisesNow(exercises, startIso, 0);
   };
 
   const updateSet = (exIdx: number, setIdx: number, field: "weight" | "actualReps", value: string) => {
@@ -776,6 +862,7 @@ const Treinos = () => {
     const num = value === "" ? null : Number(value);
     updated[exIdx].setsData[setIdx][field] = num;
     setExercises(updated);
+    persistExercisesNow(updated);
   };
 
   const confirmSet = (exIdx: number, setIdx: number) => {
@@ -787,6 +874,7 @@ const Treinos = () => {
     }
     set.done = true;
     setExercises(updated);
+    persistExercisesNow(updated);
     try { SFX.confirm(); } catch { }
 
     // Start rest timer if there are more sets remaining (in this exercise or next)
@@ -802,8 +890,10 @@ const Treinos = () => {
     const ex = exercises[exIdx];
     const updated = [...exercises];
     updated[exIdx].setsData.forEach((s) => { if (!s.done) s.done = true; });
+    const nextExpanded = exIdx < exercises.length - 1 ? exIdx + 1 : expandedExercise;
     setExercises(updated);
     if (exIdx < exercises.length - 1) setExpandedExercise(exIdx + 1);
+    persistExercisesNow(updated, undefined, nextExpanded);
     toast.success(`${ex?.name || "Exercício"} concluído!`);
     try { SFX.xp(); } catch { }
   };
@@ -833,9 +923,9 @@ const Treinos = () => {
     setShowFinishDialog(false);
     // Clear persisted state without saving
     if (selectedGroup !== null) {
-      localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
+      clearWorkoutInProgress(selectedGroup);
     }
-    localStorage.removeItem("workout-execution-state");
+    clearWorkoutExecutionSnapshot();
     setView("list");
     setSelectedGroup(null);
     setExercises([]);
@@ -864,8 +954,8 @@ const Treinos = () => {
       const totalVolume = exercises.reduce((sum, ex) => 
         sum + ex.setsData.reduce((s, set) => s + ((set.weight || 0) * (set.actualReps || 0)), 0), 0);
       if (user) onWorkoutFinish(user.id, totalVolume);
-      localStorage.removeItem(`workout-in-progress-${selectedGroup}`);
-      localStorage.removeItem("workout-execution-state");
+      clearWorkoutInProgress(selectedGroup);
+      clearWorkoutExecutionSnapshot();
       // Go to share view instead of list
       setView("share" as any);
     } catch {
@@ -1313,8 +1403,10 @@ const Treinos = () => {
                                 onClick={() => {
                                   const updated = [...exercises];
                                   updated[exIdx] = { ...updated[exIdx], _freeTextDone: true } as any;
+                                  const nextExpanded = exIdx < exercises.length - 1 ? exIdx + 1 : expandedExercise;
                                   setExercises(updated);
                                   if (exIdx < exercises.length - 1) setExpandedExercise(exIdx + 1);
+                                  persistExercisesNow(updated, undefined, nextExpanded);
                                   toast.success("Instrução concluída!");
                                 }}
                                 className="w-full py-2 rounded-lg gold-gradient text-[hsl(var(--obsidian))] text-sm font-semibold"
@@ -1365,6 +1457,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                   }
                                   setSetPickerData({ exIdx, setIdx });
                                 }}
@@ -1379,6 +1472,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                   }
                                   setSetPickerData({ exIdx, setIdx });
                                 }}
@@ -1392,6 +1486,7 @@ const Treinos = () => {
                                     const updated = [...exercises];
                                     updated[exIdx].setsData[setIdx] = { ...set, done: false };
                                     setExercises(updated);
+                                    persistExercisesNow(updated);
                                     toast("Série reaberta para edição", { icon: "✏️" });
                                   }}
                                   className="flex justify-center h-8 items-center"
@@ -1522,6 +1617,7 @@ const Treinos = () => {
               updated[setPickerData.exIdx].setsData[setPickerData.setIdx].actualReps = reps;
               updated[setPickerData.exIdx].setsData[setPickerData.setIdx].weight = weight;
               setExercises(updated);
+              persistExercisesNow(updated);
               setSetPickerData(null);
             }}
           />
