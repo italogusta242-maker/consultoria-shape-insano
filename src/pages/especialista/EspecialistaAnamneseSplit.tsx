@@ -387,14 +387,31 @@ const EspecialistaAnamneseSplit = () => {
               </div>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs gap-1.5"
-            onClick={() => setViewMode("editor-only")}
-          >
-            <Maximize2 size={14} /> Expandir Editor
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              title="Exportar anamnese completa em PDF"
+            >
+              {exportingPdf ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileDown size={14} />
+              )}
+              {exportingPdf ? "Gerando..." : "Exportar PDF"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={() => setViewMode("editor-only")}
+            >
+              <Maximize2 size={14} /> Expandir Editor
+            </Button>
+          </div>
         </div>
 
         {/* Anamnese Timeline */}
