@@ -56,8 +56,6 @@ const GROUP_LETTERS = ["A", "B", "C", "D", "E", "F"];
 export default function TrainingPlanEditor({ open, onClose, students, editingPlan, embedded, preSelectedStudent }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const isEditing = !!editingPlan;
-
   // ===== ZUSTAND: Global state keyed by student_id =====
   const { getDraft, setDraft, patchDraft, clearDraft } = useWorkoutDraftStore();
 
@@ -65,6 +63,10 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const [selectedStudent, setSelectedStudent] = useState(
     editingPlan?.user_id ?? preSelectedStudent ?? ""
   );
+
+  // Local state to track the current plan ID (survives insert -> update transition)
+  const [localPlanId, setLocalPlanId] = useState<string | null>(editingPlan?.id ?? null);
+  const isEditing = !!localPlanId;
 
   // Derive values from per-student draft (single source of truth)
   const draft = selectedStudent ? getDraft(selectedStudent) : null;
@@ -124,6 +126,10 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       setSnapshotVersion((v) => v + 1);
     };
 
+    // Update localPlanId if editingPlan prop changes
+    setLocalPlanId(editingPlan?.id ?? null);
+
+    // If we are editing an existing plan, force the store to sync with DB data
     if (editingPlan) {
       const key = `${selectedStudent}::${editingPlan.id}`;
       if (syncedKeyRef.current === key) return; // already synced this plan
@@ -515,7 +521,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         exercises: g.exercises.map((ex, idx) => ({ ...ex, order_index: idx })),
       }));
 
-      if (isEditing && editingPlan) {
+      if (isEditing && localPlanId) {
         const { error } = await supabase
           .from("training_plans")
           .update({
@@ -529,8 +535,9 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             progression_guide: progressionGuide || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", editingPlan.id);
+          .eq("id", localPlanId);
         if (error) throw error;
+        return { id: localPlanId };
       } else {
         // Deactivate existing plans
         await supabase
@@ -539,7 +546,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           .eq("user_id", studentId)
           .eq("active", true);
 
-        const { error } = await supabase.from("training_plans").insert({
+        const { data, error } = await supabase.from("training_plans").insert({
           user_id: studentId,
           specialist_id: user.id,
           title,
@@ -550,23 +557,32 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           objetivo_mesociclo: objetivoMesociclo || null,
           progression_guide: progressionGuide || null,
           active: true,
-        });
+        }).select("id").single();
+        
         if (error) throw error;
-      }
 
-      // Notificar o aluno
-      await supabase.from("notifications").insert({
-        user_id: studentId,
-        title: isEditing ? "Treino Atualizado" : "Novo Treino Disponível",
-        message: isEditing ? "Seu especialista revisou e atualizou seu treino." : "Seu especialista enviou um novo plano de treino para você!",
-        type: "system",
-      });
+        // Notificar o aluno (apenas no primeiro envio do novo plano)
+        await supabase.from("notifications").insert({
+          user_id: studentId,
+          title: "Novo Treino Disponível",
+          message: "Seu especialista enviou um novo plano de treino para você!",
+          type: "system",
+        });
+
+        return data;
+      }
     },
-    onSuccess: () => {
-      clearDraft(selectedStudent);
+    onSuccess: (data) => {
+      // We no longer clear draft or close on success to allow "continue mounting"
+      // clearDraft(selectedStudent);
       toast.success(isEditing ? "Plano atualizado!" : "Plano criado!");
       queryClient.invalidateQueries({ queryKey: ["specialist-training-plans"] });
-      onClose();
+      
+      if (data?.id) {
+        setLocalPlanId(data.id);
+      }
+      
+      // onClose(); // Removed to keep editor open as requested
     },
     onError: (err: any) => toast.error(err.message || "Erro ao salvar"),
   });
