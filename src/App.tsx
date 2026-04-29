@@ -30,6 +30,7 @@ const MinhaEvolucao = lazy(() => import("./pages/MinhaEvolucao"));
 const ConviteAcesso = lazy(() => import("./pages/ConviteAcesso"));
 const BattleMode = lazy(() => import("./pages/BattleMode"));
 const InstalarApp = lazy(() => import("./pages/InstalarApp"));
+const Destravar = lazy(() => import("./pages/Destravar"));
 const ChatNotificationToast = lazy(() => import("./components/ChatNotificationToast"));
 const PWAInstallBanner = lazy(() => import("./components/PWAInstallBanner"));
 
@@ -82,6 +83,7 @@ const AppRoutes = () => {
   const isServiceRoute = location.pathname.startsWith("/admin") || location.pathname.startsWith("/especialista") || location.pathname.startsWith("/closer") || location.pathname.startsWith("/cs");
   const isInviteRoute = location.pathname.startsWith("/convite");
   const isInstallRoute = location.pathname === "/instalar";
+  const isDestravarRoute = location.pathname === "/destravar";
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center" style={{ backgroundColor: '#FF6B00' }}>
@@ -96,12 +98,13 @@ const AppRoutes = () => {
   );
 
   // Public routes - no auth required
-  if (isInviteRoute || isInstallRoute) {
+  if (isInviteRoute || isInstallRoute || isDestravarRoute) {
     return (
       <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/convite/:token" element={<ConviteAcesso />} />
         <Route path="/instalar" element={<InstalarApp />} />
+        <Route path="/destravar" element={<Destravar />} />
       </Routes>
       </Suspense>
     );
