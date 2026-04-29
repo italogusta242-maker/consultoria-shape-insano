@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import heroImage from "@/assets/destravar/hero-athlete.jpg";
 import mentorImage from "@/assets/destravar/mentor-portrait.jpg";
-import logoFlame from "@/assets/destravar/logo-flame.png";
+import insanoLogo from "@/assets/insano-logo.svg";
 
 // Brand tokens (kept local to this page so the rest of the app's design system stays intact)
 const tokens = {
@@ -18,16 +18,33 @@ const tokens = {
   glowSoft: "drop-shadow(0 0 18px oklch(0.72 0.2 45 / 0.6))",
 };
 
-function Logo({ className = "" }: { className?: string }) {
+// 🔗 Link do grupo VIP (substituir quando usuário enviar)
+const VIP_GROUP_URL = "https://chat.whatsapp.com/";
+
+// Faixas etárias — "abaixo de 21" é desqualificada para o Meta
+const AGE_RANGES = [
+  { value: "under_21", label: "Menos de 21 anos", qualified: false },
+  { value: "21_29", label: "21 a 29 anos", qualified: true },
+  { value: "30_39", label: "30 a 39 anos", qualified: true },
+  { value: "40_49", label: "40 a 49 anos", qualified: true },
+  { value: "50_plus", label: "50 anos ou mais", qualified: true },
+];
+
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+  }
+}
+
+function Logo({ className = "", size = 48 }: { className?: string; size?: number }) {
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <img
-        src={logoFlame}
+        src={insanoLogo}
         alt="Shape Insano"
-        width={48}
-        height={48}
-        className="h-12 w-12"
-        style={{ filter: tokens.glow }}
+        width={size}
+        height={size}
+        style={{ height: size, width: size, filter: tokens.glow }}
       />
       <span
         className="text-2xl sm:text-3xl font-extrabold tracking-tight"
@@ -39,8 +56,148 @@ function Logo({ className = "" }: { className?: string }) {
   );
 }
 
+function LeadModal({ onClose }: { onClose: () => void }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    whatsapp: "",
+    ageRange: "",
+    profession: "",
+  });
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!form.name || !form.email || !form.whatsapp || !form.ageRange || !form.profession) return;
+
+    setSubmitting(true);
+    const selected = AGE_RANGES.find((a) => a.value === form.ageRange);
+    const qualified = selected?.qualified ?? false;
+
+    // 🎯 Disparo Meta Pixel APENAS para público qualificado (21+)
+    // Público desqualificado segue o mesmo fluxo, mas SEM evento "Lead"
+    if (qualified && typeof window !== "undefined" && typeof window.fbq === "function") {
+      try {
+        window.fbq("track", "Lead", {
+          content_name: "Shape Insano - Grupo VIP Destrava",
+          age_range: form.ageRange,
+        });
+      } catch (err) {
+        console.warn("Meta Pixel error:", err);
+      }
+    }
+
+    // Redireciona todos para o grupo (qualificados ou não)
+    window.location.href = VIP_GROUP_URL;
+  };
+
+  const inputBase =
+    "w-full rounded-full border-2 px-5 py-4 text-base bg-white text-black placeholder:text-zinc-500 focus:outline-none focus:border-black transition-colors";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+      style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fechar"
+          className="absolute top-4 right-4 text-zinc-500 hover:text-black transition-colors text-2xl leading-none w-8 h-8 flex items-center justify-center"
+        >
+          ×
+        </button>
+
+        <div className="flex flex-col items-center mb-6">
+          <img src={insanoLogo} alt="Shape Insano" className="h-14 w-14 mb-2" />
+          <span className="text-2xl font-extrabold tracking-tight text-black">
+            Shape<span className="opacity-90">Insano</span>
+          </span>
+        </div>
+
+        <h3 className="text-xl font-bold text-center text-black mb-6">
+          Preencha seus dados abaixo:
+        </h3>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            required
+            placeholder="* Nome"
+            className={inputBase}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            maxLength={100}
+          />
+          <input
+            type="email"
+            required
+            placeholder="* E-mail"
+            className={inputBase}
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            maxLength={255}
+          />
+          <input
+            type="tel"
+            required
+            placeholder="* WhatsApp (com DDD)"
+            className={inputBase}
+            value={form.whatsapp}
+            onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+            maxLength={20}
+          />
+          <select
+            required
+            className={inputBase}
+            value={form.ageRange}
+            onChange={(e) => setForm({ ...form, ageRange: e.target.value })}
+          >
+            <option value="" disabled>
+              * Sua faixa etária
+            </option>
+            {AGE_RANGES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            required
+            placeholder="* Qual sua profissão?"
+            className={inputBase}
+            value={form.profession}
+            onChange={(e) => setForm({ ...form, profession: e.target.value })}
+            maxLength={100}
+          />
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full mt-2 px-6 py-5 rounded-xl font-extrabold text-lg tracking-wide uppercase transition-all duration-200 hover:-translate-y-0.5 active:translate-y-1 active:shadow-none disabled:opacity-70"
+            style={{
+              backgroundColor: tokens.ctaGreen,
+              color: "black",
+              boxShadow: tokens.shadowCta,
+            }}
+          >
+            {submitting ? "Aguarde..." : "Segurar minha vaga!"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const Destravar = () => {
-  // Set page title
+  const [modalOpen, setModalOpen] = useState(false);
+
   useEffect(() => {
     const prev = document.title;
     document.title = "Shape Insano — Destrava | Grupo VIP";
@@ -59,8 +216,6 @@ const Destravar = () => {
         <img
           src={heroImage}
           alt="Atleta com físico estético em academia escura com chama laranja ao fundo"
-          width={1024}
-          height={1536}
           className="w-full h-auto object-cover"
         />
         <div
@@ -103,8 +258,9 @@ const Destravar = () => {
         </div>
 
         <div className="mt-10 flex justify-center">
-          <a
-            href="#"
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
             className="group relative inline-flex items-center justify-center w-full max-w-md px-8 py-5 rounded-xl font-extrabold text-lg sm:text-xl tracking-wide uppercase transition-all duration-200 hover:-translate-y-0.5 active:translate-y-1 active:shadow-none"
             style={{
               backgroundColor: tokens.ctaGreen,
@@ -113,7 +269,7 @@ const Destravar = () => {
             }}
           >
             Entrar no Grupo VIP!
-          </a>
+          </button>
         </div>
       </section>
 
@@ -126,8 +282,6 @@ const Destravar = () => {
           <img
             src={mentorImage}
             alt="Igor Correa, mentor do Shape Insano PRO"
-            width={1024}
-            height={1280}
             loading="lazy"
             className="w-full aspect-[4/5] object-cover"
           />
@@ -172,6 +326,21 @@ const Destravar = () => {
             metodologia correta irão transformar sua vida pra sempre.
           </p>
         </div>
+
+        <div className="mt-10 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center justify-center w-full max-w-md px-8 py-5 rounded-xl font-extrabold text-lg sm:text-xl tracking-wide uppercase transition-all duration-200 hover:-translate-y-0.5 active:translate-y-1 active:shadow-none"
+            style={{
+              backgroundColor: tokens.ctaGreen,
+              color: "black",
+              boxShadow: tokens.shadowCta,
+            }}
+          >
+            Entrar no Grupo VIP!
+          </button>
+        </div>
       </section>
 
       {/* FOOTER */}
@@ -186,6 +355,8 @@ const Destravar = () => {
           </p>
         </div>
       </footer>
+
+      {modalOpen && <LeadModal onClose={() => setModalOpen(false)} />}
     </main>
   );
 };
