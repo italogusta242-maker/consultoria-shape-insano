@@ -36,6 +36,74 @@ declare global {
   }
 }
 
+// 🎯 Captura e persiste parâmetros de tracking (UTMs + fbclid) da URL.
+// Persiste em sessionStorage para sobreviver à abertura do modal e a recargas
+// dentro da mesma sessão. Primeira visita ganha prioridade (não sobrescreve).
+const TRACKING_KEYS = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "fbclid",
+] as const;
+
+type TrackingParams = Partial<Record<(typeof TRACKING_KEYS)[number], string>>;
+
+const TRACKING_STORAGE_KEY = "destravar_tracking";
+
+function captureTrackingParams(): TrackingParams {
+  if (typeof window === "undefined") return {};
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl: TrackingParams = {};
+    for (const key of TRACKING_KEYS) {
+      const v = params.get(key);
+      if (v) fromUrl[key] = v;
+    }
+
+    const stored = window.sessionStorage.getItem(TRACKING_STORAGE_KEY);
+    const prev: TrackingParams = stored ? JSON.parse(stored) : {};
+
+    // Primeira ocorrência ganha (não sobrescreve uma campanha já registrada
+    // se o usuário recarregar sem parâmetros).
+    const merged: TrackingParams = { ...fromUrl, ...prev };
+    if (Object.keys(merged).length > 0) {
+      window.sessionStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(merged));
+    }
+    return merged;
+  } catch {
+    return {};
+  }
+}
+
+function getTrackingParams(): TrackingParams {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.sessionStorage.getItem(TRACKING_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+function appendTrackingToUrl(url: string, tracking: TrackingParams): string {
+  const entries = Object.entries(tracking).filter(([, v]) => !!v);
+  if (entries.length === 0) return url;
+  try {
+    const u = new URL(url);
+    for (const [k, v] of entries) u.searchParams.set(k, v as string);
+    return u.toString();
+  } catch {
+    // URL relativa ou inválida — fallback simples
+    const sep = url.includes("?") ? "&" : "?";
+    const qs = entries
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v as string)}`)
+      .join("&");
+    return `${url}${sep}${qs}`;
+  }
+}
+
 function Logo({ className = "", size = 48 }: { className?: string; size?: number }) {
   return (
     <div className={`flex items-center gap-3 ${className}`}>
