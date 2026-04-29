@@ -1729,6 +1729,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_user_day_approval: {
+        Args: { d_date: string; tz: string; u_id: string }
+        Returns: boolean
+      }
       get_last_messages: {
         Args: { conv_ids: string[] }
         Returns: {
