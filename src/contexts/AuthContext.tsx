@@ -42,7 +42,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         path.startsWith("/admin") ||
         path.startsWith("/closer") ||
         path.startsWith("/cs") ||
-        path.startsWith("/convite")
+        path.startsWith("/convite") ||
+        path === "/destravar" ||
+        path === "/instalar"
       ) {
         return;
       }

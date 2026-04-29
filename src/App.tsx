@@ -97,7 +97,9 @@ const AppRoutes = () => {
     </div>
   );
 
-  // Public routes - no auth required
+  // Public routes - no auth required, render BEFORE any auth/role checks
+  // so logged-in users (students, specialists, admins) can also visit them
+  // as a sales page without being redirected to their portal.
   if (isInviteRoute || isInstallRoute || isDestravarRoute) {
     return (
       <Suspense fallback={<PageLoader />}>
