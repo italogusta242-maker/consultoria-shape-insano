@@ -141,6 +141,7 @@ function LeadModal({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     const selected = AGE_RANGES.find((a) => a.value === form.ageRange);
     const qualified = selected?.qualified ?? false;
+    const tracking = getTrackingParams();
 
     // 🎯 Disparo Meta Pixel APENAS para público qualificado (21+)
     // Público desqualificado segue o mesmo fluxo, mas SEM evento "Lead"
@@ -149,14 +150,15 @@ function LeadModal({ onClose }: { onClose: () => void }) {
         window.fbq("track", "Lead", {
           content_name: "Shape Insano - Grupo VIP Destrava",
           age_range: form.ageRange,
+          ...tracking,
         });
       } catch (err) {
         console.warn("Meta Pixel error:", err);
       }
     }
 
-    // Redireciona todos para o grupo (qualificados ou não)
-    window.location.href = VIP_GROUP_URL;
+    // Redireciona todos para o grupo (qualificados ou não), preservando UTMs
+    window.location.href = appendTrackingToUrl(VIP_GROUP_URL, tracking);
   };
 
   const inputBase =
