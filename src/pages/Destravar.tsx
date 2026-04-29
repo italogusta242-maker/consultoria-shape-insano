@@ -269,6 +269,8 @@ const Destravar = () => {
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
+    // Captura UTMs/fbclid na primeira visita e persiste para o submit
+    captureTrackingParams();
     const prev = document.title;
     document.title = "Shape Insano — Destrava | Grupo VIP";
     return () => {
