@@ -1,74 +1,42 @@
-## Resumo dos 2 pedidos do Guilherme
 
-### 1. Chama de Honra: sábado e domingo NÃO podem apagar a chama
-Hoje, alunos que treinam só seg-sex perdem a chama na segunda (sáb sem treino → trégua, dom sem treino → extinta).
+## Todas as brechas identificadas
 
-### 2. Bug: ao salvar treino, redireciona pra dashboard
-Atualização de ontem não pegou — o problema persiste.
+### 1. Tela desliga e OS mata o PWA (o caso do Vinicius)
+Quando o celular bloqueia, o Android/iOS pode matar a aba do PWA para economizar bateria. O snapshot **já é salvo** no localStorage, mas quando o aluno reabre o app, ele cai no **Dashboard** e pensa que perdeu tudo. O treino está salvo, mas ele não sabe — precisa navegar manualmente para /treinos.
 
----
+**Correção:** Auto-redirect do Dashboard para /treinos se existir snapshot ativo.
 
-## Pedido 1 — Fix: fim de semana neutro no motor da chama
+### 2. Wake Lock só no timer de descanso
+O Wake Lock (que impede a tela de desligar sozinha) só está ativo durante o descanso entre séries. Na execução normal dos exercícios, a tela pode apagar por inatividade (o aluno está treinando, não tocando no celular).
 
-A lógica de apagar/rebaixar a chama está no SQL `process_midnight_flame_check()` (Postgres cron, roda toda hora). Ele chama `check_user_day_approval(user_id, "ontem", timezone)`. Se o "ontem" for um sábado ou domingo, ele tenta validar treino/dieta — e quem não treina no fim de semana cai.
+**Correção:** Wake Lock durante toda a execução do treino, não só no descanso.
 
-**Mudança:** alterar `check_user_day_approval` para retornar `TRUE` automaticamente quando a data for sábado (DOW=6) ou domingo (DOW=0), antes de consultar workouts/dieta.
+### 3. Deploy novo enquanto treina
+Se um deploy acontecer enquanto o aluno treina e ele minimizar/voltar ao app, o `useSilentUpdate` no evento `onFocus` reseta o flag e roda `runVersionCheck()`. Dentro de `runVersionCheck` ele checa `isWorkoutActive()` — **isso funciona**, mas existe uma race condition: o `fetchDeployedVersion()` é async, e entre o fetch e o check do snapshot, poderia haver um timing issue.
 
-**Efeito prático:**
-- Domingo de manhã (00:00 BRT): sistema checa "ontem = sábado" → aprovado automático. Chama mantida.
-- Segunda de manhã: checa "ontem = domingo" → aprovado automático. Chama mantida.
-- Quem treina no fim de semana continua ganhando o treino normalmente (não muda nada — só evita a punição).
+**Correção:** Checar `isWorkoutActive()` **antes** de resetar o flag no `onFocus`, como guard inicial.
 
-**Impacto adicional:** A função `check_user_day_approval` também é usada pela "migração curativa" do dia, mas só roda no deploy — sem efeito recorrente.
+### 4. Sessão de auth expira durante treino longo
+Se o aluno treinar por mais de 1h com o app em background, o token JWT pode expirar. Quando ele volta, o Supabase tenta refresh, mas se falhar, o `AuthContext` redireciona para login. Após re-login, cai no Dashboard — de novo sem saber que o snapshot está salvo.
 
-**Não vou alterar:** o `flameMotor.ts` do front (`isDayApprovedClient`), pois ele só **reativa** a chama quando o aluno faz algo (não pode punir). Manter como está.
+**Correção:** O mesmo auto-redirect do item 1 resolve isso. O snapshot sobrevive no localStorage independente do auth.
 
-**Não recupero retroativo** quem já caiu (Guilherme confirmou: "precisa recuperar não").
+### 5. Aluno não recebe feedback visual da restauração
+Quando o snapshot é restaurado, o treino simplesmente aparece como se nada tivesse acontecido. O aluno pode não perceber que foi recuperado, ou pode ficar confuso sobre o timer.
 
-### Migração SQL
-```sql
-CREATE OR REPLACE FUNCTION public.check_user_day_approval(u_id UUID, d_date DATE, tz TEXT)
-RETURNS BOOLEAN ...
-BEGIN
-    -- NOVO: Sábado (6) e Domingo (0) são automaticamente aprovados
-    IF EXTRACT(DOW FROM d_date) IN (0, 6) THEN
-        RETURN TRUE;
-    END IF;
-    -- ... resto da lógica original (treino + dieta 50%)
-END;
-```
+**Correção:** Toast "Treino em andamento restaurado!" ao detectar e restaurar um snapshot.
 
----
+### 6. `visibilitychange: hidden` + novo SW = reload imediato
+Linha 121: se um novo Service Worker foi instalado (`newSwInstalled.current = true`) e o app vai para background, ele faz `reload()` imediatamente. A proteção `!isWorkoutActive()` existe, mas se por algum motivo o snapshot não foi salvo ainda (race condition entre o save e o evento), pode perder dados.
 
-## Pedido 2 — Investigação: redirect ao salvar treino
+**Correção:** Já está protegido, mas o Wake Lock vai reduzir drasticamente as chances de o app ir para background durante o treino.
 
-Já fiz o pente fino:
+## Plano de implementação
 
-- O `onSuccess` do save em `TrainingPlanEditor.tsx` (linha 556) só faz: `clearDraft → toast → invalidateQueries → onClose()`. **Sem navigate.**
-- Os 2 callers (`EspecialistaTreino.tsx:339` e `EspecialistaAlunos.tsx:1513`) passam `onClose` que só fecha o modal. **Sem navigate.**
-- Não há `navigate("/especialista")` em lugar nenhum do fluxo de save.
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Treinos.tsx` | Adicionar Wake Lock durante `view === "execution"` (re-adquirir no `visibilitychange`). Adicionar toast ao restaurar snapshot. |
+| `src/pages/Dashboard.tsx` | No mount, verificar `hasWorkoutExecutionSnapshot()` e redirecionar para `/treinos` |
+| `src/hooks/useSilentUpdate.ts` | No `onFocus`, checar `isWorkoutActive()` antes de resetar flag e rodar version check |
 
-**Conclusão:** o redirect não está no código atual deste branch. Possíveis causas restantes:
-
-1. **Cache do PWA do especialista** — ele está rodando JS antigo (de antes do fix anterior). Solução: hard refresh ou esperar o auto-update silencioso.
-2. **`invalidateQueries(["specialist-training-plans"])` está disparando algum re-render do pai que muda rota** — improvável, mas possível.
-3. **Especialista está salvando por outro fluxo** que não passa por `TrainingPlanEditor` (ex: PDF import com `onSaveAndClose`).
-
-**Plano de investigação:**
-- Pedir pro Guilherme:
-  - Fazer **hard refresh** (Ctrl+Shift+R) ou fechar/abrir o PWA, depois testar de novo.
-  - Se persistir, **gravar tela** mostrando exatamente: qual rota está (URL), qual botão clica pra salvar, e pra onde vai.
-  - Confirmar se está na tela de **lista de planos** (`/especialista/treinos`), **detalhes do aluno** (`/especialista/alunos`) ou outra.
-- Se ainda persistir após hard refresh, adiciono um `console.log("[Save] onSuccess called from", window.location.pathname)` no editor pra capturar o caminho exato e confirmar se o callback dispara navegação fantasma.
-
-**Não vou fazer alteração de código preventiva** sem reproduzir, pra não introduzir regressão num fluxo que está correto no código.
-
----
-
-## O que vou entregar agora
-
-1. **Migration SQL** que adiciona o bypass de sábado/domingo em `check_user_day_approval`.
-2. **Mensagem para o Guilherme** confirmando o fix da chama + pedindo o hard refresh + vídeo do bug do redirect.
-
-## O que fica pendente
-- Investigação do redirect aguarda evidência do Guilherme após hard refresh.
+Nenhuma mudança no banco de dados necessária. Tudo é client-side.
