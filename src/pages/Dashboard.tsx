@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { hasWorkoutExecutionSnapshot } from "@/lib/workoutSnapshot";
 import { SFX } from "@/hooks/useSoundEffects";
 import { optimisticFlameUpdate } from "@/lib/flameOptimistic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -109,6 +110,15 @@ const Dashboard = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const today = getToday();
+
+  // Auto-redirect to active workout if snapshot exists
+  const didRedirectToWorkout = useRef(false);
+  useEffect(() => {
+    if (!didRedirectToWorkout.current && hasWorkoutExecutionSnapshot()) {
+      didRedirectToWorkout.current = true;
+      navigate("/treinos", { replace: true });
+    }
+  }, [navigate]);
 
   // Real performance data
   const {

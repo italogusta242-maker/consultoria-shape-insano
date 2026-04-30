@@ -426,8 +426,9 @@ const Treinos = () => {
     : false;
   const persistedExercises = persistedBelongsToUser ? sanitizeExercises(persisted!.exercises) : [];
 
+  const restoredFromSnapshot = persistedBelongsToUser && persisted!.view === "execution";
   const [view, setView] = useState<View>(
-    persistedBelongsToUser && persisted!.view === "execution" ? "execution" : "list"
+    restoredFromSnapshot ? "execution" : "list"
   );
   const [selectedGroup, setSelectedGroup] = useState<number | null>(
     persistedBelongsToUser ? persisted!.selectedGroup : null
@@ -626,6 +627,38 @@ const Treinos = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, [timerRunning, startedAt]);
+
+  // Wake Lock — keep screen on during entire workout execution
+  useEffect(() => {
+    if (view !== "execution" || !timerRunning) return;
+    let wakeLock: any = null;
+    const requestLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request("screen");
+        }
+      } catch {}
+    };
+    requestLock();
+    const onVisChange = () => {
+      if (document.visibilityState === "visible") requestLock();
+    };
+    document.addEventListener("visibilitychange", onVisChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisChange);
+      wakeLock?.release().catch(() => {});
+    };
+  }, [view, timerRunning]);
+
+  // Toast when workout was restored from snapshot
+  useEffect(() => {
+    if (restoredFromSnapshot) {
+      toast.success("💪 Treino em andamento restaurado!", {
+        description: "Seu progresso foi salvo automaticamente.",
+        duration: 4000,
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-finalize after 3 hours
   useEffect(() => {
