@@ -999,9 +999,18 @@ const Treinos = () => {
   // ═══════════════════════════════════════════════════════════
   if (view !== "list" && view !== "history" && selectedGroup !== null && (!hasValidSelectedGroup || persistedGroupMismatch)) {
     return (
-      <div className="p-4 max-w-lg mx-auto pb-24">
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-sm text-muted-foreground">Recarregando treino…</p>
+      <div className="p-4 max-w-lg mx-auto pb-24 space-y-3">
+        <div className="bg-card border border-border rounded-xl p-5 text-center space-y-3">
+          <p className="text-sm text-foreground font-medium">Estamos recarregando seu plano de treino…</p>
+          <p className="text-xs text-muted-foreground">
+            Seu progresso continua salvo neste aparelho. Se a tela demorar, toque abaixo para voltar à lista — nada será perdido.
+          </p>
+          <button
+            onClick={() => setView("list")}
+            className="w-full mt-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            Voltar à lista de treinos
+          </button>
         </div>
       </div>
     );
