@@ -1,42 +1,61 @@
+## Causa raiz
 
-## Todas as brechas identificadas
+O toast **"Limpamos uma sessão de treino antiga salva neste aparelho"** vem de `src/pages/Treinos.tsx` linha 704, dentro de um `useEffect` (linhas 689–706) que dispara quando:
 
-### 1. Tela desliga e OS mata o PWA (o caso do Vinicius)
-Quando o celular bloqueia, o Android/iOS pode matar a aba do PWA para economizar bateria. O snapshot **já é salvo** no localStorage, mas quando o aluno reabre o app, ele cai no **Dashboard** e pensa que perdeu tudo. O treino está salvo, mas ele não sabe — precisa navegar manualmente para /treinos.
+- `selectedGroup !== null` E
+- `!hasValidSelectedGroup` (índice fora do array `workoutGroups`) OU
+- `persistedGroupMismatch` (nome do grupo salvo ≠ nome do grupo no plano atual)
 
-**Correção:** Auto-redirect do Dashboard para /treinos se existir snapshot ativo.
+**O problema:** `workoutGroups` é derivado de `plan?.groups`. Quando o usuário volta para a aba (visibilitychange) ou o React Query refaz fetch (`refetchOnMount: "always"`), há uma janela em que `plan` é `undefined` momentaneamente → `workoutGroups` cai para `fallbackGroups` (3 grupos hardcoded: "Peito e Tríceps", "Costas e Bíceps", "Pernas").
 
-### 2. Wake Lock só no timer de descanso
-O Wake Lock (que impede a tela de desligar sozinha) só está ativo durante o descanso entre séries. Na execução normal dos exercícios, a tela pode apagar por inatividade (o aluno está treinando, não tocando no celular).
+Se o aluno está executando, por exemplo, o grupo `selectedGroup = 4` ("Push") do plano real:
+- `hasValidSelectedGroup` vira `false` (4 ≥ 3 do fallback) **ou**
+- `selectedGroupName` ("Peito e Tríceps" do fallback) ≠ `persisted.groupName` ("Push")
 
-**Correção:** Wake Lock durante toda a execução do treino, não só no descanso.
+→ o effect varre `localStorage`, zera `exercises`, volta para `view="list"` e mostra o toast. Todo o progresso vai pro lixo no meio do treino.
 
-### 3. Deploy novo enquanto treina
-Se um deploy acontecer enquanto o aluno treina e ele minimizar/voltar ao app, o `useSilentUpdate` no evento `onFocus` reseta o flag e roda `runVersionCheck()`. Dentro de `runVersionCheck` ele checa `isWorkoutActive()` — **isso funciona**, mas existe uma race condition: o `fetchDeployedVersion()` é async, e entre o fetch e o check do snapshot, poderia haver um timing issue.
+Há ainda uma segunda armadilha: a query `training-plan` não tem `enabled` que aguarde o user e `plan` começa `undefined` durante o primeiro render após mount, ativando o mesmo caminho.
 
-**Correção:** Checar `isWorkoutActive()` **antes** de resetar o flag no `onFocus`, como guard inicial.
+## Mudanças
 
-### 4. Sessão de auth expira durante treino longo
-Se o aluno treinar por mais de 1h com o app em background, o token JWT pode expirar. Quando ele volta, o Supabase tenta refresh, mas se falhar, o `AuthContext` redireciona para login. Após re-login, cai no Dashboard — de novo sem saber que o snapshot está salvo.
+### 1. `src/pages/Treinos.tsx` — neutralizar a limpeza automática
 
-**Correção:** O mesmo auto-redirect do item 1 resolve isso. O snapshot sobrevive no localStorage independente do auth.
+**a) Remover o `useEffect` de limpeza agressiva (linhas 689–706).** Em vez de varrer o snapshot, apenas mostramos a tela "Recarregando treino…" (já existe nas linhas 1006–1014) enquanto o plano não chega. Se o mismatch persistir mesmo após o plano carregar, mantemos a tela de recarregamento — sem deletar nada — e adicionamos um botão "Voltar para a lista" que o aluno pode acionar manualmente.
 
-### 5. Aluno não recebe feedback visual da restauração
-Quando o snapshot é restaurado, o treino simplesmente aparece como se nada tivesse acontecido. O aluno pode não perceber que foi recuperado, ou pode ficar confuso sobre o timer.
+**b) Tornar `persistedGroupMismatch` resiliente a fallback:** só considerar mismatch quando temos certeza de que `plan` foi carregado (não usar `fallbackGroups` para invalidar). Adicionar guarda: `plan !== undefined && plan?.groups`.
 
-**Correção:** Toast "Treino em andamento restaurado!" ao detectar e restaurar um snapshot.
+**c) Effect de persistência (linhas 710–724):** trocar o `else if (view !== "execution") clearWorkoutExecutionSnapshot()` por uma condição mais estrita — só limpar quando `view === "list"` E o usuário explicitamente finalizou/cancelou. Hoje qualquer transição (incluindo re-render durante refetch) pode disparar.
 
-### 6. `visibilitychange: hidden` + novo SW = reload imediato
-Linha 121: se um novo Service Worker foi instalado (`newSwInstalled.current = true`) e o app vai para background, ele faz `reload()` imediatamente. A proteção `!isWorkoutActive()` existe, mas se por algum motivo o snapshot não foi salvo ainda (race condition entre o save e o evento), pode perder dados.
+   Solução prática: remover o `else if` desse effect e confiar apenas nas chamadas explícitas de `clearWorkoutExecutionSnapshot()` que já existem em finalizar (961), cancelar (991), auto-finalizar 3h (681) e nova abertura.
 
-**Correção:** Já está protegido, mas o Wake Lock vai reduzir drasticamente as chances de o app ir para background durante o treino.
+**d) Tela de fallback (linha 1006):** trocar texto "Recarregando treino…" por mensagem mais clara com botão de ação manual:
+```
+"Estamos recarregando seu plano. Se demorar, toque para voltar à lista (seu progresso continua salvo)."
+[Voltar à lista]
+```
+O botão apenas faz `setView("list")` sem limpar snapshot — assim o aluno pode reentrar pelo `openGroup` que já tem lógica correta de restauração.
 
-## Plano de implementação
+### 2. `src/lib/workoutSnapshot.ts` — remover invalidação por data
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Treinos.tsx` | Adicionar Wake Lock durante `view === "execution"` (re-adquirir no `visibilitychange`). Adicionar toast ao restaurar snapshot. |
-| `src/pages/Dashboard.tsx` | No mount, verificar `hasWorkoutExecutionSnapshot()` e redirecionar para `/treinos` |
-| `src/hooks/useSilentUpdate.ts` | No `onFocus`, checar `isWorkoutActive()` antes de resetar flag e rodar version check |
+Hoje `loadWorkoutExecutionSnapshot` (linhas 64–78) deleta o snapshot se `parsed.date !== getToday()`. `getToday()` usa horário local, mas se o usuário começa um treino às 23:50 e termina 00:10, na próxima leitura o snapshot do "dia anterior" é apagado.
 
-Nenhuma mudança no banco de dados necessária. Tudo é client-side.
+**Mudança:** trocar a regra de "data diferente → deletar" por "data > 24h → deletar". Comparar timestamp (`startedAt`) com `Date.now()`. Se `< 24h`, restaurar normalmente. Se `> 24h`, aí sim limpar (treino abandonado de verdade).
+
+### 3. `src/pages/Treinos.tsx` — guarda no `openGroup` (linhas 789–800)
+
+A condição `safeExercises.length === group.exercises.length` descarta o draft silenciosamente se o preparador editou o número de exercícios entre uma sessão e outra. Adicionar log/toast informativo ("Seu plano foi atualizado, começamos do zero") em vez de descartar mudo, mas **manter** o descarte (esse caso é legítimo).
+
+## Resumo do comportamento após as mudanças
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Aluno volta à aba durante refetch do plano | Snapshot apagado, toast "limpamos sessão antiga" | Tela "Recarregando…" até o plano chegar; snapshot intacto |
+| Treino atravessa meia-noite (23:50 → 00:10) | Snapshot apagado ao voltar | Snapshot mantido (regra passa a ser 24h, não data) |
+| Plano realmente mudou (índice inválido após plano carregar) | Limpeza automática + toast | Tela com botão "Voltar à lista"; snapshot só limpa se aluno tocar |
+| Finalizar/cancelar treino | Limpa snapshot | Idêntico (chamadas explícitas mantidas) |
+
+## Arquivos afetados
+
+- `src/pages/Treinos.tsx` — remover effect de limpeza, ajustar `persistedGroupMismatch`, ajustar effect de persistência, melhorar tela de "Recarregando"
+- `src/lib/workoutSnapshot.ts` — trocar invalidação por data por invalidação por idade (24h)
+- `mem://features/training/persistence-resilience` — atualizar nota com a nova regra
