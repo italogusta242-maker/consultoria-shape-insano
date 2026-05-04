@@ -543,9 +543,13 @@ const Treinos = () => {
     : fallbackGroups;
   const totalSessions = plan?.total_sessions ?? 50;
   const planTitle = plan?.title ?? "Plano Personalizado";
+  const planLoaded = !!plan && Array.isArray((plan as any)?.groups);
   const hasValidSelectedGroup = selectedGroup !== null && selectedGroup >= 0 && selectedGroup < workoutGroups.length;
   const selectedGroupName = hasValidSelectedGroup ? workoutGroups[selectedGroup].name : null;
+  // Only flag mismatch when the real plan has loaded — never invalidate based
+  // on the hardcoded fallbackGroups (which would fire during refetch windows).
   const persistedGroupMismatch = Boolean(
+    planLoaded &&
     persisted?.groupName &&
     selectedGroup !== null &&
     hasValidSelectedGroup &&
