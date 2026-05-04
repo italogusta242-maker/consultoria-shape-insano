@@ -543,9 +543,13 @@ const Treinos = () => {
     : fallbackGroups;
   const totalSessions = plan?.total_sessions ?? 50;
   const planTitle = plan?.title ?? "Plano Personalizado";
+  const planLoaded = !!plan && Array.isArray((plan as any)?.groups);
   const hasValidSelectedGroup = selectedGroup !== null && selectedGroup >= 0 && selectedGroup < workoutGroups.length;
   const selectedGroupName = hasValidSelectedGroup ? workoutGroups[selectedGroup].name : null;
+  // Only flag mismatch when the real plan has loaded — never invalidate based
+  // on the hardcoded fallbackGroups (which would fire during refetch windows).
   const persistedGroupMismatch = Boolean(
+    planLoaded &&
     persisted?.groupName &&
     selectedGroup !== null &&
     hasValidSelectedGroup &&
@@ -686,27 +690,19 @@ const Treinos = () => {
     setSelectedGroup(null);
   }, [timer, timerRunning]);
 
-  useEffect(() => {
-    if (selectedGroup === null) return;
-    if (hasValidSelectedGroup && !persistedGroupMismatch) return;
-
-    clearWorkoutExecutionSnapshot();
-    clearWorkoutInProgress(selectedGroup);
-    setSelectedGroup(null);
-    setExpandedExercise(null);
-    setExercises([]);
-    setStartedAt("");
-    setTimer(0);
-    setTimerRunning(false);
-
-    if (view !== "list") {
-      setView("list");
-      toast.error("Limpamos uma sessão de treino antiga salva neste aparelho.");
-    }
-  }, [hasValidSelectedGroup, persistedGroupMismatch, selectedGroup, view]);
+  // NOTE: We intentionally do NOT auto-clear the snapshot when the selected
+  // group looks "invalid" or "mismatched". During a refetch of the training
+  // plan there is a window where `plan` is undefined and `workoutGroups`
+  // falls back to the hardcoded list — this used to wipe the user's
+  // in-progress workout in the middle of a session ("Limpamos uma sessão
+  // antiga..."). The fallback screen below (view !== "list" && mismatch)
+  // shows a friendly "Recarregando treino..." with a manual exit button
+  // instead of nuking progress.
 
   // Persist execution state to localStorage (kept as a safety net — the
   // critical writes happen synchronously inside each user action below).
+  // We only WRITE here; clearing is handled by explicit user actions
+  // (finalize / cancel / 3h auto-finalize / openGroup).
   useEffect(() => {
     if (view === "execution" && hasValidSelectedGroup && startedAt) {
       saveWorkoutExecutionSnapshot({
@@ -718,8 +714,6 @@ const Treinos = () => {
         exercises,
         expandedExercise,
       });
-    } else if (view !== "execution") {
-      clearWorkoutExecutionSnapshot();
     }
   }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
 
@@ -797,6 +791,12 @@ const Treinos = () => {
           setExpandedExercise(null);
           setView("detail");
           return;
+        }
+
+        // Plan changed (different exercise count) — inform the user
+        // instead of silently discarding their previous draft.
+        if (matchesGroupName && matchesUser && safeExercises.length !== group.exercises.length) {
+          toast("Seu plano foi atualizado pelo preparador. Começamos do zero neste treino.", { icon: "ℹ️" });
         }
 
         if (!matchesGroupName || !matchesUser) {
@@ -1005,9 +1005,18 @@ const Treinos = () => {
   // ═══════════════════════════════════════════════════════════
   if (view !== "list" && view !== "history" && selectedGroup !== null && (!hasValidSelectedGroup || persistedGroupMismatch)) {
     return (
-      <div className="p-4 max-w-lg mx-auto pb-24">
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <p className="text-sm text-muted-foreground">Recarregando treino…</p>
+      <div className="p-4 max-w-lg mx-auto pb-24 space-y-3">
+        <div className="bg-card border border-border rounded-xl p-5 text-center space-y-3">
+          <p className="text-sm text-foreground font-medium">Estamos recarregando seu plano de treino…</p>
+          <p className="text-xs text-muted-foreground">
+            Seu progresso continua salvo neste aparelho. Se a tela demorar, toque abaixo para voltar à lista — nada será perdido.
+          </p>
+          <button
+            onClick={() => setView("list")}
+            className="w-full mt-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold"
+          >
+            Voltar à lista de treinos
+          </button>
         </div>
       </div>
     );
