@@ -793,6 +793,12 @@ const Treinos = () => {
           return;
         }
 
+        // Plan changed (different exercise count) — inform the user
+        // instead of silently discarding their previous draft.
+        if (matchesGroupName && matchesUser && safeExercises.length !== group.exercises.length) {
+          toast("Seu plano foi atualizado pelo preparador. Começamos do zero neste treino.", { icon: "ℹ️" });
+        }
+
         if (!matchesGroupName || !matchesUser) {
           clearWorkoutInProgress(index);
         }
