@@ -61,21 +61,18 @@ export function saveWorkoutExecutionSnapshot(
   }
 }
 
-const MAX_SNAPSHOT_AGE_MS = 24 * 60 * 60 * 1000; // 24h
-
+/**
+ * Loads the active workout snapshot. Has NO time-based expiration:
+ * the snapshot is "immortal" and only cleared by explicit user actions
+ * (Finalize / Cancel / 3h auto-finalize / openGroup). The catch still
+ * removes the key on JSON corruption as a last-resort safety net.
+ */
 export function loadWorkoutExecutionSnapshot(): WorkoutExecutionSnapshot | null {
   try {
     const raw = localStorage.getItem(EXECUTION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WorkoutExecutionSnapshot;
     if (!parsed) {
-      localStorage.removeItem(EXECUTION_KEY);
-      return null;
-    }
-    // Invalidate by AGE (not by calendar date) so workouts that cross
-    // midnight in the user's local timezone are preserved.
-    const startedTs = parsed.startedAt ? new Date(parsed.startedAt).getTime() : NaN;
-    if (Number.isFinite(startedTs) && Date.now() - startedTs > MAX_SNAPSHOT_AGE_MS) {
       localStorage.removeItem(EXECUTION_KEY);
       return null;
     }
