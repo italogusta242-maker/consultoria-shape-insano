@@ -352,7 +352,7 @@ const EspecialistaExercicios = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(exercises ?? []).map((ex) => (
+                      {(exercises ?? []).filter((ex) => !onlyFavorites || favorites.has(ex.id)).map((ex) => (
                         <tr key={ex.id} className="border-b border-border/50 hover:bg-secondary/30">
                           {editingId === ex.id ? (
                             <>
@@ -373,10 +373,29 @@ const EspecialistaExercicios = () => {
                           ) : (
                             <>
                               <td className="p-2 sm:p-3">
-                                <p className="font-medium text-foreground">{ex.name}</p>
-                                {ex.equipment && (
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">{ex.equipment}</p>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleFavorite(ex.id)}
+                                    className="shrink-0 transition-transform hover:scale-110"
+                                    aria-label={isFavorite(ex.id) ? "Desfavoritar" : "Favoritar"}
+                                  >
+                                    <Star
+                                      size={16}
+                                      className={cn(
+                                        isFavorite(ex.id)
+                                          ? "fill-amber-400 text-amber-400"
+                                          : "text-muted-foreground hover:text-amber-400"
+                                      )}
+                                    />
+                                  </button>
+                                  <div>
+                                    <p className="font-medium text-foreground">{ex.name}</p>
+                                    {ex.equipment && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">{ex.equipment}</p>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
                               <td className="p-2 sm:p-3">
                                 <Badge variant="outline" className="text-[10px] border-[hsl(var(--glass-border))] text-muted-foreground">
