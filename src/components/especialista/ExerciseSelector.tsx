@@ -118,7 +118,8 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
       const matchSearch = !hasSearch || e.name.toLowerCase().includes(searchLower);
       const matchEquipment = !equipmentFilter || (e.equipment ?? "").toLowerCase().includes(equipmentFilter.toLowerCase());
       const matchLevel = !levelFilter || (e.level ?? "").toLowerCase().includes(levelFilter.toLowerCase());
-      return matchGroup && matchSearch && matchEquipment && matchLevel;
+      const matchFavorite = !onlyFavorites || favorites.has(e.id);
+      return matchGroup && matchSearch && matchEquipment && matchLevel && matchFavorite;
     });
     if (hasSearch) {
       results.sort((a, b) => {
