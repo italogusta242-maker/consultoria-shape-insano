@@ -1349,6 +1349,27 @@ export type Database = {
         }
         Relationships: []
       }
+      specialist_favorite_exercises: {
+        Row: {
+          created_at: string
+          exercise_id: string
+          id: string
+          specialist_id: string
+        }
+        Insert: {
+          created_at?: string
+          exercise_id: string
+          id?: string
+          specialist_id: string
+        }
+        Update: {
+          created_at?: string
+          exercise_id?: string
+          id?: string
+          specialist_id?: string
+        }
+        Relationships: []
+      }
       student_specialists: {
         Row: {
           created_at: string
