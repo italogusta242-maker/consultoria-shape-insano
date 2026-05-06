@@ -86,7 +86,9 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [equipmentFilter, setEquipmentFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const queryClient = useQueryClient();
+  const { favorites, isFavorite, toggle: toggleFavorite } = useFavoriteExercises();
 
   const { data: exercises } = useQuery({
     queryKey: ["exercise-library"],
