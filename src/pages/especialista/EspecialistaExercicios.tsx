@@ -118,11 +118,13 @@ const EspecialistaExercicios = () => {
   const [search, setSearch] = useState("");
   const [filterGroup, setFilterGroup] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<ExerciseForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ExerciseForm>(emptyForm);
   const [previewGif, setPreviewGif] = useState<{ name: string; url: string } | null>(null);
+  const { favorites, isFavorite, toggle: toggleFavorite } = useFavoriteExercises();
 
   const { data: exercises, isLoading } = useQuery({
     queryKey: ["exercise-library", search, filterGroup, filterLevel],
