@@ -389,6 +389,25 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
                       checked={selected.includes(ex.name)}
                       onCheckedChange={() => toggle(ex.name)}
                     />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleFavorite(ex.id);
+                      }}
+                      className="shrink-0 transition-transform hover:scale-110"
+                      aria-label={isFavorite(ex.id) ? "Desfavoritar" : "Favoritar"}
+                    >
+                      <Star
+                        size={15}
+                        className={cn(
+                          isFavorite(ex.id)
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-muted-foreground hover:text-amber-400"
+                        )}
+                      />
+                    </button>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{ex.name}</p>
                       <p className="text-xs text-muted-foreground">
