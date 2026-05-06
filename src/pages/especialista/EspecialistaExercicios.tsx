@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, Trash2, Dumbbell, BookOpen, Video, Edit, X, Check, Image, ExternalLink } from "lucide-react";
+import { Plus, Search, Loader2, Trash2, Dumbbell, BookOpen, Video, Edit, X, Check, Image, ExternalLink, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TrainingTemplatesList from "@/components/especialista/TrainingTemplatesList";
+import { useFavoriteExercises } from "@/hooks/useFavoriteExercises";
 
 const MUSCLE_GROUPS = [
   "peito", "costas", "ombros", "bíceps", "tríceps",
