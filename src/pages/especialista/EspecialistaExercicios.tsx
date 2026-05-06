@@ -272,6 +272,18 @@ const EspecialistaExercicios = () => {
             <Badge
               variant="outline"
               className={cn(
+                "cursor-pointer transition-all text-xs px-2.5 py-1 gap-1 inline-flex items-center",
+                onlyFavorites
+                  ? "bg-amber-400 text-zinc-900 border-amber-400"
+                  : "border-amber-500/50 text-amber-400 hover:border-amber-400"
+              )}
+              onClick={() => setOnlyFavorites((v) => !v)}
+            >
+              <Star size={12} className={cn(onlyFavorites && "fill-current")} /> Favoritos
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
                 "cursor-pointer transition-all text-xs px-2.5 py-1",
                 filterGroup === null
                   ? "bg-[hsl(var(--gold))] text-[hsl(var(--obsidian))] border-[hsl(var(--gold))]"
