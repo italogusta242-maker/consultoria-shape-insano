@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Video, Loader2, X, ChevronDown, Dumbbell, Info } from "lucide-react";
+import { Search, Plus, Video, Loader2, X, ChevronDown, Dumbbell, Info, Star } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { useFavoriteExercises } from "@/hooks/useFavoriteExercises";
 
 export interface ExerciseItem {
   name: string;
@@ -85,7 +86,9 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [equipmentFilter, setEquipmentFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const queryClient = useQueryClient();
+  const { favorites, isFavorite, toggle: toggleFavorite } = useFavoriteExercises();
 
   const { data: exercises } = useQuery({
     queryKey: ["exercise-library"],
@@ -115,7 +118,8 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
       const matchSearch = !hasSearch || e.name.toLowerCase().includes(searchLower);
       const matchEquipment = !equipmentFilter || (e.equipment ?? "").toLowerCase().includes(equipmentFilter.toLowerCase());
       const matchLevel = !levelFilter || (e.level ?? "").toLowerCase().includes(levelFilter.toLowerCase());
-      return matchGroup && matchSearch && matchEquipment && matchLevel;
+      const matchFavorite = !onlyFavorites || favorites.has(e.id);
+      return matchGroup && matchSearch && matchEquipment && matchLevel && matchFavorite;
     });
     if (hasSearch) {
       results.sort((a, b) => {
@@ -202,6 +206,18 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
         <div className="px-5 pt-3">
           <div className="overflow-x-auto scrollbar-none pb-1">
             <div className="flex gap-1.5 w-max">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "cursor-pointer transition-all text-[11px] px-2 py-0.5 shrink-0 gap-1 inline-flex items-center",
+                  onlyFavorites
+                    ? "bg-amber-400 text-zinc-900 border-amber-400"
+                    : "border-amber-500/50 text-amber-400 hover:border-amber-400"
+                )}
+                onClick={() => setOnlyFavorites((v) => !v)}
+              >
+                <Star size={10} className={cn(onlyFavorites && "fill-current")} /> Favoritos
+              </Badge>
               <Badge
                 variant="outline"
                 className={cn(
@@ -373,6 +389,25 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
                       checked={selected.includes(ex.name)}
                       onCheckedChange={() => toggle(ex.name)}
                     />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleFavorite(ex.id);
+                      }}
+                      className="shrink-0 transition-transform hover:scale-110"
+                      aria-label={isFavorite(ex.id) ? "Desfavoritar" : "Favoritar"}
+                    >
+                      <Star
+                        size={15}
+                        className={cn(
+                          isFavorite(ex.id)
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-muted-foreground hover:text-amber-400"
+                        )}
+                      />
+                    </button>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-foreground truncate">{ex.name}</p>
                       <p className="text-xs text-muted-foreground">

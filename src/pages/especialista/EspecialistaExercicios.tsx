@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, Trash2, Dumbbell, BookOpen, Video, Edit, X, Check, Image, ExternalLink } from "lucide-react";
+import { Plus, Search, Loader2, Trash2, Dumbbell, BookOpen, Video, Edit, X, Check, Image, ExternalLink, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TrainingTemplatesList from "@/components/especialista/TrainingTemplatesList";
+import { useFavoriteExercises } from "@/hooks/useFavoriteExercises";
 
 const MUSCLE_GROUPS = [
   "peito", "costas", "ombros", "bíceps", "tríceps",
@@ -117,11 +118,13 @@ const EspecialistaExercicios = () => {
   const [search, setSearch] = useState("");
   const [filterGroup, setFilterGroup] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<ExerciseForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ExerciseForm>(emptyForm);
   const [previewGif, setPreviewGif] = useState<{ name: string; url: string } | null>(null);
+  const { favorites, isFavorite, toggle: toggleFavorite } = useFavoriteExercises();
 
   const { data: exercises, isLoading } = useQuery({
     queryKey: ["exercise-library", search, filterGroup, filterLevel],
@@ -269,6 +272,18 @@ const EspecialistaExercicios = () => {
             <Badge
               variant="outline"
               className={cn(
+                "cursor-pointer transition-all text-xs px-2.5 py-1 gap-1 inline-flex items-center",
+                onlyFavorites
+                  ? "bg-amber-400 text-zinc-900 border-amber-400"
+                  : "border-amber-500/50 text-amber-400 hover:border-amber-400"
+              )}
+              onClick={() => setOnlyFavorites((v) => !v)}
+            >
+              <Star size={12} className={cn(onlyFavorites && "fill-current")} /> Favoritos
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
                 "cursor-pointer transition-all text-xs px-2.5 py-1",
                 filterGroup === null
                   ? "bg-[hsl(var(--gold))] text-[hsl(var(--obsidian))] border-[hsl(var(--gold))]"
@@ -337,7 +352,7 @@ const EspecialistaExercicios = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(exercises ?? []).map((ex) => (
+                      {(exercises ?? []).filter((ex) => !onlyFavorites || favorites.has(ex.id)).map((ex) => (
                         <tr key={ex.id} className="border-b border-border/50 hover:bg-secondary/30">
                           {editingId === ex.id ? (
                             <>
@@ -358,10 +373,29 @@ const EspecialistaExercicios = () => {
                           ) : (
                             <>
                               <td className="p-2 sm:p-3">
-                                <p className="font-medium text-foreground">{ex.name}</p>
-                                {ex.equipment && (
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">{ex.equipment}</p>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleFavorite(ex.id)}
+                                    className="shrink-0 transition-transform hover:scale-110"
+                                    aria-label={isFavorite(ex.id) ? "Desfavoritar" : "Favoritar"}
+                                  >
+                                    <Star
+                                      size={16}
+                                      className={cn(
+                                        isFavorite(ex.id)
+                                          ? "fill-amber-400 text-amber-400"
+                                          : "text-muted-foreground hover:text-amber-400"
+                                      )}
+                                    />
+                                  </button>
+                                  <div>
+                                    <p className="font-medium text-foreground">{ex.name}</p>
+                                    {ex.equipment && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">{ex.equipment}</p>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
                               <td className="p-2 sm:p-3">
                                 <Badge variant="outline" className="text-[10px] border-[hsl(var(--glass-border))] text-muted-foreground">
