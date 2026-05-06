@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Video, Loader2, X, ChevronDown, Dumbbell, Info } from "lucide-react";
+import { Search, Plus, Video, Loader2, X, ChevronDown, Dumbbell, Info, Star } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { useFavoriteExercises } from "@/hooks/useFavoriteExercises";
 
 export interface ExerciseItem {
   name: string;
