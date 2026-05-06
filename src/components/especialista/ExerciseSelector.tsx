@@ -209,6 +209,18 @@ export default function ExerciseSelector({ open, onClose, onAdd }: Props) {
               <Badge
                 variant="outline"
                 className={cn(
+                  "cursor-pointer transition-all text-[11px] px-2 py-0.5 shrink-0 gap-1 inline-flex items-center",
+                  onlyFavorites
+                    ? "bg-amber-400 text-zinc-900 border-amber-400"
+                    : "border-amber-500/50 text-amber-400 hover:border-amber-400"
+                )}
+                onClick={() => setOnlyFavorites((v) => !v)}
+              >
+                <Star size={10} className={cn(onlyFavorites && "fill-current")} /> Favoritos
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
                   "cursor-pointer transition-all text-[11px] px-2 py-0.5 shrink-0",
                   selectedGroup === ""
                     ? "bg-[hsl(var(--gold))] text-[hsl(var(--obsidian))] border-[hsl(var(--gold))]"
