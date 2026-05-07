@@ -40,24 +40,86 @@ export interface WorkoutInProgressSnapshot {
   exercises: unknown[];
 }
 
+/**
+ * Keys we are allowed to evict from localStorage when we run out of quota
+ * trying to persist the live workout. NEVER evict the snapshot itself or
+ * other in-progress group drafts — those are the data we are protecting.
+ */
+const EVICTABLE_KEY_PREFIXES = [
+  "diet-draft-",            // diet plan drafts (safe to lose, autosaved on backend)
+  "workout-draft-",         // specialist-side workout draft
+  "sb-",                    // supabase auth/cache leftovers (regenerated)
+  "react-query-",           // any react-query persistence leftovers
+  "lovable-",               // misc lovable cache
+];
+
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof DOMException)) return false;
+  return (
+    err.name === "QuotaExceededError" ||
+    err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    err.code === 22 ||
+    err.code === 1014
+  );
+}
+
+/** Last-resort eviction so the workout snapshot can fit. Never touches workout keys. */
+function evictNonEssentialKeys(): number {
+  let removed = 0;
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (key === EXECUTION_KEY) continue;
+      if (key.startsWith("workout-in-progress-")) continue;
+      if (EVICTABLE_KEY_PREFIXES.some((p) => key.startsWith(p))) {
+        toRemove.push(key);
+      }
+    }
+    for (const k of toRemove) {
+      try { localStorage.removeItem(k); removed++; } catch {}
+    }
+  } catch {}
+  return removed;
+}
+
 /** Synchronously persists the active execution snapshot. Safe to call on every event. */
 export function saveWorkoutExecutionSnapshot(
   snapshot: Omit<WorkoutExecutionSnapshot, "date"> & { date?: string }
 ): void {
+  const payload: WorkoutExecutionSnapshot = {
+    date: snapshot.date ?? getToday(),
+    view: snapshot.view,
+    userId: snapshot.userId,
+    selectedGroup: snapshot.selectedGroup,
+    groupName: snapshot.groupName,
+    startedAt: snapshot.startedAt,
+    exercises: snapshot.exercises,
+    expandedExercise: snapshot.expandedExercise,
+  };
+  const serialized = JSON.stringify(payload);
   try {
-    const payload: WorkoutExecutionSnapshot = {
-      date: snapshot.date ?? getToday(),
-      view: snapshot.view,
-      userId: snapshot.userId,
-      selectedGroup: snapshot.selectedGroup,
-      groupName: snapshot.groupName,
-      startedAt: snapshot.startedAt,
-      exercises: snapshot.exercises,
-      expandedExercise: snapshot.expandedExercise,
-    };
-    localStorage.setItem(EXECUTION_KEY, JSON.stringify(payload));
-  } catch {
-    // Quota exceeded or storage disabled — best-effort, ignore.
+    localStorage.setItem(EXECUTION_KEY, serialized);
+  } catch (error) {
+    if (isQuotaError(error)) {
+      const removed = evictNonEssentialKeys();
+      console.error(
+        `[workoutSnapshot] QuotaExceededError ao salvar treino. Evicted ${removed} chave(s) não essenciais. Tentando novamente...`,
+        error
+      );
+      try {
+        localStorage.setItem(EXECUTION_KEY, serialized);
+        return;
+      } catch (retryError) {
+        console.error(
+          "[workoutSnapshot] Falha ao salvar snapshot mesmo após eviction. Sessão de treino em risco.",
+          retryError
+        );
+      }
+    } else {
+      console.error("[workoutSnapshot] Erro inesperado ao salvar snapshot:", error);
+    }
   }
 }
 
