@@ -28,6 +28,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
+  // Tracks whether we've finished checking the profiles.onboarded flag for the
+  // current user. Starts as `true` when there's no user (nothing to resolve);
+  // flips to `false` the moment a session lands and back to `true` only after
+  // fetchOnboarded completes. Prevents the "Onboarding flashes for a few ms
+  // before the real page loads" race.
+  const [onboardedResolved, setOnboardedResolved] = useState(true);
   const [postLoginLoading, setPostLoginLoading] = useState(false);
   const [minLoadingDone, setMinLoadingDone] = useState(false);
   const didRedirectRef = useRef(false);
@@ -76,7 +82,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Fetch onboarded status from profiles — fail-safe
+  // Fetch onboarded status from profiles — fail-safe.
+  // Always flips `onboardedResolved` to true at the end so the UI never gets
+  // stuck on the splash if the query fails.
   const fetchOnboarded = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -93,6 +101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (e) {
       console.warn("[Auth] fetchOnboarded crashed, defaulting to false", e);
       setOnboarded(false);
+    } finally {
+      setOnboardedResolved(true);
     }
   };
 
@@ -111,6 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!cancelled) {
         console.warn("[Auth] hard timeout reached, releasing loading state");
         setLoading(false);
+        setOnboardedResolved(true);
       }
     }, 4000);
 
@@ -121,6 +132,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
+          // Mark onboarded check as pending — must resolve before App can
+          // decide between rendering the portal vs the onboarding board.
+          if (!cancelled) setOnboardedResolved(false);
           // CRITICAL: release the app immediately on session resolution.
           // Enrichment (profile/roles) happens in the background.
           if (!cancelled) setLoading(false);
@@ -136,6 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }, 0);
         } else {
           setOnboarded(false);
+          setOnboardedResolved(true);
           if (!cancelled) setLoading(false);
         }
       }
@@ -144,7 +159,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Trigger initial session resolution
     supabase.auth.getSession().catch((e) => {
       console.warn("[Auth] getSession failed", e);
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        setLoading(false);
+        setOnboardedResolved(true);
+      }
     });
 
     return () => {
@@ -155,8 +173,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
-  // Only stop loading when both auth is resolved AND minimum time has passed
-  const isLoading = (loading || !minLoadingDone || postLoginLoading);
+  // Only stop loading when auth is resolved, the onboarded flag has been
+  // checked, and the minimum splash time has passed. This prevents the
+  // onboarding board from flashing for a few ms before fetchOnboarded returns.
+  const isLoading = (loading || !minLoadingDone || postLoginLoading || !onboardedResolved);
 
   const signUp = async (email: string, password: string, name?: string) => {
     const { error } = await supabase.auth.signUp({
