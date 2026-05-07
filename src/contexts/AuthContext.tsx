@@ -28,6 +28,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
+  // Tracks whether we've finished checking the profiles.onboarded flag for the
+  // current user. Starts as `true` when there's no user (nothing to resolve);
+  // flips to `false` the moment a session lands and back to `true` only after
+  // fetchOnboarded completes. Prevents the "Onboarding flashes for a few ms
+  // before the real page loads" race.
+  const [onboardedResolved, setOnboardedResolved] = useState(true);
   const [postLoginLoading, setPostLoginLoading] = useState(false);
   const [minLoadingDone, setMinLoadingDone] = useState(false);
   const didRedirectRef = useRef(false);
