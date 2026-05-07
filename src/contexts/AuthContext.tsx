@@ -82,7 +82,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Fetch onboarded status from profiles — fail-safe
+  // Fetch onboarded status from profiles — fail-safe.
+  // Always flips `onboardedResolved` to true at the end so the UI never gets
+  // stuck on the splash if the query fails.
   const fetchOnboarded = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -99,6 +101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (e) {
       console.warn("[Auth] fetchOnboarded crashed, defaulting to false", e);
       setOnboarded(false);
+    } finally {
+      setOnboardedResolved(true);
     }
   };
 
