@@ -25,6 +25,23 @@ export function useSilentUpdate() {
   useEffect(() => {
     const isWorkoutActive = (): boolean => hasWorkoutExecutionSnapshot();
 
+    // Request persistent storage so iOS/Safari & aggressive browsers don't
+    // evict our localStorage (workout snapshot) under memory pressure.
+    // Best-effort; on iOS it's typically only granted for installed PWAs.
+    (async () => {
+      try {
+        if (navigator.storage && typeof navigator.storage.persist === "function") {
+          const already = await navigator.storage.persisted?.();
+          if (!already) {
+            const granted = await navigator.storage.persist();
+            console.info(`[storage] persistent storage: ${granted ? "granted" : "denied"}`);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
 
     // -------- Version check (handles "all users stuck on old build") --------
     const runVersionCheck = async () => {
