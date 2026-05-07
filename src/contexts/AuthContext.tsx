@@ -121,6 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!cancelled) {
         console.warn("[Auth] hard timeout reached, releasing loading state");
         setLoading(false);
+        setOnboardedResolved(true);
       }
     }, 4000);
 
