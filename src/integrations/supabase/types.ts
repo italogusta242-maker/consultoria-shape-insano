@@ -472,6 +472,9 @@ export type Database = {
           id: string
           specialist_id: string
           student_id: string
+          trainer_alert_expires_at: string | null
+          trainer_alert_reason: string | null
+          trainer_alert_status: string
         }
         Insert: {
           alert_key: string
@@ -479,6 +482,9 @@ export type Database = {
           id?: string
           specialist_id: string
           student_id: string
+          trainer_alert_expires_at?: string | null
+          trainer_alert_reason?: string | null
+          trainer_alert_status?: string
         }
         Update: {
           alert_key?: string
@@ -486,6 +492,9 @@ export type Database = {
           id?: string
           specialist_id?: string
           student_id?: string
+          trainer_alert_expires_at?: string | null
+          trainer_alert_reason?: string | null
+          trainer_alert_status?: string
         }
         Relationships: []
       }
