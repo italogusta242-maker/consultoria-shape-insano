@@ -218,6 +218,21 @@ export async function submitMonthlyAssessment(
       console.error("Erro ao preparar dados para planilha:", sheetError);
     }
 
+    // Clear any snoozed/dismissed monthly assessment alerts so specialists see the fresh submission
+    try {
+      await supabase
+        .from("dismissed_alerts" as any)
+        .delete()
+        .eq("student_id", user.id)
+        .in("alert_key", [
+          `monthly-pending-${user.id}`,
+          `monthly-review-${user.id}`,
+          `assessment-never-${user.id}`,
+        ]);
+    } catch (cleanupErr) {
+      console.error("Erro ao limpar avisos suspensos:", cleanupErr);
+    }
+
     const warning = failedDetails.length > 0
       ? `Algumas fotos não foram enviadas (${failedDetails.map((f) => f.label).join(", ")}).`
       : undefined;
