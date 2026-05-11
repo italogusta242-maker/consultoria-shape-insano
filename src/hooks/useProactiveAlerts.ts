@@ -46,21 +46,43 @@ function getSeverity(daysRelative: number, thresholds: { warn: number; critical:
   return "info";
 }
 
-/** Hook to dismiss alerts */
+export type AlertSnoozeReason = "no_response" | "will_respond_later" | "other";
+
+export interface SuspendedAlertRow {
+  alert_key: string;
+  student_id: string;
+  trainer_alert_status: string;
+  trainer_alert_reason: string | null;
+  trainer_alert_expires_at: string | null;
+}
+
+/** Hook to dismiss / suspend alerts */
 export function useDismissAlert() {
   const { user } = useAuth();
   const qc = useQueryClient();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["proactive-alerts"] });
+    qc.invalidateQueries({ queryKey: ["suspended-alerts"] });
+  };
 
   const dismissOne = useMutation({
     mutationFn: async ({ alertKey, studentId }: { alertKey: string; studentId: string }) => {
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase.from("dismissed_alerts" as any).upsert(
-        { specialist_id: user.id, alert_key: alertKey, student_id: studentId } as any,
+        {
+          specialist_id: user.id,
+          alert_key: alertKey,
+          student_id: studentId,
+          trainer_alert_status: "dismissed",
+          trainer_alert_reason: null,
+          trainer_alert_expires_at: null,
+        } as any,
         { onConflict: "specialist_id,alert_key" }
       );
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["proactive-alerts"] }),
+    onSuccess: invalidate,
   });
 
   const dismissAllForStudent = useMutation({
@@ -70,13 +92,16 @@ export function useDismissAlert() {
         specialist_id: user.id,
         alert_key: a.id,
         student_id: a.studentId,
+        trainer_alert_status: "dismissed",
+        trainer_alert_reason: null,
+        trainer_alert_expires_at: null,
       }));
       const { error } = await supabase.from("dismissed_alerts" as any).upsert(rows as any, {
         onConflict: "specialist_id,alert_key",
       });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["proactive-alerts"] }),
+    onSuccess: invalidate,
   });
 
   const restoreAll = useMutation({
@@ -88,10 +113,79 @@ export function useDismissAlert() {
         .eq("specialist_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["proactive-alerts"] }),
+    onSuccess: invalidate,
   });
 
-  return { dismissOne, dismissAllForStudent, restoreAll };
+  /** Suspend an alert (snooze) with a reason and optional expiry. */
+  const suspendAlert = useMutation({
+    mutationFn: async ({
+      alertKey,
+      studentId,
+      reason,
+      expiresAt,
+    }: {
+      alertKey: string;
+      studentId: string;
+      reason: string;
+      expiresAt: Date | null;
+    }) => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await supabase.from("dismissed_alerts" as any).upsert(
+        {
+          specialist_id: user.id,
+          alert_key: alertKey,
+          student_id: studentId,
+          trainer_alert_status: "suspended",
+          trainer_alert_reason: reason,
+          trainer_alert_expires_at: expiresAt ? expiresAt.toISOString() : null,
+        } as any,
+        { onConflict: "specialist_id,alert_key" }
+      );
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  /** Unsuspend (return to urgent): just delete the row. */
+  const unsuspendAlert = useMutation({
+    mutationFn: async ({ alertKey }: { alertKey: string }) => {
+      if (!user) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("dismissed_alerts" as any)
+        .delete()
+        .eq("specialist_id", user.id)
+        .eq("alert_key", alertKey);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  return { dismissOne, dismissAllForStudent, restoreAll, suspendAlert, unsuspendAlert };
+}
+
+/** Returns the rows currently suspended (snoozed and not yet expired). */
+export function useSuspendedAlerts(studentNames: Map<string, string>) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["suspended-alerts", user?.id],
+    queryFn: async () => {
+      if (!user) return [] as (SuspendedAlertRow & { studentName: string })[];
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from("dismissed_alerts" as any)
+        .select("alert_key, student_id, trainer_alert_status, trainer_alert_reason, trainer_alert_expires_at")
+        .eq("specialist_id", user.id)
+        .eq("trainer_alert_status", "suspended")
+        .or(`trainer_alert_expires_at.is.null,trainer_alert_expires_at.gt.${nowIso}`);
+      if (error) throw error;
+      return ((data ?? []) as any[]).map((r) => ({
+        ...(r as SuspendedAlertRow),
+        studentName: studentNames.get(r.student_id) ?? "Aluno",
+      }));
+    },
+    enabled: !!user,
+    refetchInterval: 5 * 60 * 1000,
+  });
 }
 
 export function useProactiveAlerts(specialty: string | null, studentIds: string[], studentNames: Map<string, string>) {
@@ -141,7 +235,7 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
           .eq("active", true),
         supabase
           .from("dismissed_alerts" as any)
-          .select("alert_key")
+          .select("alert_key, trainer_alert_status, trainer_alert_expires_at")
           .eq("specialist_id", user!.id),
       ]);
 
@@ -152,7 +246,21 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
       const assessments = assessmentsRes.data ?? [];
       const subscriptions = subsRes.data ?? [];
       const subPlans = subPlansRes.data ?? [];
-      const dismissedKeys = new Set(((dismissedRes.data ?? []) as any[]).map((d: any) => d.alert_key));
+      // Build a set of alert_keys that should be HIDDEN from the active list:
+      //  - status='dismissed' → hidden forever
+      //  - status='suspended' AND (expires_at IS NULL OR expires_at > NOW()) → still snoozed
+      // Suspended-but-expired rows are NOT added → alert "ressuscita" automatically.
+      const nowMs = Date.now();
+      const dismissedKeys = new Set<string>();
+      for (const row of (dismissedRes.data ?? []) as any[]) {
+        const status = row.trainer_alert_status ?? "dismissed";
+        if (status === "dismissed") {
+          dismissedKeys.add(row.alert_key);
+        } else if (status === "suspended") {
+          const exp = row.trainer_alert_expires_at ? new Date(row.trainer_alert_expires_at).getTime() : null;
+          if (exp === null || exp > nowMs) dismissedKeys.add(row.alert_key);
+        }
+      }
 
       // Filter out cancelled/inactive students
       const cancelledStudentIds = new Set(

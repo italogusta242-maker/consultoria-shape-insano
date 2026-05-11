@@ -13,7 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useProactiveAlerts, useDismissAlert, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { useProactiveAlerts, useDismissAlert, useSuspendedAlerts, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { SuspendAlertModal, type SuspendAlertPayload } from "@/components/especialista/SuspendAlertModal";
+import { BellOff, CornerUpLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -258,9 +260,20 @@ const EspecialistaDashboard = () => {
   // reviewStats kept for potential future use but efficiency is now alert-based
   const { data: proactiveAlerts, isLoading: alertsLoading, isFetching: alertsFetching } = useProactiveAlerts(specialty, studentIds, studentNames);
   const { data: unresponsiveStudents } = useUnresponsiveStudents(user?.id, studentIds, studentNames);
-  const { dismissOne, dismissAllForStudent, restoreAll } = useDismissAlert();
+  const { dismissOne, dismissAllForStudent, restoreAll, suspendAlert, unsuspendAlert } = useDismissAlert();
+  const { data: suspendedAlerts } = useSuspendedAlerts(studentNames);
   const queryClient = useQueryClient();
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
+  const [suspendTarget, setSuspendTarget] = useState<ProactiveAlert | null>(null);
+  const [suspendedOpen, setSuspendedOpen] = useState(false);
+
+  const SNOOZABLE_TYPES = new Set<AlertType>([
+    "anamnese_review_pending",
+    "anamnese_not_done",
+    "monthly_pending",
+    "monthly_awaiting_review",
+    "assessment_overdue",
+  ]);
 
   const alertCount = proactiveAlerts?.length ?? 0;
   const unresponsiveCount = unresponsiveStudents?.length ?? 0;
@@ -313,6 +326,35 @@ const EspecialistaDashboard = () => {
     restoreAll.mutate(undefined, {
       onSuccess: () => toast.success("Alertas restaurados"),
     });
+  };
+
+  const handleConfirmSuspend = (payload: SuspendAlertPayload) => {
+    if (!suspendTarget) return;
+    suspendAlert.mutate(
+      {
+        alertKey: suspendTarget.id,
+        studentId: suspendTarget.studentId,
+        reason: payload.reason,
+        expiresAt: payload.expiresAt,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Aviso suspenso · movido para 'Aguardando Aluno'");
+          setSuspendTarget(null);
+        },
+        onError: () => toast.error("Não foi possível suspender o aviso"),
+      }
+    );
+  };
+
+  const handleUnsuspend = (alertKey: string) => {
+    unsuspendAlert.mutate(
+      { alertKey },
+      {
+        onSuccess: () => toast.success("Aviso reativado"),
+        onError: () => toast.error("Falha ao reativar"),
+      }
+    );
   };
 
   const handleRefreshAlerts = async () => {
@@ -574,13 +616,27 @@ const EspecialistaDashboard = () => {
                                       <span className="text-xs text-foreground truncate">{alert.title}</span>
                                       <span className="text-[10px] text-muted-foreground shrink-0">{alert.timeLabel}</span>
                                     </div>
-                                    <button
-                                      onClick={(e) => handleDismissOne(e, alert)}
-                                      className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all shrink-0 ml-1"
-                                      title="Dispensar"
-                                    >
-                                      <X size={12} />
-                                    </button>
+                                    <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                                      {SNOOZABLE_TYPES.has(alert.type) && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSuspendTarget(alert);
+                                          }}
+                                          className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-all"
+                                          title="Suspender aviso"
+                                        >
+                                          <BellOff size={12} />
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={(e) => handleDismissOne(e, alert)}
+                                        className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                                        title="Dispensar"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -641,7 +697,75 @@ const EspecialistaDashboard = () => {
           </GlassCard>
         </motion.div>
 
-        {/* Detail Modal - Students with alerts */}
+        {/* Aguardando Aluno (snoozed alerts) */}
+        {(suspendedAlerts?.length ?? 0) > 0 && (
+          <motion.div variants={fadeUp}>
+            <GlassCard>
+              <Collapsible open={suspendedOpen} onOpenChange={setSuspendedOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full flex items-center gap-2 p-4 hover:opacity-80 transition-opacity">
+                    <BellOff size={16} className="text-amber-400" />
+                    <h3 className="text-sm font-medium text-foreground">Aguardando Aluno</h3>
+                    <span className="min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                      {suspendedAlerts!.length}
+                    </span>
+                    <span className="ml-auto">
+                      {suspendedOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4 space-y-2">
+                    {suspendedAlerts!.map((row) => {
+                      const expiresLabel = row.trainer_alert_expires_at
+                        ? `volta em ${new Date(row.trainer_alert_expires_at).toLocaleDateString("pt-BR")}`
+                        : "tempo indeterminado";
+                      return (
+                        <div
+                          key={row.alert_key}
+                          className="flex items-center justify-between gap-2 p-3 rounded-lg border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))]"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{row.studentName}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {row.trainer_alert_reason && (
+                                <Badge variant="outline" className="text-[10px] border-amber-400/40 text-amber-400">
+                                  {row.trainer_alert_reason}
+                                </Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">{expiresLabel}</span>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[10px] gap-1"
+                            onClick={() => handleUnsuspend(row.alert_key)}
+                            disabled={unsuspendAlert.isPending}
+                          >
+                            <CornerUpLeft size={12} />
+                            Retornar
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </GlassCard>
+          </motion.div>
+        )}
+
+        {/* Suspend Alert Modal */}
+        <SuspendAlertModal
+          open={!!suspendTarget}
+          onOpenChange={(o) => !o && setSuspendTarget(null)}
+          studentName={suspendTarget?.studentName}
+          alertTitle={suspendTarget?.title}
+          isSubmitting={suspendAlert.isPending}
+          onConfirm={handleConfirmSuspend}
+        />
+
         <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
           <DialogContent className="bg-background border-border max-w-lg max-h-[80vh] overflow-y-auto">
             <DialogHeader>

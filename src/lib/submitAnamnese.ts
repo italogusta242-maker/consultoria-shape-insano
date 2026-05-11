@@ -261,6 +261,22 @@ export async function submitAnamnese(
       console.error("Erro ao notificar especialistas:", notifErr);
     }
 
+    // 8. Clear any snoozed/dismissed anamnesis alerts so specialists see the fresh submission
+    try {
+      await supabase
+        .from("dismissed_alerts" as any)
+        .delete()
+        .eq("student_id", user.id)
+        .in("alert_key", [
+          `anamnese-review-${user.id}`,
+          `monthly-pending-${user.id}`,
+          `monthly-review-${user.id}`,
+          `assessment-never-${user.id}`,
+        ]);
+    } catch (cleanupErr) {
+      console.error("Erro ao limpar avisos suspensos:", cleanupErr);
+    }
+
     return { success: true };
   } catch (error: any) {
     console.error("Erro ao salvar anamnese:", error);
