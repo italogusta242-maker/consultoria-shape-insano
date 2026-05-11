@@ -616,13 +616,27 @@ const EspecialistaDashboard = () => {
                                       <span className="text-xs text-foreground truncate">{alert.title}</span>
                                       <span className="text-[10px] text-muted-foreground shrink-0">{alert.timeLabel}</span>
                                     </div>
-                                    <button
-                                      onClick={(e) => handleDismissOne(e, alert)}
-                                      className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all shrink-0 ml-1"
-                                      title="Dispensar"
-                                    >
-                                      <X size={12} />
-                                    </button>
+                                    <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                                      {SNOOZABLE_TYPES.has(alert.type) && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSuspendTarget(alert);
+                                          }}
+                                          className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-all"
+                                          title="Suspender aviso"
+                                        >
+                                          <BellOff size={12} />
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={(e) => handleDismissOne(e, alert)}
+                                        className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                                        title="Dispensar"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
                                   </div>
                                 );
                               })}
