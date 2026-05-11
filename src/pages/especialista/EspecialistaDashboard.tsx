@@ -356,6 +356,8 @@ const EspecialistaDashboard = () => {
       }
     );
   };
+
+  const handleRefreshAlerts = async () => {
     await queryClient.invalidateQueries({ queryKey: ["proactive-alerts"] });
     toast.success("Alertas atualizados");
   };
