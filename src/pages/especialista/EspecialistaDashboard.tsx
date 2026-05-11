@@ -657,7 +657,7 @@ const EspecialistaDashboard = () => {
                                             e.stopPropagation();
                                             setSuspendTarget(alert);
                                           }}
-                                          className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-all"
+                                          className="p-0.5 rounded hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-colors"
                                           title="Suspender aviso"
                                         >
                                           <BellOff size={12} />
@@ -665,7 +665,7 @@ const EspecialistaDashboard = () => {
                                       )}
                                       <button
                                         onClick={(e) => handleDismissOne(e, alert)}
-                                        className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                                        className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
                                         title="Dispensar"
                                       >
                                         <X size={12} />
