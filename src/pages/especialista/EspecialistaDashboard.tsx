@@ -265,6 +265,7 @@ const EspecialistaDashboard = () => {
   const queryClient = useQueryClient();
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [suspendTarget, setSuspendTarget] = useState<ProactiveAlert | null>(null);
+  const [suspendBatch, setSuspendBatch] = useState<ProactiveAlert[] | null>(null);
   const [suspendedOpen, setSuspendedOpen] = useState(false);
 
   const SNOOZABLE_TYPES = new Set<AlertType>([
