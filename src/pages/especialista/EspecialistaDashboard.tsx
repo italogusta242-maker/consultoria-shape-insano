@@ -608,6 +608,19 @@ const EspecialistaDashboard = () => {
                                 >
                                   {studentAlerts.length}
                                 </Badge>
+                                {studentAlerts.some(a => SNOOZABLE_TYPES.has(a.type)) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const snoozable = studentAlerts.filter(a => SNOOZABLE_TYPES.has(a.type));
+                                      setSuspendBatch(snoozable);
+                                    }}
+                                    className="p-1 rounded hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-colors"
+                                    title="Suspender avisos (Aguardando Aluno)"
+                                  >
+                                    <BellOff size={14} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={(e) => handleDismissAllStudent(e, studentAlerts)}
                                   className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
