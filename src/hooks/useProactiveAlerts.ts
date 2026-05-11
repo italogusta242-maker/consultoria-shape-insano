@@ -246,7 +246,21 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
       const assessments = assessmentsRes.data ?? [];
       const subscriptions = subsRes.data ?? [];
       const subPlans = subPlansRes.data ?? [];
-      const dismissedKeys = new Set(((dismissedRes.data ?? []) as any[]).map((d: any) => d.alert_key));
+      // Build a set of alert_keys that should be HIDDEN from the active list:
+      //  - status='dismissed' → hidden forever
+      //  - status='suspended' AND (expires_at IS NULL OR expires_at > NOW()) → still snoozed
+      // Suspended-but-expired rows are NOT added → alert "ressuscita" automatically.
+      const nowMs = Date.now();
+      const dismissedKeys = new Set<string>();
+      for (const row of (dismissedRes.data ?? []) as any[]) {
+        const status = row.trainer_alert_status ?? "dismissed";
+        if (status === "dismissed") {
+          dismissedKeys.add(row.alert_key);
+        } else if (status === "suspended") {
+          const exp = row.trainer_alert_expires_at ? new Date(row.trainer_alert_expires_at).getTime() : null;
+          if (exp === null || exp > nowMs) dismissedKeys.add(row.alert_key);
+        }
+      }
 
       // Filter out cancelled/inactive students
       const cancelledStudentIds = new Set(
