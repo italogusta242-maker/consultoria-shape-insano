@@ -792,10 +792,19 @@ const EspecialistaDashboard = () => {
 
         {/* Suspend Alert Modal */}
         <SuspendAlertModal
-          open={!!suspendTarget}
-          onOpenChange={(o) => !o && setSuspendTarget(null)}
-          studentName={suspendTarget?.studentName}
-          alertTitle={suspendTarget?.title}
+          open={!!suspendTarget || !!suspendBatch}
+          onOpenChange={(o) => {
+            if (!o) {
+              setSuspendTarget(null);
+              setSuspendBatch(null);
+            }
+          }}
+          studentName={suspendBatch?.[0]?.studentName ?? suspendTarget?.studentName}
+          alertTitle={
+            suspendBatch
+              ? `${suspendBatch.length} aviso(s) deste aluno`
+              : suspendTarget?.title
+          }
           isSubmitting={suspendAlert.isPending}
           onConfirm={handleConfirmSuspend}
         />
