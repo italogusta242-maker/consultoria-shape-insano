@@ -235,7 +235,7 @@ export function useProactiveAlerts(specialty: string | null, studentIds: string[
           .eq("active", true),
         supabase
           .from("dismissed_alerts" as any)
-          .select("alert_key")
+          .select("alert_key, trainer_alert_status, trainer_alert_expires_at")
           .eq("specialist_id", user!.id),
       ]);
 
