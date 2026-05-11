@@ -328,7 +328,34 @@ const EspecialistaDashboard = () => {
     });
   };
 
-  const handleRefreshAlerts = async () => {
+  const handleConfirmSuspend = (payload: SuspendAlertPayload) => {
+    if (!suspendTarget) return;
+    suspendAlert.mutate(
+      {
+        alertKey: suspendTarget.id,
+        studentId: suspendTarget.studentId,
+        reason: payload.reason,
+        expiresAt: payload.expiresAt,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Aviso suspenso · movido para 'Aguardando Aluno'");
+          setSuspendTarget(null);
+        },
+        onError: () => toast.error("Não foi possível suspender o aviso"),
+      }
+    );
+  };
+
+  const handleUnsuspend = (alertKey: string) => {
+    unsuspendAlert.mutate(
+      { alertKey },
+      {
+        onSuccess: () => toast.success("Aviso reativado"),
+        onError: () => toast.error("Falha ao reativar"),
+      }
+    );
+  };
     await queryClient.invalidateQueries({ queryKey: ["proactive-alerts"] });
     toast.success("Alertas atualizados");
   };
