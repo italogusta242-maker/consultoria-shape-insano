@@ -260,9 +260,20 @@ const EspecialistaDashboard = () => {
   // reviewStats kept for potential future use but efficiency is now alert-based
   const { data: proactiveAlerts, isLoading: alertsLoading, isFetching: alertsFetching } = useProactiveAlerts(specialty, studentIds, studentNames);
   const { data: unresponsiveStudents } = useUnresponsiveStudents(user?.id, studentIds, studentNames);
-  const { dismissOne, dismissAllForStudent, restoreAll } = useDismissAlert();
+  const { dismissOne, dismissAllForStudent, restoreAll, suspendAlert, unsuspendAlert } = useDismissAlert();
+  const { data: suspendedAlerts } = useSuspendedAlerts(studentNames);
   const queryClient = useQueryClient();
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
+  const [suspendTarget, setSuspendTarget] = useState<ProactiveAlert | null>(null);
+  const [suspendedOpen, setSuspendedOpen] = useState(false);
+
+  const SNOOZABLE_TYPES = new Set<AlertType>([
+    "anamnese_review_pending",
+    "anamnese_not_done",
+    "monthly_pending",
+    "monthly_awaiting_review",
+    "assessment_overdue",
+  ]);
 
   const alertCount = proactiveAlerts?.length ?? 0;
   const unresponsiveCount = unresponsiveStudents?.length ?? 0;
