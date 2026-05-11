@@ -265,6 +265,7 @@ const EspecialistaDashboard = () => {
   const queryClient = useQueryClient();
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set());
   const [suspendTarget, setSuspendTarget] = useState<ProactiveAlert | null>(null);
+  const [suspendBatch, setSuspendBatch] = useState<ProactiveAlert[] | null>(null);
   const [suspendedOpen, setSuspendedOpen] = useState(false);
 
   const SNOOZABLE_TYPES = new Set<AlertType>([
@@ -328,7 +329,27 @@ const EspecialistaDashboard = () => {
     });
   };
 
-  const handleConfirmSuspend = (payload: SuspendAlertPayload) => {
+  const handleConfirmSuspend = async (payload: SuspendAlertPayload) => {
+    // Batch mode: suspend all snoozable alerts of a student at once
+    if (suspendBatch && suspendBatch.length > 0) {
+      try {
+        await Promise.all(
+          suspendBatch.map((a) =>
+            suspendAlert.mutateAsync({
+              alertKey: a.id,
+              studentId: a.studentId,
+              reason: payload.reason,
+              expiresAt: payload.expiresAt,
+            })
+          )
+        );
+        toast.success(`${suspendBatch.length} aviso(s) suspenso(s) · em "Aguardando Aluno"`);
+        setSuspendBatch(null);
+      } catch {
+        toast.error("Não foi possível suspender os avisos");
+      }
+      return;
+    }
     if (!suspendTarget) return;
     suspendAlert.mutate(
       {
@@ -587,6 +608,19 @@ const EspecialistaDashboard = () => {
                                 >
                                   {studentAlerts.length}
                                 </Badge>
+                                {studentAlerts.some(a => SNOOZABLE_TYPES.has(a.type)) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const snoozable = studentAlerts.filter(a => SNOOZABLE_TYPES.has(a.type));
+                                      setSuspendBatch(snoozable);
+                                    }}
+                                    className="p-1 rounded hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-colors"
+                                    title="Suspender avisos (Aguardando Aluno)"
+                                  >
+                                    <BellOff size={14} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={(e) => handleDismissAllStudent(e, studentAlerts)}
                                   className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
@@ -623,7 +657,7 @@ const EspecialistaDashboard = () => {
                                             e.stopPropagation();
                                             setSuspendTarget(alert);
                                           }}
-                                          className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-all"
+                                          className="p-0.5 rounded hover:bg-amber-500/20 text-muted-foreground hover:text-amber-400 transition-colors"
                                           title="Suspender aviso"
                                         >
                                           <BellOff size={12} />
@@ -631,7 +665,7 @@ const EspecialistaDashboard = () => {
                                       )}
                                       <button
                                         onClick={(e) => handleDismissOne(e, alert)}
-                                        className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
+                                        className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
                                         title="Dispensar"
                                       >
                                         <X size={12} />
@@ -758,10 +792,19 @@ const EspecialistaDashboard = () => {
 
         {/* Suspend Alert Modal */}
         <SuspendAlertModal
-          open={!!suspendTarget}
-          onOpenChange={(o) => !o && setSuspendTarget(null)}
-          studentName={suspendTarget?.studentName}
-          alertTitle={suspendTarget?.title}
+          open={!!suspendTarget || !!suspendBatch}
+          onOpenChange={(o) => {
+            if (!o) {
+              setSuspendTarget(null);
+              setSuspendBatch(null);
+            }
+          }}
+          studentName={suspendBatch?.[0]?.studentName ?? suspendTarget?.studentName}
+          alertTitle={
+            suspendBatch
+              ? `${suspendBatch.length} aviso(s) deste aluno`
+              : suspendTarget?.title
+          }
           isSubmitting={suspendAlert.isPending}
           onConfirm={handleConfirmSuspend}
         />
