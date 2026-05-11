@@ -697,7 +697,75 @@ const EspecialistaDashboard = () => {
           </GlassCard>
         </motion.div>
 
-        {/* Detail Modal - Students with alerts */}
+        {/* Aguardando Aluno (snoozed alerts) */}
+        {(suspendedAlerts?.length ?? 0) > 0 && (
+          <motion.div variants={fadeUp}>
+            <GlassCard>
+              <Collapsible open={suspendedOpen} onOpenChange={setSuspendedOpen}>
+                <CollapsibleTrigger asChild>
+                  <button className="w-full flex items-center gap-2 p-4 hover:opacity-80 transition-opacity">
+                    <BellOff size={16} className="text-amber-400" />
+                    <h3 className="text-sm font-medium text-foreground">Aguardando Aluno</h3>
+                    <span className="min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                      {suspendedAlerts!.length}
+                    </span>
+                    <span className="ml-auto">
+                      {suspendedOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-4 pb-4 space-y-2">
+                    {suspendedAlerts!.map((row) => {
+                      const expiresLabel = row.trainer_alert_expires_at
+                        ? `volta em ${new Date(row.trainer_alert_expires_at).toLocaleDateString("pt-BR")}`
+                        : "tempo indeterminado";
+                      return (
+                        <div
+                          key={row.alert_key}
+                          className="flex items-center justify-between gap-2 p-3 rounded-lg border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))]"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-foreground truncate">{row.studentName}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {row.trainer_alert_reason && (
+                                <Badge variant="outline" className="text-[10px] border-amber-400/40 text-amber-400">
+                                  {row.trainer_alert_reason}
+                                </Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">{expiresLabel}</span>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-[10px] gap-1"
+                            onClick={() => handleUnsuspend(row.alert_key)}
+                            disabled={unsuspendAlert.isPending}
+                          >
+                            <CornerUpLeft size={12} />
+                            Retornar
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </GlassCard>
+          </motion.div>
+        )}
+
+        {/* Suspend Alert Modal */}
+        <SuspendAlertModal
+          open={!!suspendTarget}
+          onOpenChange={(o) => !o && setSuspendTarget(null)}
+          studentName={suspendTarget?.studentName}
+          alertTitle={suspendTarget?.title}
+          isSubmitting={suspendAlert.isPending}
+          onConfirm={handleConfirmSuspend}
+        />
+
         <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
           <DialogContent className="bg-background border-border max-w-lg max-h-[80vh] overflow-y-auto">
             <DialogHeader>
