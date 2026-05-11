@@ -13,7 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useProactiveAlerts, useDismissAlert, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { useProactiveAlerts, useDismissAlert, useSuspendedAlerts, type ProactiveAlert, type AlertSeverity, type AlertType } from "@/hooks/useProactiveAlerts";
+import { SuspendAlertModal, type SuspendAlertPayload } from "@/components/especialista/SuspendAlertModal";
+import { Clock as ClockIcon, BellOff, CornerUpLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
