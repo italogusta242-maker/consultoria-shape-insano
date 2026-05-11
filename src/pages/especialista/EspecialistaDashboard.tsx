@@ -329,7 +329,27 @@ const EspecialistaDashboard = () => {
     });
   };
 
-  const handleConfirmSuspend = (payload: SuspendAlertPayload) => {
+  const handleConfirmSuspend = async (payload: SuspendAlertPayload) => {
+    // Batch mode: suspend all snoozable alerts of a student at once
+    if (suspendBatch && suspendBatch.length > 0) {
+      try {
+        await Promise.all(
+          suspendBatch.map((a) =>
+            suspendAlert.mutateAsync({
+              alertKey: a.id,
+              studentId: a.studentId,
+              reason: payload.reason,
+              expiresAt: payload.expiresAt,
+            })
+          )
+        );
+        toast.success(`${suspendBatch.length} aviso(s) suspenso(s) · em "Aguardando Aluno"`);
+        setSuspendBatch(null);
+      } catch {
+        toast.error("Não foi possível suspender os avisos");
+      }
+      return;
+    }
     if (!suspendTarget) return;
     suspendAlert.mutate(
       {
