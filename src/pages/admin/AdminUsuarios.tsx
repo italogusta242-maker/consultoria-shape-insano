@@ -33,6 +33,7 @@ const mockConversasProfissional = [
 ];
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import FlameEditModal from "@/components/admin/FlameEditModal";
 
 // Status mapping from DB to display
 const mapStatus = (status: string): string => {
