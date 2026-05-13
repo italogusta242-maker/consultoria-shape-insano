@@ -1210,6 +1210,17 @@ const AdminUsuarios = () => {
                               </div>
                               <div><p className="text-muted-foreground">Cadastro</p><p className="font-medium text-foreground">{new Date(user.created_at).toLocaleDateString("pt-BR")}</p></div>
                             </div>
+                            <div className="mt-3 flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-orange-500/40 hover:bg-orange-500/10 text-orange-400"
+                                onClick={() => setFlameEdit({ id: user.id, name: user.nome || user.email || "Aluno" })}
+                              >
+                                <Flame size={14} className="mr-1.5" />
+                                Editar Chama
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       )}
