@@ -84,6 +84,7 @@ const AdminUsuarios = () => {
   const [anamneseMap, setAnamneseMap] = useState<Record<string, any>>({});
   const [specialistMap, setSpecialistMap] = useState<Record<string, { display: string; personal?: string; personalName?: string; nutri?: string; nutriName?: string }>>({});
   const [flameMap, setFlameMap] = useState<Record<string, { state: string; adherence: number }>>({});
+  const [flameEdit, setFlameEdit] = useState<{ id: string; name: string } | null>(null);
   // Create Aluno
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
