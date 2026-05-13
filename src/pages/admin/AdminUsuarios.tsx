@@ -1639,6 +1639,20 @@ const AdminUsuarios = () => {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      <FlameEditModal
+        open={!!flameEdit}
+        onOpenChange={(v) => { if (!v) setFlameEdit(null); }}
+        userId={flameEdit?.id ?? null}
+        userName={flameEdit?.name}
+        onSaved={({ state }) => {
+          if (!flameEdit) return;
+          setFlameMap((prev) => ({
+            ...prev,
+            [flameEdit.id]: { state, adherence: prev[flameEdit.id]?.adherence ?? 0 },
+          }));
+        }}
+      />
     </div>
   );
 };
