@@ -33,6 +33,7 @@ const mockConversasProfissional = [
 ];
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import FlameEditModal from "@/components/admin/FlameEditModal";
 
 // Status mapping from DB to display
 const mapStatus = (status: string): string => {
@@ -83,6 +84,7 @@ const AdminUsuarios = () => {
   const [anamneseMap, setAnamneseMap] = useState<Record<string, any>>({});
   const [specialistMap, setSpecialistMap] = useState<Record<string, { display: string; personal?: string; personalName?: string; nutri?: string; nutriName?: string }>>({});
   const [flameMap, setFlameMap] = useState<Record<string, { state: string; adherence: number }>>({});
+  const [flameEdit, setFlameEdit] = useState<{ id: string; name: string } | null>(null);
   // Create Aluno
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -1208,6 +1210,17 @@ const AdminUsuarios = () => {
                               </div>
                               <div><p className="text-muted-foreground">Cadastro</p><p className="font-medium text-foreground">{new Date(user.created_at).toLocaleDateString("pt-BR")}</p></div>
                             </div>
+                            <div className="mt-3 flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-orange-500/40 hover:bg-orange-500/10 text-orange-400"
+                                onClick={() => setFlameEdit({ id: user.id, name: user.nome || user.email || "Aluno" })}
+                              >
+                                <Flame size={14} className="mr-1.5" />
+                                Editar Chama
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -1637,6 +1650,20 @@ const AdminUsuarios = () => {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      <FlameEditModal
+        open={!!flameEdit}
+        onOpenChange={(v) => { if (!v) setFlameEdit(null); }}
+        userId={flameEdit?.id ?? null}
+        userName={flameEdit?.name}
+        onSaved={({ state }) => {
+          if (!flameEdit) return;
+          setFlameMap((prev) => ({
+            ...prev,
+            [flameEdit.id]: { state, adherence: prev[flameEdit.id]?.adherence ?? 0 },
+          }));
+        }}
+      />
     </div>
   );
 };
