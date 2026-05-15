@@ -1,74 +1,113 @@
-## Visão Geral
+## Plano de Correções Cirúrgicas — `Treinos.tsx`
 
-Os alertas de "Anamnese pendente" no painel do especialista não são linhas de uma tabela `anamnesis_requests` — eles são derivados em tempo real pelo hook `useProactiveAlerts.ts` a partir de `anamnese`, `monthly_assessments` e `profiles.next_anamnese_due`. Hoje já existe a tabela `dismissed_alerts` (specialist_id + alert_key + student_id) usada para "dispensar" alertas.
+Aplicar as Prioridades **A, B, C, E** sem refatorar o arquivo inteiro. Três edições isoladas, todas em `src/pages/Treinos.tsx`, mais uma assinatura nova de hook auxiliar inline.
 
-A forma mais limpa e consistente de implementar a "Soneca" é **estender `dismissed_alerts`** para virar também um registro de "suspensão temporária", em vez de criar uma tabela paralela.
+---
 
-## Mudanças no Banco
+### Correção E — Restauração reativa pós-auth (iOS PWA / bf-cache)
 
-Adicionar à tabela `dismissed_alerts`:
-- `trainer_alert_status` text NOT NULL DEFAULT `'dismissed'` — valores: `'dismissed'` (comportamento atual: oculta para sempre), `'suspended'` (nova soneca).
-- `trainer_alert_reason` text NULL — motivo escolhido.
-- `trainer_alert_expires_at` timestamptz NULL — quando vira `NULL` é tempo indeterminado.
+**Onde:** `src/pages/Treinos.tsx`, linhas ~420–465.
 
-Sem migração de dados (o default cobre as linhas existentes). RLS já está ok (specialist gerencia as próprias linhas).
+**O que muda:**
 
-## Lógica de Filtragem (sem cron)
-
-Em `useProactiveAlerts`, trocar o `Set<alert_key>` por um `Map<alert_key, { status, expires_at }>` e classificar cada alerta gerado em três buckets:
-
-```text
-ATIVO   → não tem registro
-        OU status='suspended' AND expires_at IS NOT NULL AND expires_at < NOW()
-SUSPENSO→ status='suspended' AND (expires_at IS NULL OR expires_at > NOW())
-OCULTO  → status='dismissed' (comportamento atual mantido)
-```
-
-O hook passa a retornar `{ active: ProactiveAlert[], suspended: (ProactiveAlert & { reason, expiresAt })[] }` para a UI consumir os dois grupos sem refazer a lógica.
-
-A "ressureição" no vencimento acontece automaticamente porque a query reavalia `expires_at < NOW()` a cada refetch (já existe `refetchInterval: 5min`).
-
-## Mudanças na UI (`EspecialistaDashboard.tsx`)
-
-1. **Card de alerta** — adicionar menu de 3 pontinhos (`MoreVertical`) com:
-   - "Suspender Aviso" → abre modal
-   - "Dispensar" (item já existente migrado pra dentro do menu)
-
-2. **Modal de Suspensão** (novo componente `SuspendAlertModal.tsx` em `src/components/especialista/`):
-   - Radio "Motivo": Sem resposta do aluno · Aluno vai responder depois · Outros
-   - Radio "Prazo": Indeterminado · 3 dias · 7 dias · Data específica (DatePicker via `<Calendar>`)
-   - Confirma → upsert em `dismissed_alerts` com `status='suspended'`, `reason`, `expires_at`.
-
-3. **Seção "Aguardando Aluno"** — `<Collapsible>` no final da página, mostrando os alertas com status suspenso. Cada item exibe:
-   - Badge com motivo
-   - Texto "volta em X dias" ou "indeterminado"
-   - Botão "Retornar para Urgentes" → upsert com `status='dismissed'` e depois delete, ou simplesmente `delete` da linha (mais simples — limpa a soneca e o alerta volta no próximo render).
-
-4. O escopo se aplica apenas aos alertas dos tipos `anamnese_review_pending`, `monthly_pending`, `monthly_awaiting_review`, `assessment_overdue` (família "anamnese"). Os outros tipos mantêm o comportamento atual.
-
-## Reativação no Submit do Aluno
-
-Ao submeter anamnese (`src/lib/submitAnamnese.ts`) e ao submeter reavaliação mensal (`src/lib/submitMonthlyAssessment.ts`), após sucesso:
+1. Remover a leitura de `loadWorkoutExecutionSnapshot()` no topo do componente (executada no primeiro render, quando `user?.id` ainda é `undefined` no bf-cache do iOS).
+2. Inicializar todos os states com valores neutros:
+   - `view = "list"`, `selectedGroup = null`, `expandedExercise = null`
+   - `exercises = []`, `startedAt = ""`, `timerRunning = false`, `timer = 0`
+3. Adicionar um `useEffect` dependente de `user?.id` com guarda `hasRestoredRef`:
 
 ```ts
-await supabase.from("dismissed_alerts")
-  .delete()
-  .eq("student_id", user.id)
-  .in("alert_key", ["anamnese-review-…", "monthly-pending-…", "assessment-never-…"]);
+const hasRestoredRef = useRef(false);
+useEffect(() => {
+  if (!user?.id || hasRestoredRef.current) return;
+  const persisted = loadWorkoutExecutionSnapshot();
+  if (!persisted) { hasRestoredRef.current = true; return; }
+  const belongs = persisted.userId == null || persisted.userId === user.id;
+  if (!belongs) { hasRestoredRef.current = true; return; }
+  const safe = sanitizeExercises(persisted.exercises);
+  setExercises(safe);
+  setSelectedGroup(persisted.selectedGroup);
+  setExpandedExercise(persisted.expandedExercise);
+  setStartedAt(persisted.startedAt);
+  setView(persisted.view);
+  if (persisted.startedAt && persisted.view === "execution") {
+    setTimerRunning(true);
+    setTimer(Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000));
+  }
+  hasRestoredRef.current = true;
+}, [user?.id]);
 ```
 
-Como `alert_key` inclui o `studentId` no formato `monthly-pending-${sid}`, basta um delete por padrão `like 'monthly-%-' || user.id` ou listar as chaves possíveis. Isso "ressuscita" o alerta como `anamnese_review_pending` (aguardando revisão do especialista) na próxima query.
+Garantia: roda **uma única vez** após o `user` estar disponível, evita race condition do primeiro render. O `handleConclude` continua intocado (lê dos states atuais).
 
-## Arquivos Tocados
+---
 
-- `supabase/migrations/<timestamp>_snooze_alerts.sql` (nova migração: 3 colunas)
-- `src/hooks/useProactiveAlerts.ts` (lógica de buckets + nova mutation `suspendAlert`)
-- `src/components/especialista/SuspendAlertModal.tsx` (novo)
-- `src/pages/especialista/EspecialistaDashboard.tsx` (menu, modal, accordion "Aguardando Aluno")
-- `src/lib/submitAnamnese.ts` e `src/lib/submitMonthlyAssessment.ts` (limpeza de soneca no submit)
+### Correção C — Fim do "bug da meia-noite" no per-group draft
 
-## Notas Técnicas
+**Onde:** `src/pages/Treinos.tsx`, função `openGroup`, linhas ~774–805.
 
-- Sem cron job — toda a "expiração" é decidida em query time comparando `expires_at` com `new Date()` no client.
-- `dismissed_alerts` já tem `unique(specialist_id, alert_key)` via upsert; mantém-se.
-- `src/integrations/supabase/types.ts` será atualizado automaticamente após a migração.
+**O que muda:**
+
+- Remover a condição `parsed.date === todayStr` do `if` de restauração.
+- Remover o cálculo `const todayStr = getToday();` (não usado mais).
+- Manter as validações de `matchesGroupName`, `matchesUser` e contagem de exercícios.
+- Limpeza continua exclusivamente nas ações explícitas (Finalizar / Cancelar / 3h auto-finalize).
+
+Bloco final:
+
+```ts
+if (matchesGroupName && matchesUser && safeExercises.length === group.exercises.length) {
+  setExercises(safeExercises);
+  setSelectedGroup(index);
+  setExpandedExercise(null);
+  setView("detail");
+  return;
+}
+```
+
+---
+
+### Correção A & B — `getNextGroupIndex` por rotação cíclica + cache fresh
+
+**Onde:** `src/pages/Treinos.tsx`, linhas ~487–501 (query) e ~756–762 (cálculo).
+
+**Parte 1 — Query React Query** (linha 487): adicionar `refetchOnMount: "always"`:
+
+```ts
+const { data: workoutHistory = [] } = useQuery({
+  queryKey: ["workout-history", user?.id],
+  queryFn: async () => { /* mantém */ },
+  enabled: !!user,
+  refetchOnMount: "always",
+});
+```
+
+**Parte 2 — Heurística** (linhas 756–762): substituir o algoritmo `indexOf(Math.min(counts))` por rotação cíclica pura baseada **apenas no último treino finalizado**:
+
+```ts
+const getNextGroupIndex = useCallback(() => {
+  if (workoutGroups.length === 0) return 0;
+  const lastFinished = workoutHistory.find((w) => w.finished_at);
+  if (!lastFinished) return 0;
+  const lastIdx = workoutGroups.findIndex(
+    (g) => g.name.trim().toLowerCase() === (lastFinished.group_name ?? "").trim().toLowerCase()
+  );
+  if (lastIdx === -1) return 0; // grupo renomeado: começa do A
+  return (lastIdx + 1) % workoutGroups.length;
+}, [workoutGroups, workoutHistory]);
+```
+
+Comportamento: A → B → C → A. Se o último treino não casa com nenhum grupo (renomeado pelo preparador), volta para o índice 0 em vez de travar.
+
+---
+
+### Validação final
+
+- `handleConclude` não é tocado — segue lendo dos states.
+- Snapshot continua sendo salvo a cada ação (lógica de persistência intacta).
+- `clearWorkoutInProgress` continua sendo chamada apenas em finalize/cancel.
+- Sem mudanças de tipos, sem mudanças de imports além de `useRef`/`useEffect` (já presentes).
+
+### Arquivos modificados
+
+- `src/pages/Treinos.tsx` (3 edições isoladas)

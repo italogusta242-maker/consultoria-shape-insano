@@ -413,40 +413,20 @@ const Treinos = () => {
 
   const MAX_WORKOUT_SECONDS = 3 * 60 * 60; // 3 hours
 
-  // ─── Restore execution state from localStorage ─────────────
-  // Local-first: every set/click is persisted *immediately* (synchronous) so
-  // the workout survives the OS killing the tab when the user opens WhatsApp,
-  // Spotify, loses signal, or the PWA is suspended in the background.
-  const persisted = loadWorkoutExecutionSnapshot();
-  // Only restore if it belongs to the same authenticated user. If userId is
-  // null (older snapshot from before this change), still allow it for the
-  // current user — best-effort recovery.
-  const persistedBelongsToUser = persisted
-    ? persisted.userId == null || persisted.userId === user?.id
-    : false;
-  const persistedExercises = persistedBelongsToUser ? sanitizeExercises(persisted!.exercises) : [];
-
-  const restoredFromSnapshot = persistedBelongsToUser && persisted!.view === "execution";
-  const [view, setView] = useState<View>(
-    restoredFromSnapshot ? "execution" : "list"
-  );
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(
-    persistedBelongsToUser ? persisted!.selectedGroup : null
-  );
-  const [expandedExercise, setExpandedExercise] = useState<number | null>(
-    persistedBelongsToUser ? persisted!.expandedExercise : null
-  );
-  const [exercises, setExercises] = useState<Exercise[]>(persistedExercises);
+  // ─── State (neutral initial values) ─────────────────────────
+  // Restoration happens REACTIVELY in a useEffect that depends on user?.id.
+  // This avoids the iOS PWA bf-cache race where the first render had
+  // user === undefined and the snapshot was silently discarded.
+  const [view, setView] = useState<View>("list");
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [expandedExercise, setExpandedExercise] = useState<number | null>(null);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [effortRating, setEffortRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
-  const [startedAt, setStartedAt] = useState<string>(
-    persistedBelongsToUser ? persisted!.startedAt : ""
-  );
-  const [timerRunning, setTimerRunning] = useState(
-    persistedBelongsToUser && !!persisted!.startedAt && persisted!.view === "execution"
-  );
+  const [startedAt, setStartedAt] = useState<string>("");
+  const [timerRunning, setTimerRunning] = useState(false);
   const [restTimerData, setRestTimerData] = useState<{ seconds: number } | null>(null);
   const [setPickerData, setSetPickerData] = useState<{ exIdx: number; setIdx: number } | null>(null);
 
@@ -455,14 +435,32 @@ const Treinos = () => {
   const { shareWorkout, isSharing } = useWorkoutShare();
   const { state: flameState, streak } = useFlameState();
 
-
   // Timer computed from startedAt (survives tab changes)
-  const [timer, setTimer] = useState(() => {
-    if (persistedBelongsToUser && persisted?.startedAt) {
-      return Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000);
+  const [timer, setTimer] = useState(0);
+
+  // ─── Reactive restore (runs ONCE after user is authenticated) ───
+  // Fixes iOS PWA bf-cache bug: the snapshot was being read before the
+  // Supabase session rehydrated, so persistedBelongsToUser was false and
+  // the user lost their in-progress workout on app resume.
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id || hasRestoredRef.current) return;
+    const persisted = loadWorkoutExecutionSnapshot();
+    if (!persisted) { hasRestoredRef.current = true; return; }
+    const belongs = persisted.userId == null || persisted.userId === user.id;
+    if (!belongs) { hasRestoredRef.current = true; return; }
+    const safe = sanitizeExercises(persisted.exercises);
+    setExercises(safe);
+    setSelectedGroup(persisted.selectedGroup);
+    setExpandedExercise(persisted.expandedExercise);
+    setStartedAt(persisted.startedAt);
+    setView(persisted.view);
+    if (persisted.startedAt && persisted.view === "execution") {
+      setTimerRunning(true);
+      setTimer(Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000));
     }
-    return 0;
-  });
+    hasRestoredRef.current = true;
+  }, [user?.id]);
 
   // ─── DB Queries ────────────────────────────────────────────
   const { data: plan } = useQuery({
@@ -498,6 +496,7 @@ const Treinos = () => {
       return (data ?? []) as WorkoutLog[];
     },
     enabled: !!user,
+    refetchOnMount: "always",
   });
 
   // Fetch exercise library for GIF/instructions enrichment
@@ -548,12 +547,15 @@ const Treinos = () => {
   const selectedGroupName = hasValidSelectedGroup ? workoutGroups[selectedGroup].name : null;
   // Only flag mismatch when the real plan has loaded — never invalidate based
   // on the hardcoded fallbackGroups (which would fire during refetch windows).
+  const persistedGroupName = (() => {
+    try { return loadWorkoutExecutionSnapshot()?.groupName ?? null; } catch { return null; }
+  })();
   const persistedGroupMismatch = Boolean(
     planLoaded &&
-    persisted?.groupName &&
+    persistedGroupName &&
     selectedGroup !== null &&
     hasValidSelectedGroup &&
-    selectedGroupName !== persisted.groupName
+    selectedGroupName !== persistedGroupName
   );
 
   // Save workout mutation
@@ -654,15 +656,18 @@ const Treinos = () => {
     };
   }, [view, timerRunning]);
 
-  // Toast when workout was restored from snapshot
+  // Toast when workout was restored from snapshot (after async restore effect)
+  const restoredToastShownRef = useRef(false);
   useEffect(() => {
-    if (restoredFromSnapshot) {
+    if (restoredToastShownRef.current) return;
+    if (hasRestoredRef.current && view === "execution" && exercises.length > 0) {
+      restoredToastShownRef.current = true;
       toast.success("💪 Treino em andamento restaurado!", {
         description: "Seu progresso foi salvo automaticamente.",
         duration: 4000,
       });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, exercises.length]);
 
   // Auto-finalize after 3 hours
   useEffect(() => {
@@ -755,10 +760,17 @@ const Treinos = () => {
   // Determine next group
   const getNextGroupIndex = useCallback(() => {
     if (workoutGroups.length === 0) return 0;
-    const counts = workoutGroups.map((g) =>
-      workoutHistory.filter((w) => w.group_name === g.name && w.finished_at).length
+    // Pure cyclic rotation based on the LAST finished workout: A -> B -> C -> A.
+    // Avoids the brittle string-counting heuristic that would freeze on the
+    // first group if any plan rename desynced history rows.
+    const lastFinished = workoutHistory.find((w) => w.finished_at);
+    if (!lastFinished) return 0;
+    const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+    const lastIdx = workoutGroups.findIndex(
+      (g) => norm(g.name) === norm(lastFinished.group_name)
     );
-    return counts.indexOf(Math.min(...counts));
+    if (lastIdx === -1) return 0; // group renamed by specialist — restart at A
+    return (lastIdx + 1) % workoutGroups.length;
   }, [workoutGroups, workoutHistory]);
 
   const nextGroupIndex = getNextGroupIndex();
@@ -775,13 +787,13 @@ const Treinos = () => {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const todayStr = getToday();
         const safeExercises = sanitizeExercises(parsed.exercises);
         const matchesGroupName = typeof parsed.groupName !== "string" || parsed.groupName === group.name;
         const matchesUser = parsed.userId == null || parsed.userId === user?.id;
 
+        // Date check intentionally removed: a draft started at night must
+        // survive midnight. Cleanup happens only via Finalize/Cancel/3h timeout.
         if (
-          parsed.date === todayStr &&
           matchesGroupName &&
           matchesUser &&
           safeExercises.length === group.exercises.length
