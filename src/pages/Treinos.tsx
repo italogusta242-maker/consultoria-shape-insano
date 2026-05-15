@@ -787,13 +787,13 @@ const Treinos = () => {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        const todayStr = getToday();
         const safeExercises = sanitizeExercises(parsed.exercises);
         const matchesGroupName = typeof parsed.groupName !== "string" || parsed.groupName === group.name;
         const matchesUser = parsed.userId == null || parsed.userId === user?.id;
 
+        // Date check intentionally removed: a draft started at night must
+        // survive midnight. Cleanup happens only via Finalize/Cancel/3h timeout.
         if (
-          parsed.date === todayStr &&
           matchesGroupName &&
           matchesUser &&
           safeExercises.length === group.exercises.length
