@@ -655,15 +655,18 @@ const Treinos = () => {
     };
   }, [view, timerRunning]);
 
-  // Toast when workout was restored from snapshot
+  // Toast when workout was restored from snapshot (after async restore effect)
+  const restoredToastShownRef = useRef(false);
   useEffect(() => {
-    if (restoredFromSnapshot) {
+    if (restoredToastShownRef.current) return;
+    if (hasRestoredRef.current && view === "execution" && exercises.length > 0) {
+      restoredToastShownRef.current = true;
       toast.success("💪 Treino em andamento restaurado!", {
         description: "Seu progresso foi salvo automaticamente.",
         duration: 4000,
       });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, exercises.length]);
 
   // Auto-finalize after 3 hours
   useEffect(() => {
