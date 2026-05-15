@@ -546,12 +546,15 @@ const Treinos = () => {
   const selectedGroupName = hasValidSelectedGroup ? workoutGroups[selectedGroup].name : null;
   // Only flag mismatch when the real plan has loaded — never invalidate based
   // on the hardcoded fallbackGroups (which would fire during refetch windows).
+  const persistedGroupName = (() => {
+    try { return loadWorkoutExecutionSnapshot()?.groupName ?? null; } catch { return null; }
+  })();
   const persistedGroupMismatch = Boolean(
     planLoaded &&
-    persisted?.groupName &&
+    persistedGroupName &&
     selectedGroup !== null &&
     hasValidSelectedGroup &&
-    selectedGroupName !== persisted.groupName
+    selectedGroupName !== persistedGroupName
   );
 
   // Save workout mutation
