@@ -413,40 +413,20 @@ const Treinos = () => {
 
   const MAX_WORKOUT_SECONDS = 3 * 60 * 60; // 3 hours
 
-  // ─── Restore execution state from localStorage ─────────────
-  // Local-first: every set/click is persisted *immediately* (synchronous) so
-  // the workout survives the OS killing the tab when the user opens WhatsApp,
-  // Spotify, loses signal, or the PWA is suspended in the background.
-  const persisted = loadWorkoutExecutionSnapshot();
-  // Only restore if it belongs to the same authenticated user. If userId is
-  // null (older snapshot from before this change), still allow it for the
-  // current user — best-effort recovery.
-  const persistedBelongsToUser = persisted
-    ? persisted.userId == null || persisted.userId === user?.id
-    : false;
-  const persistedExercises = persistedBelongsToUser ? sanitizeExercises(persisted!.exercises) : [];
-
-  const restoredFromSnapshot = persistedBelongsToUser && persisted!.view === "execution";
-  const [view, setView] = useState<View>(
-    restoredFromSnapshot ? "execution" : "list"
-  );
-  const [selectedGroup, setSelectedGroup] = useState<number | null>(
-    persistedBelongsToUser ? persisted!.selectedGroup : null
-  );
-  const [expandedExercise, setExpandedExercise] = useState<number | null>(
-    persistedBelongsToUser ? persisted!.expandedExercise : null
-  );
-  const [exercises, setExercises] = useState<Exercise[]>(persistedExercises);
+  // ─── State (neutral initial values) ─────────────────────────
+  // Restoration happens REACTIVELY in a useEffect that depends on user?.id.
+  // This avoids the iOS PWA bf-cache race where the first render had
+  // user === undefined and the snapshot was silently discarded.
+  const [view, setView] = useState<View>("list");
+  const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
+  const [expandedExercise, setExpandedExercise] = useState<number | null>(null);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [effortRating, setEffortRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
-  const [startedAt, setStartedAt] = useState<string>(
-    persistedBelongsToUser ? persisted!.startedAt : ""
-  );
-  const [timerRunning, setTimerRunning] = useState(
-    persistedBelongsToUser && !!persisted!.startedAt && persisted!.view === "execution"
-  );
+  const [startedAt, setStartedAt] = useState<string>("");
+  const [timerRunning, setTimerRunning] = useState(false);
   const [restTimerData, setRestTimerData] = useState<{ seconds: number } | null>(null);
   const [setPickerData, setSetPickerData] = useState<{ exIdx: number; setIdx: number } | null>(null);
 
@@ -455,14 +435,32 @@ const Treinos = () => {
   const { shareWorkout, isSharing } = useWorkoutShare();
   const { state: flameState, streak } = useFlameState();
 
-
   // Timer computed from startedAt (survives tab changes)
-  const [timer, setTimer] = useState(() => {
-    if (persistedBelongsToUser && persisted?.startedAt) {
-      return Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000);
+  const [timer, setTimer] = useState(0);
+
+  // ─── Reactive restore (runs ONCE after user is authenticated) ───
+  // Fixes iOS PWA bf-cache bug: the snapshot was being read before the
+  // Supabase session rehydrated, so persistedBelongsToUser was false and
+  // the user lost their in-progress workout on app resume.
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id || hasRestoredRef.current) return;
+    const persisted = loadWorkoutExecutionSnapshot();
+    if (!persisted) { hasRestoredRef.current = true; return; }
+    const belongs = persisted.userId == null || persisted.userId === user.id;
+    if (!belongs) { hasRestoredRef.current = true; return; }
+    const safe = sanitizeExercises(persisted.exercises);
+    setExercises(safe);
+    setSelectedGroup(persisted.selectedGroup);
+    setExpandedExercise(persisted.expandedExercise);
+    setStartedAt(persisted.startedAt);
+    setView(persisted.view);
+    if (persisted.startedAt && persisted.view === "execution") {
+      setTimerRunning(true);
+      setTimer(Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000));
     }
-    return 0;
-  });
+    hasRestoredRef.current = true;
+  }, [user?.id]);
 
   // ─── DB Queries ────────────────────────────────────────────
   const { data: plan } = useQuery({
