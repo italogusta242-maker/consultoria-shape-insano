@@ -496,6 +496,7 @@ const Treinos = () => {
       return (data ?? []) as WorkoutLog[];
     },
     enabled: !!user,
+    refetchOnMount: "always",
   });
 
   // Fetch exercise library for GIF/instructions enrichment
