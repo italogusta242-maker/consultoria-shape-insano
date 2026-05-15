@@ -760,10 +760,17 @@ const Treinos = () => {
   // Determine next group
   const getNextGroupIndex = useCallback(() => {
     if (workoutGroups.length === 0) return 0;
-    const counts = workoutGroups.map((g) =>
-      workoutHistory.filter((w) => w.group_name === g.name && w.finished_at).length
+    // Pure cyclic rotation based on the LAST finished workout: A -> B -> C -> A.
+    // Avoids the brittle string-counting heuristic that would freeze on the
+    // first group if any plan rename desynced history rows.
+    const lastFinished = workoutHistory.find((w) => w.finished_at);
+    if (!lastFinished) return 0;
+    const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+    const lastIdx = workoutGroups.findIndex(
+      (g) => norm(g.name) === norm(lastFinished.group_name)
     );
-    return counts.indexOf(Math.min(...counts));
+    if (lastIdx === -1) return 0; // group renamed by specialist — restart at A
+    return (lastIdx + 1) % workoutGroups.length;
   }, [workoutGroups, workoutHistory]);
 
   const nextGroupIndex = getNextGroupIndex();
