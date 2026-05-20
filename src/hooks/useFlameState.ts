@@ -71,7 +71,7 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
       return { state: initialState, streak: initialStreak, adherence };
     },
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutes — optimistic updates handle the UI
+    staleTime: 10 * 1000, // 10 seconds — short staleTime so that admin manual overrides are shown quickly on navigation
     gcTime: 10 * 60 * 1000,
   });
 

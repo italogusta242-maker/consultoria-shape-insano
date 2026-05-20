@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { user_id, nome, email, telefone, cpf, password, status } = await req.json();
+    const { user_id, nome, email, telefone, cpf, password, status, streak, flameState } = await req.json();
 
     if (!user_id) {
       return new Response(JSON.stringify({ error: "user_id é obrigatório" }), {
@@ -97,6 +97,56 @@ Deno.serve(async (req) => {
       if (profileError) {
         console.error("Profile update error:", profileError);
         return new Response(JSON.stringify({ error: "Erro ao atualizar perfil: " + profileError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // Update flame status if provided
+    if (streak !== undefined || flameState !== undefined) {
+      const flameUpdate: Record<string, any> = {
+        user_id,
+        updated_at: new Date().toISOString(),
+      };
+      if (streak !== undefined) flameUpdate.streak = Number(streak);
+      if (flameState !== undefined) flameUpdate.state = flameState;
+
+      // To prevent the midnight judge from resetting this manual edit today:
+      // We get the user's timezone to compute today's local date string
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("timezone")
+        .eq("id", user_id)
+        .maybeSingle();
+
+      const userTimezone = profile?.timezone || "America/Sao_Paulo";
+      
+      // Compute correct date string in user's timezone (YYYY-MM-DD)
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: userTimezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      const parts = formatter.formatToParts(new Date());
+      const year = parts.find((p) => p.type === "year")?.value;
+      const month = parts.find((p) => p.type === "month")?.value;
+      const day = parts.find((p) => p.type === "day")?.value;
+      const localTodayStr = `${year}-${month}-${day}`;
+
+      if (flameState === "ativa") {
+        flameUpdate.last_approved_date = localTodayStr;
+      }
+      flameUpdate.last_midnight_check = localTodayStr;
+
+      const { error: flameError } = await adminClient
+        .from("flame_status")
+        .upsert(flameUpdate, { onConflict: "user_id" });
+
+      if (flameError) {
+        console.error("Flame status update error:", flameError);
+        return new Response(JSON.stringify({ error: "Erro ao atualizar Chama de Honra: " + flameError.message }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

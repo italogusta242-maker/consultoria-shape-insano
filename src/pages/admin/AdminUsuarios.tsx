@@ -83,7 +83,7 @@ const AdminUsuarios = () => {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [anamneseMap, setAnamneseMap] = useState<Record<string, any>>({});
   const [specialistMap, setSpecialistMap] = useState<Record<string, { display: string; personal?: string; personalName?: string; nutri?: string; nutriName?: string }>>({});
-  const [flameMap, setFlameMap] = useState<Record<string, { state: string; adherence: number }>>({});
+  const [flameMap, setFlameMap] = useState<Record<string, { state: string; streak: number; adherence: number }>>({});
   const [flameEdit, setFlameEdit] = useState<{ id: string; name: string } | null>(null);
   // Create Aluno
   const [createOpen, setCreateOpen] = useState(false);
@@ -203,8 +203,8 @@ const AdminUsuarios = () => {
             setSpecialistMap(sMap);
           }
 
-          // Fetch workouts and training plans for flame/adherence
-          const [workoutsRes, plansRes] = await Promise.all([
+          // Fetch workouts, training plans, and flame statuses
+          const [workoutsRes, plansRes, flameRes] = await Promise.all([
             supabase
               .from("workouts")
               .select("user_id, finished_at")
@@ -217,10 +217,15 @@ const AdminUsuarios = () => {
               .select("user_id, groups, created_at")
               .in("user_id", alunoIds)
               .eq("active", true),
+            supabase
+              .from("flame_status")
+              .select("user_id, state, streak")
+              .in("user_id", alunoIds),
           ]);
 
           const allWorkouts = workoutsRes.data || [];
           const plans = plansRes.data || [];
+          const flameStatuses = flameRes.data || [];
 
           const toLocal = (d: Date) =>
             `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -228,13 +233,18 @@ const AdminUsuarios = () => {
           const today = new Date();
           const todayStr = toLocal(today);
 
-          const fMap: Record<string, { state: string; adherence: number }> = {};
+          const fMap: Record<string, { state: string; streak: number; adherence: number }> = {};
           alunoIds.forEach((id) => {
             const userWorkouts = allWorkouts.filter((w) => w.user_id === id);
             const userPlan = plans.find((p) => p.user_id === id);
 
             if (!userPlan || !Array.isArray(userPlan.groups) || userWorkouts.length === 0) {
-              fMap[id] = { state: "normal", adherence: 0 };
+              const dbFlame = flameStatuses.find((f) => f.user_id === id);
+              fMap[id] = { 
+                state: dbFlame ? dbFlame.state : "normal", 
+                streak: dbFlame ? dbFlame.streak : 0, 
+                adherence: 0 
+              };
               return;
             }
 
@@ -252,7 +262,7 @@ const AdminUsuarios = () => {
             yesterday.setDate(yesterday.getDate() - 1);
             const trainedYesterday = workoutDates.has(toLocal(yesterday));
 
-            let streak = trainedToday ? 1 : 0;
+            let calculatedStreak = trainedToday ? 1 : 0;
             let missed = 0;
 
             for (let i = trainedToday ? 1 : 0; i < 90; i++) {
@@ -263,7 +273,7 @@ const AdminUsuarios = () => {
               if (i === 0) continue; // today handled above
 
               if (workoutDates.has(toLocal(d))) {
-                if (missed === 0) streak++;
+                if (missed === 0) calculatedStreak++;
               } else {
                 missed++;
                 if (missed >= 2) break;
@@ -283,14 +293,19 @@ const AdminUsuarios = () => {
             }
             const adherence = schedCount > 0 ? Math.round((doneCount / schedCount) * 100) : 0;
 
-            let state: string;
-            if (trainedToday) state = "ativa";
-            else if (trainedYesterday && missed === 0) state = "ativa"; // trained yesterday, no misses
-            else if (missed === 0) state = streak > 0 ? "ativa" : "normal";
-            else if (missed === 1) state = "tregua";
-            else { state = "extinta"; streak = 0; }
+            let calculatedState: string;
+            if (trainedToday) calculatedState = "ativa";
+            else if (trainedYesterday && missed === 0) calculatedState = "ativa"; // trained yesterday, no misses
+            else if (missed === 0) calculatedState = calculatedStreak > 0 ? "ativa" : "normal";
+            else if (missed === 1) calculatedState = "tregua";
+            else { calculatedState = "extinta"; calculatedStreak = 0; }
 
-            fMap[id] = { state, adherence };
+            // Use persisted database flame_status if it exists, otherwise fall back to calculation
+            const dbFlame = flameStatuses.find((f) => f.user_id === id);
+            const state = dbFlame ? dbFlame.state : calculatedState;
+            const streak = dbFlame ? dbFlame.streak : calculatedStreak;
+
+            fMap[id] = { state, streak, adherence };
           });
           setFlameMap(fMap);
         }
@@ -488,7 +503,9 @@ const AdminUsuarios = () => {
   const [editTab, setEditTab] = useState("dados");
   const [editUser, setEditUser] = useState<{
     id: string; nome: string; email: string; telefone: string; cpf: string; password: string; status: string;
-  }>({ id: "", nome: "", email: "", telefone: "", cpf: "", password: "", status: "" });
+    streak?: number;
+    flameState?: string;
+  }>({ id: "", nome: "", email: "", telefone: "", cpf: "", password: "", status: "", streak: 0, flameState: "normal" });
 
   // Sales tab state
   const [salesCloser, setSalesCloser] = useState("");
@@ -678,6 +695,7 @@ const AdminUsuarios = () => {
   };
 
   const openEditDialog = (user: any) => {
+    const userFlame = flameMap[user.id];
     setEditUser({
       id: user.id,
       nome: user.nome || "",
@@ -686,6 +704,8 @@ const AdminUsuarios = () => {
       cpf: user.cpf || "",
       password: "",
       status: user.status || "pendente_onboarding",
+      streak: userFlame?.streak ?? 0,
+      flameState: userFlame?.state ?? "normal",
     });
     setEditTab("dados");
     setSalesInviteId(null);
@@ -708,10 +728,28 @@ const AdminUsuarios = () => {
       if (editUser.cpf !== undefined) body.cpf = editUser.cpf;
       if (editUser.status) body.status = editUser.status;
       if (editUser.password) body.password = editUser.password;
+      if (editUser.streak !== undefined) body.streak = editUser.streak;
+      if (editUser.flameState !== undefined) body.flameState = editUser.flameState;
 
       const { data, error } = await supabase.functions.invoke("admin-edit-user", { body });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+
+      // Chamada direta via RPC para contornar limites de deploy da Edge Function remota
+      if (editUser.streak !== undefined || editUser.flameState !== undefined) {
+        const { error: rpcError } = await supabase.rpc("admin_update_flame_status", {
+          student_id: editUser.id,
+          new_streak: Number(editUser.streak ?? 0),
+          new_state: editUser.flameState ?? "normal"
+        });
+        if (rpcError) {
+          console.error("Erro RPC flame status:", rpcError);
+          if (rpcError.message?.includes("does not exist")) {
+            throw new Error("Erro: A função 'admin_update_flame_status' não existe no banco de dados. Por favor, execute a migração SQL 20260307_admin_update_flame_status.sql no SQL Editor do seu console Supabase.");
+          }
+          throw rpcError;
+        }
+      }
 
       toast.success("Dados atualizados com sucesso!");
       setEditOpen(false);
@@ -1058,7 +1096,9 @@ const AdminUsuarios = () => {
                             return (
                               <div className="flex items-center gap-2">
                                 <Flame size={14} className={flameColor} />
-                                <span className="text-xs text-foreground">{flameLabel}</span>
+                                <span className="text-xs text-foreground">
+                                  {flameLabel} {flame && flame.streak > 0 ? `(${flame.streak})` : ""}
+                                </span>
                               </div>
                             );
                           })()}
@@ -1541,6 +1581,30 @@ const AdminUsuarios = () => {
                         <SelectItem value="ativo">Ativo</SelectItem>
                         <SelectItem value="inativo">Inativo</SelectItem>
                         <SelectItem value="cancelado">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Chama de Honra (Dias)</Label>
+                    <Input 
+                      type="number" 
+                      min={0}
+                      value={editUser.streak ?? 0} 
+                      onChange={(e) => setEditUser(u => ({ ...u, streak: Number(e.target.value) }))} 
+                      className="bg-background border-border" 
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Estado da Chama</Label>
+                    <Select value={editUser.flameState ?? "normal"} onValueChange={(v) => setEditUser(u => ({ ...u, flameState: v }))}>
+                      <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="ativa">Ativa</SelectItem>
+                        <SelectItem value="tregua">Trégua</SelectItem>
+                        <SelectItem value="extinta">Extinta</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
