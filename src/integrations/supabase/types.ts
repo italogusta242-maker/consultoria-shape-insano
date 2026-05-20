@@ -1759,6 +1759,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_update_flame_status: {
+        Args: { new_state: string; new_streak: number; student_id: string }
+        Returns: undefined
+      }
       check_user_day_approval: {
         Args: { d_date: string; tz: string; u_id: string }
         Returns: boolean
