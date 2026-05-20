@@ -141,7 +141,7 @@ export const useRealPerformance = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("workouts")
-        .select("started_at, exercises, group_name")
+        .select("started_at, exercises, group_name, duration_seconds")
         .eq("user_id", user.id)
         .gte("started_at", getWeekStart())
         .order("started_at", { ascending: true });
