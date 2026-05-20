@@ -97,13 +97,18 @@ function getNDaysAgo(n: number): string {
   return d.toISOString();
 }
 
-// Helper: compute training score for a set of workouts
+// Helper: compute training score for a set of workouts.
+// Score híbrido: se houver séries (musculação) usa proporção done/total * 40.
+// Se NÃO houver séries (ex.: Muay Thai, cardio, funcional), usa duração:
+// 60min = 40pts, 30min = 20pts, mínimo 10pts por presença.
 function calcTrainingForDay(workouts: any[]): { score: number; setsCompleted: number; totalSets: number; groupName: string } {
   let totalSets = 0;
   let doneSets = 0;
+  let totalDurationSec = 0;
   let groupName = "";
   for (const w of workouts) {
     if (w.group_name) groupName = w.group_name;
+    if (typeof w.duration_seconds === "number") totalDurationSec += w.duration_seconds;
     const exercises = getSafeWorkoutExercises(w.exercises);
     for (const ex of exercises) {
       const sets = ex.setsData || [];
@@ -112,9 +117,14 @@ function calcTrainingForDay(workouts: any[]): { score: number; setsCompleted: nu
     }
   }
   let score = 0;
-  if (workouts.length > 0 && totalSets > 0) {
-    score = Math.round((doneSets / totalSets) * 40);
-    if (score < 10 && workouts.length > 0) score = 10;
+  if (workouts.length > 0) {
+    if (totalSets > 0) {
+      score = Math.round((doneSets / totalSets) * 40);
+    } else if (totalDurationSec > 0) {
+      // Treino sem séries (luta, cardio, funcional): pontua por duração.
+      score = Math.round(Math.min(totalDurationSec / 3600, 1) * 40);
+    }
+    if (score < 10) score = 10; // piso de presença
   }
   return { score, setsCompleted: doneSets, totalSets, groupName };
 }
@@ -131,7 +141,7 @@ export const useRealPerformance = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("workouts")
-        .select("started_at, exercises, group_name")
+        .select("started_at, exercises, group_name, duration_seconds")
         .eq("user_id", user.id)
         .gte("started_at", getWeekStart())
         .order("started_at", { ascending: true });
@@ -148,7 +158,7 @@ export const useRealPerformance = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("workouts")
-        .select("started_at, exercises, group_name")
+        .select("started_at, exercises, group_name, duration_seconds")
         .eq("user_id", user.id)
         .gte("started_at", getNDaysAgo(30))
         .order("started_at", { ascending: true });
