@@ -1,21 +1,81 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { MonthlyFormData } from "@/pages/monthly-assessment/constants";
 
+const MAX_IMAGE_DIM = 1200;
+const JPEG_QUALITY = 0.8;
+
+export const MONTHLY_SUBMITTING_FLAG = "monthly-assessment-submitting";
+
+function compressImage(file: File): Promise<File> {
+  const needsConversion = !file.type || !file.type.startsWith("image/jpeg");
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      const needsResize = width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM;
+
+      if (!needsResize && !needsConversion) {
+        URL.revokeObjectURL(img.src);
+        resolve(file);
+        return;
+      }
+
+      if (needsResize) {
+        const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(img.src);
+          if (blob) {
+            resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+          } else {
+            resolve(file);
+          }
+        },
+        "image/jpeg",
+        JPEG_QUALITY
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src);
+      resolve(file);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 async function uploadPhoto(
   userId: string,
   file: File,
   label: string,
   folderId: string
 ): Promise<{ url: string | null; reason?: string }> {
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-  const path = `${userId}/monthly/${folderId}/${label}.${ext}`;
-  const contentType = file.type || "image/jpeg";
+  // Compress before upload (fallback to original on failure)
+  let toUpload: File = file;
+  try {
+    toUpload = await compressImage(file);
+  } catch (err) {
+    console.warn(`[uploadPhoto] compress failed for ${label}, sending original`, err);
+  }
 
-  // Try upload with 1 retry — no compression, no validation, raw file.
+  const ext = (toUpload.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${userId}/monthly/${folderId}/${label}.${ext}`;
+  const contentType = toUpload.type || "image/jpeg";
+
+  // Try upload with 1 retry
   for (let attempt = 0; attempt < 2; attempt++) {
     const { error } = await supabase.storage
       .from("anamnese-photos")
-      .upload(path, file, { upsert: true, contentType });
+      .upload(path, toUpload, { upsert: true, contentType });
 
     if (!error) {
       const { data } = supabase.storage.from("anamnese-photos").getPublicUrl(path);
@@ -34,6 +94,20 @@ async function uploadPhoto(
 export async function submitMonthlyAssessment(
   formData: MonthlyFormData
 ): Promise<{ success: boolean; error?: string; warning?: string }> {
+  // Sinaliza que o envio está em curso para o PWA não recarregar a página
+  try {
+    sessionStorage.setItem(MONTHLY_SUBMITTING_FLAG, "1");
+  } catch {
+    /* ignore */
+  }
+
+  // Bloqueia fechamento acidental da aba/refresh durante o envio
+  const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+    e.preventDefault();
+    e.returnValue = "";
+  };
+  window.addEventListener("beforeunload", beforeUnloadHandler);
+
   try {
     await supabase.auth.refreshSession();
 
@@ -56,7 +130,8 @@ export async function submitMonthlyAssessment(
     const failedDetails: Array<{ label: string; reason: string }> = [];
     const photosToUpload = photoFields.filter(({ key }) => formData[key] instanceof File);
 
-    const uploads = photosToUpload.map(async ({ key, label, column }) => {
+    // Upload SEQUENCIAL (uma foto por vez) para não saturar 3G/4G fraco.
+    for (const { key, label, column } of photosToUpload) {
       const result = await uploadPhoto(user.id, formData[key] as File, label, folderId);
       if (result.url) {
         photoUpdates[column] = result.url;
@@ -64,9 +139,7 @@ export async function submitMonthlyAssessment(
       } else {
         failedDetails.push({ label, reason: result.reason || "erro desconhecido" });
       }
-    });
-
-    await Promise.all(uploads);
+    }
 
     if (photosToUpload.length > 0 && Object.keys(photoUpdates).length === 0) {
       console.error("[submitMonthlyAssessment] ALL photo uploads failed", failedDetails);
@@ -240,5 +313,12 @@ export async function submitMonthlyAssessment(
   } catch (error: any) {
     console.error("Erro ao salvar reavaliação:", error);
     return { success: false, error: error.message || "Erro desconhecido. Verifique sua conexão e tente novamente." };
+  } finally {
+    try {
+      sessionStorage.removeItem(MONTHLY_SUBMITTING_FLAG);
+    } catch {
+      /* ignore */
+    }
+    window.removeEventListener("beforeunload", beforeUnloadHandler);
   }
 }
