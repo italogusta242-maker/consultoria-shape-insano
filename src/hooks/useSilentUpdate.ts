@@ -101,7 +101,7 @@ export function useSilentUpdate() {
 
     const onControllerChange = () => {
       newSwInstalled.current = true;
-      if (!isWorkoutActive()) {
+      if (!isWorkoutActive() && !isCriticalFormSubmitting()) {
         window.location.reload();
       }
     };
