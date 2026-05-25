@@ -18,6 +18,16 @@ import { hasWorkoutExecutionSnapshot } from "@/lib/workoutSnapshot";
  * the rug under the user mid-execution would wipe the in-memory state.
  * The local snapshot would survive, but reloading is still disruptive.
  */
+const MONTHLY_SUBMITTING_FLAG = "monthly-assessment-submitting";
+
+function isCriticalFormSubmitting(): boolean {
+  try {
+    return sessionStorage.getItem(MONTHLY_SUBMITTING_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
   const versionCheckRan = useRef(false);
