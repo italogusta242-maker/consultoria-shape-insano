@@ -65,7 +65,7 @@ export function useSilentUpdate() {
       if (!deployed || deployed === embedded) return;
 
       // Stale build detected. Don't yank the rug if the user is mid-workout.
-      if (isWorkoutActive()) return;
+      if (isWorkoutActive() || isCriticalFormSubmitting()) return;
 
       await hardPurgeCaches();
       // Cache-bust the HTML one more time so the reload definitely pulls fresh
