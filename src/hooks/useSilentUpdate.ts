@@ -146,7 +146,7 @@ export function useSilentUpdate() {
     setup();
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive()) {
+      if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive() && !isCriticalFormSubmitting()) {
         window.location.reload();
       }
     };
