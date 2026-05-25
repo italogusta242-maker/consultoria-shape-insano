@@ -80,7 +80,7 @@ export function useSilentUpdate() {
     // Run version check immediately and again on tab focus
     runVersionCheck();
     const onFocus = () => {
-      if (isWorkoutActive()) return;
+      if (isWorkoutActive() || isCriticalFormSubmitting()) return;
       versionCheckRan.current = false;
       runVersionCheck();
     };
