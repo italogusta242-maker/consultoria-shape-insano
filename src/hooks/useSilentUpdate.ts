@@ -18,6 +18,16 @@ import { hasWorkoutExecutionSnapshot } from "@/lib/workoutSnapshot";
  * the rug under the user mid-execution would wipe the in-memory state.
  * The local snapshot would survive, but reloading is still disruptive.
  */
+const MONTHLY_SUBMITTING_FLAG = "monthly-assessment-submitting";
+
+function isCriticalFormSubmitting(): boolean {
+  try {
+    return sessionStorage.getItem(MONTHLY_SUBMITTING_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function useSilentUpdate() {
   const newSwInstalled = useRef(false);
   const versionCheckRan = useRef(false);
@@ -55,7 +65,7 @@ export function useSilentUpdate() {
       if (!deployed || deployed === embedded) return;
 
       // Stale build detected. Don't yank the rug if the user is mid-workout.
-      if (isWorkoutActive()) return;
+      if (isWorkoutActive() || isCriticalFormSubmitting()) return;
 
       await hardPurgeCaches();
       // Cache-bust the HTML one more time so the reload definitely pulls fresh
@@ -70,7 +80,7 @@ export function useSilentUpdate() {
     // Run version check immediately and again on tab focus
     runVersionCheck();
     const onFocus = () => {
-      if (isWorkoutActive()) return;
+      if (isWorkoutActive() || isCriticalFormSubmitting()) return;
       versionCheckRan.current = false;
       runVersionCheck();
     };
@@ -91,7 +101,7 @@ export function useSilentUpdate() {
 
     const onControllerChange = () => {
       newSwInstalled.current = true;
-      if (!isWorkoutActive()) {
+      if (!isWorkoutActive() && !isCriticalFormSubmitting()) {
         window.location.reload();
       }
     };
@@ -136,7 +146,7 @@ export function useSilentUpdate() {
     setup();
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive()) {
+      if (document.visibilityState === "hidden" && newSwInstalled.current && !isWorkoutActive() && !isCriticalFormSubmitting()) {
         window.location.reload();
       }
     };
