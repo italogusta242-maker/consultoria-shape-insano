@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getToday, getDailyValue, setDailyValue } from "@/lib/dateUtils";
 import { useDailyHabits } from "@/hooks/useDailyHabits";
 import { useFlameState } from "@/hooks/useFlameState";
+import { useTheme } from "@/hooks/useTheme";
 import FlameCard from "@/components/FlameCard";
 import FlameBanner from "@/components/FlameBanner";
 import AnamneseRequestAlert from "@/components/AnamneseRequestAlert";
