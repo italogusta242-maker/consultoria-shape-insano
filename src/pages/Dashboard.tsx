@@ -221,51 +221,113 @@ const Dashboard = () => {
 
   const currentQuote = useMemo(() => getDailyQuote(flameState), [flameState]);
 
-  // Visual styles based on flame state
+  // Visual styles based on flame state (theme-aware)
   const isExtinta = flameState === "extinta";
   const isTregua = flameState === "tregua";
+  // Token-based, so they pick up .light overrides automatically
   const cardBg = isExtinta ? "bg-[hsl(var(--dishonor-card))]" : isTregua ? "bg-[hsl(var(--truce-card))]" : "bg-card";
   const cardBorder = isExtinta ? "border-[hsl(var(--dishonor-border))]" : isTregua ? "border-[hsl(var(--truce-border))]" : "border-border";
   const textMuted = "text-muted-foreground";
 
-  // Button gradient based on flame state
+  // Button gradient based on flame state — saturated in light, deep in dark
   const buttonGradient = isExtinta
-    ? "linear-gradient(135deg, hsl(270, 30%, 35%), hsl(270, 35%, 45%))"
+    ? (isLight
+        ? "linear-gradient(135deg, hsl(270, 60%, 50%), hsl(280, 70%, 60%))"
+        : "linear-gradient(135deg, hsl(270, 30%, 35%), hsl(270, 35%, 45%))")
     : isTregua
-    ? "linear-gradient(135deg, hsl(210, 50%, 40%), hsl(210, 60%, 50%))"
+    ? (isLight
+        ? "linear-gradient(135deg, hsl(210, 75%, 48%), hsl(200, 85%, 55%))"
+        : "linear-gradient(135deg, hsl(210, 50%, 40%), hsl(210, 60%, 50%))")
     : "linear-gradient(135deg, hsl(var(--crimson)), hsl(var(--crimson-glow)))";
   const buttonShadow = isExtinta
-    ? "0 0 20px hsl(270, 30%, 35%, 0.3)"
+    ? (isLight ? "0 8px 24px -8px hsl(270, 60%, 50%, 0.45)" : "0 0 20px hsl(270, 30%, 35%, 0.3)")
     : isTregua
-    ? "0 0 20px hsl(210, 50%, 40%, 0.3)"
+    ? (isLight ? "0 8px 24px -8px hsl(210, 75%, 48%, 0.45)" : "0 0 20px hsl(210, 50%, 40%, 0.3)")
     : "0 0 20px hsl(var(--crimson) / 0.3)";
 
   // Chart/progress accent color based on flame state
-  const chartColor = isExtinta ? "hsl(270, 25%, 45%)" : isTregua ? "hsl(210, 50%, 50%)" : "hsl(25, 100%, 50%)";
-  
+  const chartColor = isExtinta
+    ? (isLight ? "hsl(270, 60%, 50%)" : "hsl(270, 25%, 45%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 75%, 48%)" : "hsl(210, 50%, 50%)")
+    : "hsl(25, 100%, 50%)";
+
   // Progress bar colors for daily goals
-  const mealBarColor = isExtinta ? "hsl(270, 25%, 40%)" : isTregua ? "hsl(210, 50%, 45%)" : "hsl(var(--primary))";
-  const sleepBarColor = isExtinta ? "hsl(270, 20%, 38%)" : isTregua ? "hsl(210, 40%, 42%)" : "hsl(270, 60%, 50%)";
-  const waterBarColor = isExtinta ? "hsl(270, 22%, 42%)" : isTregua ? "hsl(210, 45%, 48%)" : "hsl(220, 60%, 50%)";
-  
+  const mealBarColor = isExtinta
+    ? (isLight ? "hsl(270, 55%, 52%)" : "hsl(270, 25%, 40%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 70%, 50%)" : "hsl(210, 50%, 45%)")
+    : "hsl(var(--primary))";
+  const sleepBarColor = isExtinta
+    ? (isLight ? "hsl(270, 50%, 55%)" : "hsl(270, 20%, 38%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 65%, 52%)" : "hsl(210, 40%, 42%)")
+    : "hsl(270, 60%, 50%)";
+  const waterBarColor = isExtinta
+    ? (isLight ? "hsl(270, 55%, 55%)" : "hsl(270, 22%, 42%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 75%, 52%)" : "hsl(210, 45%, 48%)")
+    : "hsl(220, 60%, 50%)";
+
   // Quote accent color
-  const quoteAccent = isExtinta ? "hsl(270, 30%, 50%)" : isTregua ? "hsl(210, 50%, 55%)" : "hsl(var(--accent))";
-  const quoteBorder = isExtinta ? "hsl(270, 15%, 18%)" : isTregua ? "hsl(210, 18%, 20%)" : "hsl(var(--border) / 0.5)";
-  const quoteTextColor = isExtinta ? "hsl(270, 15%, 60%)" : isTregua ? "hsl(210, 20%, 65%)" : "hsl(var(--foreground) / 0.8)";
-  
+  const quoteAccent = isExtinta
+    ? (isLight ? "hsl(270, 60%, 45%)" : "hsl(270, 30%, 50%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 75%, 45%)" : "hsl(210, 50%, 55%)")
+    : "hsl(var(--accent))";
+  const quoteBorder = isExtinta
+    ? (isLight ? "hsl(270, 25%, 88%)" : "hsl(270, 15%, 18%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 30%, 88%)" : "hsl(210, 18%, 20%)")
+    : "hsl(var(--border) / 0.5)";
+  const quoteTextColor = isExtinta
+    ? (isLight ? "hsl(270, 20%, 30%)" : "hsl(270, 15%, 60%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 25%, 28%)" : "hsl(210, 20%, 65%)")
+    : "hsl(var(--foreground) / 0.8)";
+
   // Volume bar color override
-  const volumeBarColor = isExtinta ? "hsl(270, 20%, 35%)" : isTregua ? "hsl(210, 40%, 40%)" : "hsl(140, 60%, 40%)";
-  
-  // Background color based on flame state
-  const pageBg = isExtinta ? "hsl(260, 20%, 6%)" : isTregua ? "hsl(210, 25%, 7%)" : undefined;
-  
+  const volumeBarColor = isExtinta
+    ? (isLight ? "hsl(270, 55%, 50%)" : "hsl(270, 20%, 35%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 70%, 48%)" : "hsl(210, 40%, 40%)")
+    : "hsl(140, 60%, 40%)";
+
+  // Background color based on flame state — only tinted in DARK mode
+  const pageBg = isLight
+    ? undefined
+    : isExtinta
+    ? "hsl(260, 20%, 6%)"
+    : isTregua
+    ? "hsl(210, 25%, 7%)"
+    : undefined;
+
   // Stat badge colors
-  const statBorderColor = isExtinta ? "hsl(270, 12%, 18%)" : isTregua ? "hsl(210, 18%, 20%)" : undefined;
-  
+  const statBorderColor = isLight
+    ? undefined
+    : isExtinta
+    ? "hsl(270, 12%, 18%)"
+    : isTregua
+    ? "hsl(210, 18%, 20%)"
+    : undefined;
+
   // Icon accent color for misc icons (TrendingUp, Droplets, etc.)
-  const iconAccentColor = isExtinta ? "hsl(270, 30%, 45%)" : isTregua ? "hsl(210, 50%, 50%)" : undefined;
-  const iconAccentClass = isExtinta ? "text-[hsl(270,30%,45%)]" : isTregua ? "text-[hsl(210,50%,50%)]" : "text-accent";
-  const dropletsClass = isExtinta ? "text-[hsl(270,25%,45%)]" : isTregua ? "text-[hsl(210,50%,50%)]" : "text-[hsl(220,60%,50%)]";
+  const iconAccentColor = isExtinta
+    ? (isLight ? "hsl(270, 60%, 48%)" : "hsl(270, 30%, 45%)")
+    : isTregua
+    ? (isLight ? "hsl(210, 75%, 45%)" : "hsl(210, 50%, 50%)")
+    : undefined;
+  const iconAccentClass = isExtinta
+    ? (isLight ? "text-[hsl(270,60%,48%)]" : "text-[hsl(270,30%,45%)]")
+    : isTregua
+    ? (isLight ? "text-[hsl(210,75%,45%)]" : "text-[hsl(210,50%,50%)]")
+    : "text-accent";
+  const dropletsClass = isExtinta
+    ? (isLight ? "text-[hsl(270,60%,50%)]" : "text-[hsl(270,25%,45%)]")
+    : isTregua
+    ? (isLight ? "text-[hsl(210,75%,48%)]" : "text-[hsl(210,50%,50%)]")
+    : "text-[hsl(220,60%,50%)]";
+
 
   const PendingPlanAlert = () => (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
