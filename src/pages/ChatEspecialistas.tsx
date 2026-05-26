@@ -11,17 +11,23 @@ interface ConversationItem {
   otherName: string;
   otherRole: string;
   color: string;
-  bg: string;
+  iconBg: string;
+  iconShadow: string;
   border: string;
   icon: LucideIcon;
 }
 
-const roleConfig: Record<string, { color: string; bg: string; border: string; label: string; icon: LucideIcon }> = {
-  preparador_fisico: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  preparador: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  personal: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  nutricionista: { color: "text-green-400", bg: "bg-green-900/30", border: "border-green-800/50", label: "Nutricionista", icon: Leaf },
-  default: { color: "text-muted-foreground", bg: "bg-secondary", border: "border-border", label: "Especialista", icon: Dumbbell },
+const ORANGE_GRADIENT = "linear-gradient(135deg, hsl(22, 95%, 55%), hsl(35, 100%, 60%))";
+const ORANGE_SHADOW = "0 8px 24px -8px hsl(22, 95%, 55%, 0.55)";
+const GREEN_GRADIENT = "linear-gradient(135deg, hsl(150, 75%, 42%), hsl(165, 80%, 48%))";
+const GREEN_SHADOW = "0 8px 24px -8px hsl(150, 75%, 42%, 0.55)";
+
+const roleConfig: Record<string, { color: string; iconBg: string; iconShadow: string; border: string; label: string; icon: LucideIcon }> = {
+  preparador_fisico: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  preparador: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  personal: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  nutricionista: { color: "text-[hsl(150,75%,42%)]", iconBg: GREEN_GRADIENT, iconShadow: GREEN_SHADOW, border: "border-[hsl(150,75%,42%)]/60", label: "Nutricionista", icon: Leaf },
+  default: { color: "text-muted-foreground", iconBg: "hsl(var(--secondary))", iconShadow: "none", border: "border-border", label: "Especialista", icon: Dumbbell },
 };
 
 const ChatEspecialistas = () => {
@@ -77,7 +83,8 @@ const ChatEspecialistas = () => {
           otherName: profile?.nome || "Membro da Equipe",
           otherRole: rc.label,
           color: rc.color,
-          bg: rc.bg,
+          iconBg: rc.iconBg,
+          iconShadow: rc.iconShadow,
           border: rc.border,
           icon: rc.icon,
         });
@@ -200,10 +207,13 @@ const ChatEspecialistas = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate(`/chat/${conv.id}`)}
-              className={`cursor-pointer bg-card rounded-xl border ${conv.border} p-4 flex items-center gap-4 transition-all hover:gold-shadow`}
+              className={`cursor-pointer bg-card rounded-2xl border-2 ${conv.border} p-4 flex items-center gap-4 transition-all hover:shadow-elevated`}
             >
-              <div className={`w-14 h-14 rounded-lg ${conv.bg} flex items-center justify-center shrink-0`}>
-                <conv.icon className={conv.color} size={28} />
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+                style={{ background: conv.iconBg, boxShadow: conv.iconShadow }}
+              >
+                <conv.icon className="text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]" size={28} strokeWidth={2.4} />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className={`font-cinzel font-bold ${conv.color}`}>{conv.otherName}</h3>

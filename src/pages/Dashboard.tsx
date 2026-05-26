@@ -457,7 +457,7 @@ const Dashboard = () => {
             style={{
               background: buttonGradient,
               boxShadow: buttonShadow,
-              color: "hsl(var(--foreground))",
+              color: "#ffffff",
             }}
           >
             <Dumbbell size={24} />
@@ -750,7 +750,7 @@ const Dashboard = () => {
               style={{
                 background: buttonGradient,
                 boxShadow: buttonShadow,
-                color: "hsl(var(--foreground))",
+                color: "#ffffff",
               }}
             >
               <Dumbbell size={28} />
