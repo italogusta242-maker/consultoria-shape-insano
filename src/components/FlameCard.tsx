@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Flame, Shield, CircleAlert } from "lucide-react";
 import type { FlameState } from "@/hooks/useFlameState";
+import { useTheme } from "@/hooks/useTheme";
 
 interface FlameCardProps {
   state: FlameState;
@@ -9,86 +10,106 @@ interface FlameCardProps {
   className?: string;
 }
 
-const stateConfig = {
-  normal: {
-    title: "Chama de Honra",
-    subtitle: (a: number) => `Adesão: ${a}%`,
-    icon: Flame,
-    progressColor: "hsl(25, 100%, 50%)",
-    gradientStart: "hsl(40, 100%, 55%)",
-    iconColor: "hsl(25, 100%, 50%)",
-    numberColor: "hsl(0, 0%, 95%)",
-    labelColor: "hsl(0, 0%, 55%)",
-    subtitleColor: "hsl(0, 0%, 45%)",
-    label: "CHAMA DE HONRA",
-    cardBg: "hsl(var(--card))",
-    cardBorder: "hsl(var(--border))",
-  },
-  ativa: {
-    title: "Chama de Honra",
-    subtitle: (a: number) => `Adesão: ${a}%`,
-    icon: Flame,
-    progressColor: "hsl(25, 100%, 50%)",
-    gradientStart: "hsl(40, 100%, 55%)",
-    iconColor: "hsl(25, 100%, 50%)",
-    numberColor: "hsl(0, 0%, 95%)",
-    labelColor: "hsl(25, 100%, 50%)",
-    subtitleColor: "hsl(0, 0%, 55%)",
-    label: "CHAMA DE HONRA",
-    cardBg: "hsl(var(--card))",
-    cardBorder: "hsl(25, 100%, 50%, 0.3)",
-  },
-  tregua: {
-    title: "Trégua",
-    subtitle: () => "Treine hoje para manter a chama!",
-    icon: Shield,
-    progressColor: "hsl(210, 60%, 50%)",
-    gradientStart: "hsl(195, 80%, 55%)",
-    iconColor: "hsl(210, 60%, 50%)",
-    numberColor: "hsl(0, 0%, 95%)",
-    labelColor: "hsl(210, 60%, 50%)",
-    subtitleColor: "hsl(210, 30%, 50%)",
-    label: "TRÉGUA",
-    cardBg: "hsl(var(--truce-card))",
-    cardBorder: "hsl(var(--truce-border))",
-  },
-  extinta: {
-    title: "Chama Extinta",
-    subtitle: () => "Sem atividade registrada",
-    icon: CircleAlert,
-    progressColor: "hsl(270, 25%, 28%)",
-    gradientStart: "hsl(280, 30%, 38%)",
-    iconColor: "hsl(270, 30%, 40%)",
-    numberColor: "hsl(0, 0%, 60%)",
-    labelColor: "hsl(270, 35%, 50%)",
-    subtitleColor: "hsl(270, 15%, 40%)",
-    label: "CHAMA EXTINTA",
-    cardBg: "hsl(var(--dishonor-card))",
-    cardBorder: "hsl(var(--dishonor-border))",
-  },
+type StateColors = {
+  title: string;
+  subtitle: (a: number) => string;
+  icon: typeof Flame;
+  progressColor: string;
+  gradientStart: string;
+  iconColor: string;
+  numberColor: string;
+  labelColor: string;
+  subtitleColor: string;
+  label: string;
+  cardBg: string;
+  cardBorder: string;
 };
+
+function buildConfig(isLight: boolean): Record<FlameState, StateColors> {
+  return {
+    normal: {
+      title: "Chama de Honra",
+      subtitle: (a: number) => `Adesão: ${a}%`,
+      icon: Flame,
+      progressColor: "hsl(25, 100%, 50%)",
+      gradientStart: "hsl(40, 100%, 55%)",
+      iconColor: "hsl(25, 100%, 50%)",
+      numberColor: "hsl(var(--foreground))",
+      labelColor: isLight ? "hsl(215, 16%, 47%)" : "hsl(0, 0%, 55%)",
+      subtitleColor: isLight ? "hsl(215, 16%, 47%)" : "hsl(0, 0%, 45%)",
+      label: "CHAMA DE HONRA",
+      cardBg: "hsl(var(--card))",
+      cardBorder: "hsl(var(--border))",
+    },
+    ativa: {
+      title: "Chama de Honra",
+      subtitle: (a: number) => `Adesão: ${a}%`,
+      icon: Flame,
+      progressColor: "hsl(25, 100%, 50%)",
+      gradientStart: "hsl(40, 100%, 55%)",
+      iconColor: "hsl(25, 100%, 50%)",
+      numberColor: "hsl(var(--foreground))",
+      labelColor: "hsl(25, 100%, 50%)",
+      subtitleColor: isLight ? "hsl(215, 16%, 47%)" : "hsl(0, 0%, 55%)",
+      label: "CHAMA DE HONRA",
+      cardBg: "hsl(var(--card))",
+      cardBorder: "hsl(25, 100%, 50%, 0.3)",
+    },
+    tregua: {
+      title: "Trégua",
+      subtitle: () => "Treine hoje para manter a chama!",
+      icon: Shield,
+      progressColor: isLight ? "hsl(210, 75%, 48%)" : "hsl(210, 60%, 50%)",
+      gradientStart: isLight ? "hsl(200, 85%, 58%)" : "hsl(195, 80%, 55%)",
+      iconColor: isLight ? "hsl(210, 75%, 45%)" : "hsl(210, 60%, 50%)",
+      numberColor: "hsl(var(--foreground))",
+      labelColor: isLight ? "hsl(210, 75%, 42%)" : "hsl(210, 60%, 50%)",
+      subtitleColor: isLight ? "hsl(210, 25%, 35%)" : "hsl(210, 30%, 50%)",
+      label: "TRÉGUA",
+      cardBg: "hsl(var(--truce-card))",
+      cardBorder: "hsl(var(--truce-border))",
+    },
+    extinta: {
+      title: "Chama Extinta",
+      subtitle: () => "Sem atividade registrada",
+      icon: CircleAlert,
+      progressColor: isLight ? "hsl(270, 55%, 50%)" : "hsl(270, 25%, 28%)",
+      gradientStart: isLight ? "hsl(280, 70%, 60%)" : "hsl(280, 30%, 38%)",
+      iconColor: isLight ? "hsl(270, 60%, 48%)" : "hsl(270, 30%, 40%)",
+      numberColor: isLight ? "hsl(270, 20%, 25%)" : "hsl(0, 0%, 60%)",
+      labelColor: isLight ? "hsl(270, 55%, 45%)" : "hsl(270, 35%, 50%)",
+      subtitleColor: isLight ? "hsl(270, 20%, 35%)" : "hsl(270, 15%, 40%)",
+      label: "CHAMA EXTINTA",
+      cardBg: "hsl(var(--dishonor-card))",
+      cardBorder: "hsl(var(--dishonor-border))",
+    },
+  };
+}
 
 const RADIUS = 48;
 const STROKE = 8;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 const FlameCard = ({ state, streak, adherence, className = "" }: FlameCardProps) => {
-  const config = stateConfig[state];
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+  const config = buildConfig(isLight)[state];
   const Icon = config.icon;
   const progress = Math.min(adherence, 100);
   const strokeDashoffset = CIRCUMFERENCE - (progress / 100) * CIRCUMFERENCE;
+  const trackStroke = isLight ? "hsl(220, 13%, 91%)" : "hsl(0, 0%, 22%)";
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`rounded-xl border p-6 flex flex-col items-center ${className}`}
+      className={`rounded-2xl border p-6 flex flex-col items-center shadow-soft ${className}`}
       style={{
         background: config.cardBg,
         borderColor: config.cardBorder,
       }}
     >
-      <h3 className="font-cinzel text-sm font-bold mb-4" style={{ color: config.subtitleColor }}>{config.title}</h3>
+      <h3 className="font-cinzel text-sm font-bold mb-4 tracking-tight" style={{ color: config.subtitleColor }}>{config.title}</h3>
 
       {/* Circular progress ring */}
       <div className="relative w-40 h-40 mb-4">
@@ -103,7 +124,7 @@ const FlameCard = ({ state, streak, adherence, className = "" }: FlameCardProps)
           <circle
             cx="60" cy="60" r={RADIUS}
             fill="none"
-            stroke="hsl(0, 0%, 22%)"
+            stroke={trackStroke}
             strokeWidth={STROKE}
           />
           {/* Progress arc with gradient */}
@@ -153,7 +174,9 @@ const FlameCard = ({ state, streak, adherence, className = "" }: FlameCardProps)
               <motion.div
                 className="absolute inset-0 rounded-full"
                 style={{
-                  background: "radial-gradient(circle, hsl(270, 15%, 30%, 0.3) 0%, transparent 70%)",
+                  background: isLight
+                    ? "radial-gradient(circle, hsl(270, 50%, 70%, 0.35) 0%, transparent 70%)"
+                    : "radial-gradient(circle, hsl(270, 15%, 30%, 0.3) 0%, transparent 70%)",
                   width: 44, height: 44, top: -8, left: -8,
                   filter: "blur(3px)",
                 }}
@@ -181,14 +204,14 @@ const FlameCard = ({ state, streak, adherence, className = "" }: FlameCardProps)
                 size={28}
                 style={{
                   color: config.iconColor,
-                  filter: state === "tregua" ? "drop-shadow(0 0 4px hsl(210, 80%, 60%))" 
-                    : state === "ativa" ? "drop-shadow(0 0 6px hsl(25, 100%, 50%))" 
+                  filter: state === "tregua" ? "drop-shadow(0 0 4px hsl(210, 80%, 60%))"
+                    : state === "ativa" ? "drop-shadow(0 0 6px hsl(25, 100%, 50%))"
                     : undefined,
                 }}
               />
             </motion.div>
           </div>
-          <span className="font-cinzel text-3xl font-bold mt-1" style={{ color: config.numberColor }}>
+          <span className="font-cinzel text-3xl font-bold mt-1 tracking-tight" style={{ color: config.numberColor }}>
             {streak}
           </span>
           <span className="text-[10px] font-semibold tracking-widest" style={{ color: config.numberColor, opacity: 0.8 }}>
