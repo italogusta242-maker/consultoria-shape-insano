@@ -2,6 +2,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { isStaleChunkError, recoverFromStaleChunk } from "./components/ErrorBoundary";
+import { initThemeOnBoot } from "./hooks/useTheme";
+
+// Apply saved theme before first paint to avoid a flash of wrong palette.
+initThemeOnBoot();
 
 // Force service worker update on load
 if ("serviceWorker" in navigator) {
