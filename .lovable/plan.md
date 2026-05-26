@@ -1,113 +1,56 @@
-## Plano de Correções Cirúrgicas — `Treinos.tsx`
+## Problema
 
-Aplicar as Prioridades **A, B, C, E** sem refatorar o arquivo inteiro. Três edições isoladas, todas em `src/pages/Treinos.tsx`, mais uma assinatura nova de hook auxiliar inline.
+O sistema de "UI gamificada" (Trégua / Chama Extinta) foi desenhado exclusivamente para o modo escuro:
 
----
+- Os tokens `--dishonor-*` e `--truce-*` em `index.css` têm valores escuros e nunca são redefinidos no bloco `.light`.
+- `Dashboard.tsx` e `FlameCard.tsx` usam **dezenas de cores HSL hardcoded** (ex.: `hsl(270, 15%, 60%)`, `hsl(210, 25%, 7%)`) para fundos de página, bordas, textos de citação, gradientes de botão e barras de progresso.
 
-### Correção E — Restauração reativa pós-auth (iOS PWA / bf-cache)
+Resultado no print: no modo claro com Chama Extinta, o `pageBg` força fundo arroxeado escuro, o card "Bem-vindo ao Coliseu / ITALO..." fica com texto roxo invisível, os stat cards (Performance / Mental) ficam roxos com texto ilegível, e o card da chama central fica preto sobre quase preto.
 
-**Onde:** `src/pages/Treinos.tsx`, linhas ~420–465.
+## Plano de ação (cirúrgico)
 
-**O que muda:**
+### 1. `src/index.css` — adicionar overrides `.light` para os tokens dinâmicos
 
-1. Remover a leitura de `loadWorkoutExecutionSnapshot()` no topo do componente (executada no primeiro render, quando `user?.id` ainda é `undefined` no bf-cache do iOS).
-2. Inicializar todos os states com valores neutros:
-   - `view = "list"`, `selectedGroup = null`, `expandedExercise = null`
-   - `exercises = []`, `startedAt = ""`, `timerRunning = false`, `timer = 0`
-3. Adicionar um `useEffect` dependente de `user?.id` com guarda `hasRestoredRef`:
+Dentro do bloco `.light { ... }` redefinir:
 
-```ts
-const hasRestoredRef = useRef(false);
-useEffect(() => {
-  if (!user?.id || hasRestoredRef.current) return;
-  const persisted = loadWorkoutExecutionSnapshot();
-  if (!persisted) { hasRestoredRef.current = true; return; }
-  const belongs = persisted.userId == null || persisted.userId === user.id;
-  if (!belongs) { hasRestoredRef.current = true; return; }
-  const safe = sanitizeExercises(persisted.exercises);
-  setExercises(safe);
-  setSelectedGroup(persisted.selectedGroup);
-  setExpandedExercise(persisted.expandedExercise);
-  setStartedAt(persisted.startedAt);
-  setView(persisted.view);
-  if (persisted.startedAt && persisted.view === "execution") {
-    setTimerRunning(true);
-    setTimer(Math.floor((Date.now() - new Date(persisted.startedAt).getTime()) / 1000));
-  }
-  hasRestoredRef.current = true;
-}, [user?.id]);
-```
+- `--dishonor-bg`, `--dishonor-card`, `--dishonor-border`, `--dishonor-muted`, `--dishonor-accent`, `--dishonor-glow` → versões claras (fundo lavanda muito suave, bordas finas roxa-acinzentadas, texto roxo escuro legível sobre branco).
+- `--truce-bg`, `--truce-card`, `--truce-border`, `--truce-muted`, `--truce-accent`, `--truce-glow` → versões claras equivalentes em azul.
 
-Garantia: roda **uma única vez** após o `user` estar disponível, evita race condition do primeiro render. O `handleConclude` continua intocado (lê dos states atuais).
+Isso resolve automaticamente todo o uso de `hsl(var(--dishonor-card))`, `hsl(var(--truce-border))` etc. em `FlameCard.tsx`, `StoicQuote` do Dashboard, e nos overrides `bg-[hsl(var(--dishonor-card))]`.
 
----
+### 2. `src/pages/Dashboard.tsx` — desligar overrides hardcoded no modo claro
 
-### Correção C — Fim do "bug da meia-noite" no per-group draft
+Adicionar `const isLight = document.documentElement.classList.contains("light")` (ou via `useTheme()`) no topo do componente e ramificar todas as constantes que hoje usam HSL escuros:
 
-**Onde:** `src/pages/Treinos.tsx`, função `openGroup`, linhas ~774–805.
+- `pageBg` → `undefined` em light (deixa o `bg-background` neutro aparecer).
+- `quoteBorder`, `quoteTextColor` → versões claras (`hsl(270, 20%, 35%)` para texto, `hsl(220, 13%, 91%)` para borda).
+- Gradientes de botão (`buttonGradient`/`buttonShadow`) para Trégua/Extinta → versões saturadas mais vivas em fundo claro (mantém o roxo/azul de marca mas com luminância adequada para texto branco).
+- `mealBarColor`/`sleepBarColor`/`waterBarColor`/`volumeBarColor`/`chartColor` → versões com saturação maior em light (acentos vívidos, conforme já exigido pela diretriz "destacar vividamente em ambos os modos").
+- `iconAccentColor`/`iconAccentClass`/`dropletsClass`/`statIconColor` → usar HSL com luminância em torno de 45% no light em vez de 40-50% no dark.
+- Pequeno ajuste: o trilho da barra de Performance (`hsl(0, 0%, 20%)` linha 350) também precisa virar `hsl(var(--muted))` para não ficar quase preto sobre branco.
 
-**O que muda:**
+### 3. `src/components/FlameCard.tsx` — fazer o card respeitar o modo
 
-- Remover a condição `parsed.date === todayStr` do `if` de restauração.
-- Remover o cálculo `const todayStr = getToday();` (não usado mais).
-- Manter as validações de `matchesGroupName`, `matchesUser` e contagem de exercícios.
-- Limpeza continua exclusivamente nas ações explícitas (Finalizar / Cancelar / 3h auto-finalize).
+Trocar `progressColor`, `gradientStart`, `iconColor`, `numberColor`, `labelColor`, `subtitleColor` por valores `light`-aware nos states `tregua` e `extinta`. Em particular:
 
-Bloco final:
+- `numberColor` em Extinta hoje é `hsl(0, 0%, 60%)` → em fundo claro fica fantasma; usar token `hsl(var(--foreground))` ou um cinza escuro (`hsl(270, 20%, 30%)`).
+- Trilho do círculo SVG (`stroke="hsl(0, 0%, 22%)"`, linha 106) → `hsl(var(--muted))`.
+- `subtitleColor` Extinta `hsl(270, 15%, 40%)` continua ok em claro; verificar contraste e ajustar para `hsl(270, 25%, 35%)`.
 
-```ts
-if (matchesGroupName && matchesUser && safeExercises.length === group.exercises.length) {
-  setExercises(safeExercises);
-  setSelectedGroup(index);
-  setExpandedExercise(null);
-  setView("detail");
-  return;
-}
-```
+Implementação: mesmo padrão de detectar `isLight` e selecionar o conjunto de cores adequado dentro do `stateConfig`.
 
----
+### 4. Verificação visual
 
-### Correção A & B — `getNextGroupIndex` por rotação cíclica + cache fresh
+Após as mudanças, rodar o preview no modo claro nas três telas-chave:
 
-**Onde:** `src/pages/Treinos.tsx`, linhas ~487–501 (query) e ~756–762 (cálculo).
+- `/` Dashboard com Chama Extinta (caso do print) → confirmar fundo branco/slate, textos legíveis, acento roxo nítido.
+- `/` Dashboard com Trégua → mesmo check em azul.
+- Componente `FlameCard` nos 3 estados (normal/ativa/tregua/extinta).
 
-**Parte 1 — Query React Query** (linha 487): adicionar `refetchOnMount: "always"`:
+E re-verificar o modo escuro para garantir que nada regrediu (os tokens dark continuam intactos no `:root`).
 
-```ts
-const { data: workoutHistory = [] } = useQuery({
-  queryKey: ["workout-history", user?.id],
-  queryFn: async () => { /* mantém */ },
-  enabled: !!user,
-  refetchOnMount: "always",
-});
-```
+## Detalhes técnicos
 
-**Parte 2 — Heurística** (linhas 756–762): substituir o algoritmo `indexOf(Math.min(counts))` por rotação cíclica pura baseada **apenas no último treino finalizado**:
-
-```ts
-const getNextGroupIndex = useCallback(() => {
-  if (workoutGroups.length === 0) return 0;
-  const lastFinished = workoutHistory.find((w) => w.finished_at);
-  if (!lastFinished) return 0;
-  const lastIdx = workoutGroups.findIndex(
-    (g) => g.name.trim().toLowerCase() === (lastFinished.group_name ?? "").trim().toLowerCase()
-  );
-  if (lastIdx === -1) return 0; // grupo renomeado: começa do A
-  return (lastIdx + 1) % workoutGroups.length;
-}, [workoutGroups, workoutHistory]);
-```
-
-Comportamento: A → B → C → A. Se o último treino não casa com nenhum grupo (renomeado pelo preparador), volta para o índice 0 em vez de travar.
-
----
-
-### Validação final
-
-- `handleConclude` não é tocado — segue lendo dos states.
-- Snapshot continua sendo salvo a cada ação (lógica de persistência intacta).
-- `clearWorkoutInProgress` continua sendo chamada apenas em finalize/cancel.
-- Sem mudanças de tipos, sem mudanças de imports além de `useRef`/`useEffect` (já presentes).
-
-### Arquivos modificados
-
-- `src/pages/Treinos.tsx` (3 edições isoladas)
+- Sem mudanças em DB, edge functions, ou lógica de negócio. Estritamente UI/CSS.
+- Sem mudanças em outros componentes (`WorkoutShareCard` usa os tokens, então herdará automaticamente as cores claras do passo 1).
+- Não vou expandir o escopo para criar um `useThemeAwareColor` global agora — apenas a detecção pontual em Dashboard e FlameCard, mantendo o "surgical strike".

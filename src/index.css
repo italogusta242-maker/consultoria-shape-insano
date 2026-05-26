@@ -126,6 +126,25 @@
     --glass-bg: 0 0% 100% / 0.65;
     --glass-border: 0 0% 0% / 0.06;
     --glass-highlight: 0 0% 0% / 0.04;
+
+    /* Dishonor / Chama Extinta — LIGHT overrides (legíveis sobre slate-50) */
+    --dishonor-bg: 270 30% 97%;
+    --dishonor-card: 0 0% 100%;
+    --dishonor-border: 270 25% 88%;
+    --dishonor-muted: 270 15% 45%;
+    --dishonor-accent: 270 55% 50%;
+    --dishonor-glow: 270 70% 60%;
+    --dishonor-alert: 0 75% 55%;
+    --dishonor-frost: 220 40% 55%;
+
+    /* Truce / Trégua — LIGHT overrides */
+    --truce-bg: 210 40% 97%;
+    --truce-card: 0 0% 100%;
+    --truce-border: 210 30% 88%;
+    --truce-muted: 210 18% 45%;
+    --truce-accent: 210 75% 48%;
+    --truce-glow: 200 80% 55%;
+    --truce-frost: 200 60% 55%;
   }
 }
 
