@@ -347,6 +347,9 @@ const Dashboard = () => {
 
   // MonthlyAnamnesisBanner removed — unified into AnamneseRequestAlert
 
+  // NOTE: Render as plain markup (no AnimatePresence) to avoid flicker —
+  // defining a component inline causes React to remount on every parent
+  // re-render, which made the motion fade trigger constantly.
   const StoicQuote = ({ compact = false }: { compact?: boolean }) => (
     <div className="rounded-xl border p-4 text-center"
       style={{
@@ -354,20 +357,16 @@ const Dashboard = () => {
         borderColor: quoteBorder,
       }}
     >
-      <AnimatePresence mode="wait">
-        <motion.div key={flameState} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.6 }}>
-          <p className={`${compact ? "text-xs" : "text-sm"} italic mb-2`}
-            style={{ color: quoteTextColor }}
-          >
-            "{currentQuote.text}"
-          </p>
-          <p className={`${compact ? "text-[10px]" : "text-xs"} font-cinzel font-semibold`}
-            style={{ color: quoteAccent }}
-          >
-            — {currentQuote.author}
-          </p>
-        </motion.div>
-      </AnimatePresence>
+      <p className={`${compact ? "text-xs" : "text-sm"} italic mb-2`}
+        style={{ color: quoteTextColor }}
+      >
+        "{currentQuote.text}"
+      </p>
+      <p className={`${compact ? "text-[10px]" : "text-xs"} font-cinzel font-semibold`}
+        style={{ color: quoteAccent }}
+      >
+        — {currentQuote.author}
+      </p>
     </div>
   );
 
