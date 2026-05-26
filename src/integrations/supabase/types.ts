@@ -1503,6 +1503,7 @@ export type Database = {
           objetivo_mesociclo: string | null
           plan_id: string
           pontos_melhoria: string | null
+          progression_guide: string | null
           saved_at: string
           specialist_id: string | null
           title: string
@@ -1517,6 +1518,7 @@ export type Database = {
           objetivo_mesociclo?: string | null
           plan_id: string
           pontos_melhoria?: string | null
+          progression_guide?: string | null
           saved_at?: string
           specialist_id?: string | null
           title: string
@@ -1531,6 +1533,7 @@ export type Database = {
           objetivo_mesociclo?: string | null
           plan_id?: string
           pontos_melhoria?: string | null
+          progression_guide?: string | null
           saved_at?: string
           specialist_id?: string | null
           title?: string
@@ -1557,6 +1560,7 @@ export type Database = {
           id: string
           objetivo_mesociclo: string | null
           pontos_melhoria: string | null
+          progression_guide: string | null
           specialist_id: string | null
           title: string
           total_sessions: number
@@ -1572,6 +1576,7 @@ export type Database = {
           id?: string
           objetivo_mesociclo?: string | null
           pontos_melhoria?: string | null
+          progression_guide?: string | null
           specialist_id?: string | null
           title?: string
           total_sessions?: number
@@ -1587,6 +1592,7 @@ export type Database = {
           id?: string
           objetivo_mesociclo?: string | null
           pontos_melhoria?: string | null
+          progression_guide?: string | null
           specialist_id?: string | null
           title?: string
           total_sessions?: number
