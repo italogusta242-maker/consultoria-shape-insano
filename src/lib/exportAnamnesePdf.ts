@@ -520,10 +520,9 @@ export async function exportAnamnesePdf({
       ["Dias disponíveis", latestMonthly.dias_disponiveis?.length ? latestMonthly.dias_disponiveis.join(", ") : null],
       ["Horário do treino", [latestMonthly.horario_treino, latestMonthly.horario_treino_outro].filter(Boolean).join(" / ") || null],
       ["Refeições / horários", latestMonthly.refeicoes_horarios || null],
-      ["Adesão aos treinos", latestMonthly.adesao_treinos != null ? `${latestMonthly.adesao_treinos}%` : null],
-      ["Motivo (treinos)", latestMonthly.motivo_adesao_treinos || null],
-      ["Adesão ao cardio", latestMonthly.adesao_cardios != null ? `${latestMonthly.adesao_cardios}%` : null],
-      ["Motivo (cardio)", latestMonthly.motivo_adesao_cardios || null],
+      // Adesão aos treinos / cardio ocultados temporariamente: o valor atual vem
+      // do auto-relato do aluno na reavaliação e não reflete a métrica real
+      // (workouts concluídos / planejados). Reativar quando o cálculo backend existir.
       ["Adesão à dieta", latestMonthly.adesao_dieta || null],
       ["Motivo (não dieta)", latestMonthly.motivo_nao_dieta || null],
       ["Alongamentos corretos", latestMonthly.alongamentos_corretos === true ? "Sim" : latestMonthly.alongamentos_corretos === false ? "Não" : null],

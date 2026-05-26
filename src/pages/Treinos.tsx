@@ -72,6 +72,7 @@ interface TrainingPlan {
   avaliacao_postural?: string | null;
   pontos_melhoria?: string | null;
   objetivo_mesociclo?: string | null;
+  progression_guide?: string | null;
 }
 
 interface WorkoutLog {
@@ -86,17 +87,19 @@ interface WorkoutLog {
 }
 
 // ─── Training Analysis Cards ────────────────────────────────
-const TrainingAnalysisCards = ({ avaliacaoPostural, pontosMelhoria, objetivoMesociclo }: {
+const TrainingAnalysisCards = ({ avaliacaoPostural, pontosMelhoria, objetivoMesociclo, progressionGuide }: {
   avaliacaoPostural?: string | null;
   pontosMelhoria?: string | null;
   objetivoMesociclo?: string | null;
+  progressionGuide?: string | null;
 }) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   const cards = [
     { key: "objetivo", label: "Objetivo do Mesociclo", icon: Target, content: objetivoMesociclo },
     { key: "avaliacao", label: "Avaliação Postural", icon: ClipboardList, content: avaliacaoPostural },
-    { key: "pontos", label: "Informações Adicionais", icon: TrendingUp, content: pontosMelhoria },
+    { key: "pontos", label: "Informações Adicionais", icon: ClipboardList, content: pontosMelhoria },
+    { key: "progressao", label: "Progressão", icon: TrendingUp, content: progressionGuide },
   ].filter(c => c.content);
 
   if (cards.length === 0) return null;
@@ -1168,11 +1171,12 @@ const Treinos = () => {
           <p className="font-cinzel text-sm font-semibold text-foreground mb-4">{planTitle}</p>
 
           {/* Specialist analysis cards */}
-          {(plan.avaliacao_postural || plan.pontos_melhoria || plan.objetivo_mesociclo) && (
+          {(plan.avaliacao_postural || plan.pontos_melhoria || plan.objetivo_mesociclo || plan.progression_guide) && (
             <TrainingAnalysisCards
               avaliacaoPostural={plan.avaliacao_postural}
               pontosMelhoria={plan.pontos_melhoria}
               objetivoMesociclo={plan.objetivo_mesociclo}
+              progressionGuide={plan.progression_guide}
             />
           )}
 

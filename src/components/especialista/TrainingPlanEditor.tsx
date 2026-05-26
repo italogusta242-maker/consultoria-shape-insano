@@ -73,6 +73,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const avaliacaoPostural = draft?.avaliacaoPostural ?? "";
   const pontosMelhoria = draft?.pontosMelhoria ?? "";
   const objetivoMesociclo = draft?.objetivoMesociclo ?? "";
+  const progressionGuide = draft?.progressionGuide ?? "";
 
   // Helper setters that patch the store for the CURRENT student
   const setTitle = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { title: v }); };
@@ -81,6 +82,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const setAvaliacaoPostural = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { avaliacaoPostural: v }); };
   const setPontosMelhoria = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { pontosMelhoria: v }); };
   const setObjetivoMesociclo = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { objetivoMesociclo: v }); };
+  const setProgressionGuide = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { progressionGuide: v }); };
 
   // UI-only local state (doesn't need to survive unmount)
   const [exerciseSelectorOpen, setExerciseSelectorOpen] = useState(false);
@@ -134,6 +136,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         avaliacaoPostural: editingPlan.avaliacao_postural || "",
         pontosMelhoria: editingPlan.pontos_melhoria || "",
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
+        progressionGuide: (editingPlan as any).progression_guide || "",
       };
       setDraft(selectedStudent, seeded);
       captureSnapshot(seeded);
@@ -159,6 +162,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
+      progressionGuide: "",
     };
     setDraft(selectedStudent, seeded);
     captureSnapshot(seeded);
@@ -192,6 +196,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
+      progressionGuide: "",
     };
     setDraft(selectedStudent, blank);
     initialSnapshotRef.current = JSON.parse(JSON.stringify(blank));
@@ -232,6 +237,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         avaliacaoPostural: plan.avaliacao_postural || avaliacaoPostural,
         pontosMelhoria: plan.pontos_melhoria || pontosMelhoria,
         objetivoMesociclo: plan.objetivo_mesociclo || objetivoMesociclo,
+        progressionGuide: plan.progression_guide || progressionGuide,
       });
 
       // Store log_id for feedback
@@ -519,6 +525,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             avaliacao_postural: avaliacaoPostural || null,
             pontos_melhoria: pontosMelhoria || null,
             objetivo_mesociclo: objetivoMesociclo || null,
+            progression_guide: progressionGuide || null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", editingPlan.id);
@@ -540,6 +547,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           avaliacao_postural: avaliacaoPostural || null,
           pontos_melhoria: pontosMelhoria || null,
           objetivo_mesociclo: objetivoMesociclo || null,
+          progression_guide: progressionGuide || null,
           active: true,
         });
         if (error) throw error;
@@ -636,6 +644,15 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
                 onChange={(e) => setPontosMelhoria(e.target.value)}
                 placeholder="Ex: Ênfase em abdômen, dorsais, peitorais..."
                 className="min-h-[60px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Guia de Progressão</label>
+              <Textarea
+                value={progressionGuide}
+                onChange={(e) => setProgressionGuide(e.target.value)}
+                placeholder="Ex: Aumentar carga 2,5kg quando completar todas as séries no topo da faixa de reps; após 4 sessões trocar variação..."
+                className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
               />
             </div>
             <div>
@@ -1021,6 +1038,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             setAvaliacaoPostural(v.avaliacao_postural || "");
             setPontosMelhoria(v.pontos_melhoria || "");
             setObjetivoMesociclo(v.objetivo_mesociclo || "");
+            setProgressionGuide((v as any).progression_guide || "");
           }}
         />
         {/* Read-only preview of an OLD version (does NOT touch the draft) */}
@@ -1119,6 +1137,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
           setAvaliacaoPostural(v.avaliacao_postural || "");
           setPontosMelhoria(v.pontos_melhoria || "");
           setObjetivoMesociclo(v.objetivo_mesociclo || "");
+          setProgressionGuide((v as any).progression_guide || "");
         }}
       />
 
