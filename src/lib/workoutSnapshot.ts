@@ -124,10 +124,29 @@ export function saveWorkoutExecutionSnapshot(
 }
 
 /**
- * Loads the active workout snapshot. Has NO time-based expiration:
- * the snapshot is "immortal" and only cleared by explicit user actions
- * (Finalize / Cancel / 3h auto-finalize / openGroup). The catch still
- * removes the key on JSON corruption as a last-resort safety net.
+ * Hard expiration safety net. The previous "immortal" snapshot caused users
+ * to get stuck on /treinos with a perpetual auto-finalize loop after the app
+ * was left idle for hours/days. Anything older than this is treated as
+ * abandoned and silently discarded on load.
+ */
+const SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function isSnapshotExpired(snap: WorkoutExecutionSnapshot | null): boolean {
+  if (!snap) return false;
+  try {
+    if (snap.startedAt) {
+      const age = Date.now() - new Date(snap.startedAt).getTime();
+      if (Number.isFinite(age) && age > SNAPSHOT_MAX_AGE_MS) return true;
+    }
+    // Also expire if the snapshot was saved on a previous calendar day.
+    if (snap.date && snap.date !== getToday()) return true;
+  } catch {}
+  return false;
+}
+
+/**
+ * Loads the active workout snapshot. Snapshots older than 6h (or from a
+ * previous day) are auto-cleared to prevent stale "treino finalizado" loops.
  */
 export function loadWorkoutExecutionSnapshot(): WorkoutExecutionSnapshot | null {
   try {
@@ -135,6 +154,10 @@ export function loadWorkoutExecutionSnapshot(): WorkoutExecutionSnapshot | null 
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WorkoutExecutionSnapshot;
     if (!parsed) {
+      localStorage.removeItem(EXECUTION_KEY);
+      return null;
+    }
+    if (isSnapshotExpired(parsed)) {
       localStorage.removeItem(EXECUTION_KEY);
       return null;
     }
@@ -150,8 +173,21 @@ export function clearWorkoutExecutionSnapshot(): void {
 }
 
 export function hasWorkoutExecutionSnapshot(): boolean {
-  try { return !!localStorage.getItem(EXECUTION_KEY); } catch { return false; }
+  try {
+    const raw = localStorage.getItem(EXECUTION_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as WorkoutExecutionSnapshot;
+    if (isSnapshotExpired(parsed)) {
+      localStorage.removeItem(EXECUTION_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    try { localStorage.removeItem(EXECUTION_KEY); } catch {}
+    return false;
+  }
 }
+
 
 /** Per-group "draft" snapshot used for re-entering a workout the same day. */
 export function saveWorkoutInProgress(

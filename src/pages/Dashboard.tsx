@@ -115,14 +115,10 @@ const Dashboard = () => {
   const queryClient = useQueryClient();
   const today = getToday();
 
-  // Auto-redirect to active workout if snapshot exists
-  const didRedirectToWorkout = useRef(false);
-  useEffect(() => {
-    if (!didRedirectToWorkout.current && hasWorkoutExecutionSnapshot()) {
-      didRedirectToWorkout.current = true;
-      navigate("/treinos", { replace: true });
-    }
-  }, [navigate]);
+  // Soft resume: we used to auto-navigate to /treinos when a snapshot existed,
+  // but that made it impossible to switch tabs (every Dashboard mount re-redirected).
+  // Now we just expose a flag for an inline banner; the user decides when to resume.
+  const hasActiveWorkout = hasWorkoutExecutionSnapshot();
 
   // Real performance data
   const {
