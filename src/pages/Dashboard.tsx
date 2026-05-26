@@ -23,6 +23,7 @@ import { useTheme } from "@/hooks/useTheme";
 import FlameCard from "@/components/FlameCard";
 import FlameBanner from "@/components/FlameBanner";
 import AnamneseRequestAlert from "@/components/AnamneseRequestAlert";
+import PatchNoteLightMode, { PATCHNOTE_LIGHTMODE_KEY } from "@/components/PatchNoteLightMode";
 
 // ── Daily goals config ──
 const dailyGoalsBase = {
@@ -158,6 +159,15 @@ const Dashboard = () => {
 
   // Daily check-in
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showPatchNote, setShowPatchNote] = useState(false);
+  const maybeShowPatchNote = useCallback(() => {
+    try {
+      if (!localStorage.getItem(PATCHNOTE_LIGHTMODE_KEY)) {
+        // Delay slightly so the check-in modal can close gracefully
+        setTimeout(() => setShowPatchNote(true), 350);
+      }
+    } catch {}
+  }, []);
   const [volumeExpanded, setVolumeExpanded] = useState(false);
   const [volumeFilter, setVolumeFilter] = useState<"all" | "superior" | "inferior">("all");
   const moodToMentalState = (mood: number): MentalState => {
@@ -665,6 +675,7 @@ const Dashboard = () => {
             setMentalState(result.mentalState);
             localStorage.setItem("lastCheckIn", new Date().toDateString());
             setShowCheckIn(false);
+            maybeShowPatchNote();
             if (user) {
               try {
                 await supabase.from("psych_checkins").insert({
@@ -685,8 +696,9 @@ const Dashboard = () => {
               }
             }
           }}
-          onClose={() => setShowCheckIn(false)}
+          onClose={() => { setShowCheckIn(false); maybeShowPatchNote(); }}
         />
+        <PatchNoteLightMode open={showPatchNote} onClose={() => setShowPatchNote(false)} />
         <PerformanceDetailModal
           open={showPerformanceModal}
           onClose={() => setShowPerformanceModal(false)}
@@ -965,6 +977,7 @@ const Dashboard = () => {
           setMentalState(result.mentalState);
           localStorage.setItem("lastCheckIn", new Date().toDateString());
           setShowCheckIn(false);
+          maybeShowPatchNote();
           if (user) {
             try {
               await supabase.from("psych_checkins").insert({
@@ -985,8 +998,9 @@ const Dashboard = () => {
             }
           }
         }}
-        onClose={() => setShowCheckIn(false)}
+        onClose={() => { setShowCheckIn(false); maybeShowPatchNote(); }}
       />
+      <PatchNoteLightMode open={showPatchNote} onClose={() => setShowPatchNote(false)} />
       <PerformanceDetailModal
         open={showPerformanceModal}
         onClose={() => setShowPerformanceModal(false)}
