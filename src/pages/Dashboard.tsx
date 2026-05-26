@@ -675,6 +675,7 @@ const Dashboard = () => {
             setMentalState(result.mentalState);
             localStorage.setItem("lastCheckIn", new Date().toDateString());
             setShowCheckIn(false);
+            maybeShowPatchNote();
             if (user) {
               try {
                 await supabase.from("psych_checkins").insert({
@@ -695,8 +696,9 @@ const Dashboard = () => {
               }
             }
           }}
-          onClose={() => setShowCheckIn(false)}
+          onClose={() => { setShowCheckIn(false); maybeShowPatchNote(); }}
         />
+        <PatchNoteLightMode open={showPatchNote} onClose={() => setShowPatchNote(false)} />
         <PerformanceDetailModal
           open={showPerformanceModal}
           onClose={() => setShowPerformanceModal(false)}
@@ -975,6 +977,7 @@ const Dashboard = () => {
           setMentalState(result.mentalState);
           localStorage.setItem("lastCheckIn", new Date().toDateString());
           setShowCheckIn(false);
+          maybeShowPatchNote();
           if (user) {
             try {
               await supabase.from("psych_checkins").insert({
@@ -995,8 +998,9 @@ const Dashboard = () => {
             }
           }
         }}
-        onClose={() => setShowCheckIn(false)}
+        onClose={() => { setShowCheckIn(false); maybeShowPatchNote(); }}
       />
+      <PatchNoteLightMode open={showPatchNote} onClose={() => setShowPatchNote(false)} />
       <PerformanceDetailModal
         open={showPerformanceModal}
         onClose={() => setShowPerformanceModal(false)}
