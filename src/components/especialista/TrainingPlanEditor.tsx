@@ -160,6 +160,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
+      progressionGuide: "",
     };
     setDraft(selectedStudent, seeded);
     captureSnapshot(seeded);
