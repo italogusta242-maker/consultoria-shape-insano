@@ -371,7 +371,11 @@ const Dashboard = () => {
     </div>
   );
 
-  const statIconColor = isExtinta ? "text-[hsl(270,25%,40%)]" : isTregua ? "text-[hsl(210,40%,45%)]" : "";
+  const statIconColor = isExtinta
+    ? (isLight ? "text-[hsl(270,60%,48%)]" : "text-[hsl(270,25%,40%)]")
+    : isTregua
+    ? (isLight ? "text-[hsl(210,75%,45%)]" : "text-[hsl(210,40%,45%)]")
+    : "";
   const stats = [
     { icon: Heart, label: "Performance", value: String(performanceScore), sub: "/100", color: statIconColor || "text-primary" },
     { icon: Brain, label: "Mental", value: "---", sub: "", color: statIconColor || "text-accent", dynamic: true },
