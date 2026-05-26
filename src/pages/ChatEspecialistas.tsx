@@ -83,7 +83,8 @@ const ChatEspecialistas = () => {
           otherName: profile?.nome || "Membro da Equipe",
           otherRole: rc.label,
           color: rc.color,
-          bg: rc.bg,
+          iconBg: rc.iconBg,
+          iconShadow: rc.iconShadow,
           border: rc.border,
           icon: rc.icon,
         });
@@ -206,10 +207,13 @@ const ChatEspecialistas = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate(`/chat/${conv.id}`)}
-              className={`cursor-pointer bg-card rounded-xl border ${conv.border} p-4 flex items-center gap-4 transition-all hover:gold-shadow`}
+              className={`cursor-pointer bg-card rounded-2xl border-2 ${conv.border} p-4 flex items-center gap-4 transition-all hover:shadow-elevated`}
             >
-              <div className={`w-14 h-14 rounded-lg ${conv.bg} flex items-center justify-center shrink-0`}>
-                <conv.icon className={conv.color} size={28} />
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+                style={{ background: conv.iconBg, boxShadow: conv.iconShadow }}
+              >
+                <conv.icon className="text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]" size={28} strokeWidth={2.4} />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className={`font-cinzel font-bold ${conv.color}`}>{conv.otherName}</h3>
