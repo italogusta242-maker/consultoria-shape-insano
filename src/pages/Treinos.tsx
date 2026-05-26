@@ -1171,11 +1171,12 @@ const Treinos = () => {
           <p className="font-cinzel text-sm font-semibold text-foreground mb-4">{planTitle}</p>
 
           {/* Specialist analysis cards */}
-          {(plan.avaliacao_postural || plan.pontos_melhoria || plan.objetivo_mesociclo) && (
+          {(plan.avaliacao_postural || plan.pontos_melhoria || plan.objetivo_mesociclo || plan.progression_guide) && (
             <TrainingAnalysisCards
               avaliacaoPostural={plan.avaliacao_postural}
               pontosMelhoria={plan.pontos_melhoria}
               objetivoMesociclo={plan.objetivo_mesociclo}
+              progressionGuide={plan.progression_guide}
             />
           )}
 
