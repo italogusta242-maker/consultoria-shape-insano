@@ -16,12 +16,17 @@ interface ConversationItem {
   icon: LucideIcon;
 }
 
-const roleConfig: Record<string, { color: string; bg: string; border: string; label: string; icon: LucideIcon }> = {
-  preparador_fisico: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  preparador: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  personal: { color: "text-orange-400", bg: "bg-orange-900/30", border: "border-orange-800/50", label: "Preparador Físico", icon: Dumbbell },
-  nutricionista: { color: "text-green-400", bg: "bg-green-900/30", border: "border-green-800/50", label: "Nutricionista", icon: Leaf },
-  default: { color: "text-muted-foreground", bg: "bg-secondary", border: "border-border", label: "Especialista", icon: Dumbbell },
+const ORANGE_GRADIENT = "linear-gradient(135deg, hsl(22, 95%, 55%), hsl(35, 100%, 60%))";
+const ORANGE_SHADOW = "0 8px 24px -8px hsl(22, 95%, 55%, 0.55)";
+const GREEN_GRADIENT = "linear-gradient(135deg, hsl(150, 75%, 42%), hsl(165, 80%, 48%))";
+const GREEN_SHADOW = "0 8px 24px -8px hsl(150, 75%, 42%, 0.55)";
+
+const roleConfig: Record<string, { color: string; iconBg: string; iconShadow: string; border: string; label: string; icon: LucideIcon }> = {
+  preparador_fisico: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  preparador: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  personal: { color: "text-[hsl(22,95%,55%)]", iconBg: ORANGE_GRADIENT, iconShadow: ORANGE_SHADOW, border: "border-[hsl(22,95%,55%)]/60", label: "Preparador Físico", icon: Dumbbell },
+  nutricionista: { color: "text-[hsl(150,75%,42%)]", iconBg: GREEN_GRADIENT, iconShadow: GREEN_SHADOW, border: "border-[hsl(150,75%,42%)]/60", label: "Nutricionista", icon: Leaf },
+  default: { color: "text-muted-foreground", iconBg: "hsl(var(--secondary))", iconShadow: "none", border: "border-border", label: "Especialista", icon: Dumbbell },
 };
 
 const ChatEspecialistas = () => {
