@@ -235,6 +235,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         avaliacaoPostural: plan.avaliacao_postural || avaliacaoPostural,
         pontosMelhoria: plan.pontos_melhoria || pontosMelhoria,
         objetivoMesociclo: plan.objetivo_mesociclo || objetivoMesociclo,
+        progressionGuide: plan.progression_guide || progressionGuide,
       });
 
       // Store log_id for feedback
