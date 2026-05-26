@@ -4,6 +4,7 @@
 
 @layer base {
   :root {
+    /* DARK MODE (default — keeps the established premium INSANO look) */
     --background: 0 0% 2%;
     --foreground: 0 0% 95%;
 
@@ -32,7 +33,8 @@
     --input: 0 0% 14%;
     --ring: 25 100% 50%;
 
-    --radius: 0.5rem;
+    /* Apple-like continuous curve radius */
+    --radius: 1rem;
 
     --sidebar-background: 0 0% 4%;
     --sidebar-foreground: 0 0% 95%;
@@ -42,6 +44,9 @@
     --sidebar-accent-foreground: 0 0% 95%;
     --sidebar-border: 0 0% 14%;
     --sidebar-ring: 25 100% 50%;
+
+    /* Hairline stroke (per-mode) */
+    --hairline: 0 0% 100% / 0.08;
 
     /* Custom INSANO tokens — new palette */
     --gold: 42 96% 51%;
@@ -78,6 +83,50 @@
     --forja-teal: 170 80% 45%;
     --forja-teal-glow: 170 90% 55%;
   }
+
+  /* LIGHT MODE — Apple-like minimalist, soft slate background */
+  .light {
+    --background: 210 20% 98%;          /* slate-50 — not pure white */
+    --foreground: 222 47% 11%;          /* slate-900 — chumbo */
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 25 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 25 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 25 100% 50%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-accent: 210 20% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+
+    --hairline: 0 0% 0% / 0.05;
+
+    /* Glass tweaks for light */
+    --glass-bg: 0 0% 100% / 0.65;
+    --glass-border: 0 0% 0% / 0.06;
+    --glass-highlight: 0 0% 0% / 0.04;
+  }
 }
 
 @layer base {
@@ -85,32 +134,43 @@
     @apply border-border;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-family: 'Sora', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
     font-size: 16px;
     font-weight: 400;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    letter-spacing: -0.005em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, -apple-system, 'SF Pro Display', sans-serif;
+    letter-spacing: -0.022em;
   }
 
   h1 {
-    font-family: 'Sora', sans-serif;
-    font-size: 45px;
+    font-size: 38px;
     font-weight: 700;
-    line-height: 1.15;
+    line-height: 1.1;
   }
 
   h2 {
-    font-family: 'Sora', sans-serif;
-    font-size: 25px;
+    font-size: 24px;
     font-weight: 600;
-    line-height: 1.3;
+    line-height: 1.25;
   }
 
   h3 {
-    font-family: 'Sora', sans-serif;
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1.35;
   }
 
   p, span, div {

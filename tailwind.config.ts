@@ -69,8 +69,16 @@ export default {
       },
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 8px)",
+        "2xl": "1.25rem",
+        "3xl": "1.75rem",
+        squircle: "22px",
+      },
+      boxShadow: {
+        soft: "0 2px 12px -2px hsl(0 0% 0% / 0.04), 0 8px 24px -6px hsl(0 0% 0% / 0.06)",
+        elevated: "0 4px 24px -4px hsl(0 0% 0% / 0.08), 0 16px 48px -12px hsl(0 0% 0% / 0.10)",
+        glow: "0 0 32px -8px hsl(var(--primary) / 0.35)",
       },
       keyframes: {
         "accordion-down": {

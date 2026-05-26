@@ -20,12 +20,12 @@ const AppLayout = ({ dishonorMode, setDishonorMode }: AppLayoutProps) => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top bar with notification center — hidden inside chat conversations */}
       {!isChatConversation && (
-        <header className="sticky top-0 z-40 flex items-center justify-end px-4 py-2 bg-background/80">
+        <header className="sticky top-0 z-40 flex items-center justify-end px-4 py-2 supports-[backdrop-filter]:bg-background/70 bg-background/95 backdrop-blur-xl backdrop-saturate-150 border-b border-border/40">
           <NotificationCenter />
         </header>
       )}
       <PushPermissionBanner pushState={pushState} onRequestPermission={requestPermission} />
-      <main className="flex-1 pb-20">
+      <main className="flex-1 pb-24">
         <Outlet />
       </main>
       <BottomNav />
