@@ -1038,6 +1038,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             setAvaliacaoPostural(v.avaliacao_postural || "");
             setPontosMelhoria(v.pontos_melhoria || "");
             setObjetivoMesociclo(v.objetivo_mesociclo || "");
+            setProgressionGuide((v as any).progression_guide || "");
           }}
         />
         {/* Read-only preview of an OLD version (does NOT touch the draft) */}
