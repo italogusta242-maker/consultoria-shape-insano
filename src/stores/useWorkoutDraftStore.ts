@@ -13,6 +13,7 @@ export interface WorkoutDraft {
   avaliacaoPostural: string;
   pontosMelhoria: string;
   objetivoMesociclo: string;
+  progressionGuide: string;
 }
 
 interface WorkoutDraftStore {
