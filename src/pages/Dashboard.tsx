@@ -107,6 +107,8 @@ const hasDietPlan = true;
 const Dashboard = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const { data: profile } = useProfile();
   const { user } = useAuth();
   const queryClient = useQueryClient();
