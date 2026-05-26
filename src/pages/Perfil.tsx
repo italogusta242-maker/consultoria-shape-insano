@@ -278,12 +278,46 @@ const Perfil = () => {
         ))}
       </div>
 
+      {/* Theme toggle */}
+      <motion.button
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        onClick={toggleTheme}
+        className="w-full flex items-center gap-3 p-4 bg-card rounded-2xl border border-border hover:bg-secondary/50 transition-colors text-left shadow-soft"
+      >
+        <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center shrink-0">
+          {theme === "dark" ? (
+            <Moon size={18} className="text-muted-foreground" />
+          ) : (
+            <Sun size={18} className="text-primary" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground tracking-tight">Aparência</p>
+          <p className="text-[11px] text-muted-foreground">
+            {theme === "dark" ? "Modo escuro ativo" : "Modo claro ativo"} · toque para alternar
+          </p>
+        </div>
+        <div
+          className={`w-11 h-6 rounded-full p-0.5 transition-colors ${
+            theme === "dark" ? "bg-primary/30" : "bg-primary"
+          }`}
+        >
+          <div
+            className={`w-5 h-5 rounded-full bg-background shadow-md transition-transform ${
+              theme === "light" ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </div>
+      </motion.button>
+
       {/* Action Menu */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
-        className="bg-card rounded-xl border border-border overflow-hidden divide-y divide-border"
+        className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border/60 shadow-soft"
       >
         {menuItems.map((item) => (
           <button
