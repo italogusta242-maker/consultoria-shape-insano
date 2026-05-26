@@ -21,6 +21,7 @@ import { useChangePasswordTrigger } from "@/components/ChangePasswordSection";
 
 const Perfil = () => {
   const { signOut, user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { data: profile } = useProfile();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
