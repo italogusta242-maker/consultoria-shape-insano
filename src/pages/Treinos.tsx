@@ -569,7 +569,7 @@ const Treinos = () => {
       startedAtOverride?: string;
     }) => {
       if (!user) throw new Error("Not authenticated");
-      const resolvedStart = data.startedAtOverride || startedAt;
+      const resolvedStart = data.startedAtOverride || startedAt || new Date().toISOString();
       // Prevent duplicate inserts for the same session
       const { data: existing } = await supabase
         .from("workouts")
@@ -578,21 +578,34 @@ const Treinos = () => {
         .eq("started_at", resolvedStart)
         .limit(1);
       if (existing && existing.length > 0) {
-        console.warn("Workout already saved for this session, skipping duplicate insert");
+        console.warn("[saveWorkout] Workout already saved for this session, skipping duplicate insert");
         return;
       }
-      const { error } = await supabase.from("workouts").insert({
+      // Defensive plan_id: validate UUID before sending (snapshot may hold stale id)
+      const isValidUuid = (id: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      const planId = plan?.id && isValidUuid(plan.id) ? plan.id : null;
+      const payload = {
         user_id: user.id,
         exercises: data.exercises as any,
         duration_seconds: data.duration,
         effort_rating: data.effortRating,
         comment: data.comment || null,
         group_name: data.groupName,
-        plan_id: plan?.id || null,
+        plan_id: planId,
         started_at: resolvedStart,
         finished_at: new Date().toISOString(),
-      });
-      if (error) throw error;
+      };
+      let { error } = await supabase.from("workouts").insert(payload);
+      // FK violation (specialist deleted/replaced the plan mid-session) — retry without plan_id
+      if (error?.code === "23503" && planId) {
+        console.warn("[saveWorkout] FK violation on plan_id, retrying without it");
+        ({ error } = await supabase.from("workouts").insert({ ...payload, plan_id: null }));
+      }
+      if (error) {
+        console.error("[saveWorkout] Insert error:", error);
+        throw error;
+      }
     },
     onMutate: async () => {
       // REGRA 1: Cancel in-flight queries
@@ -615,8 +628,10 @@ const Treinos = () => {
       }
     },
     onSuccess: () => {
-      // REGRA 4: NO invalidateQueries for flame — only workout-history is safe
+      // REGRA 4: invalidate read-side caches that drive "Próximo Treino"
       queryClient.invalidateQueries({ queryKey: ["workout-history"] });
+      queryClient.invalidateQueries({ queryKey: ["streak"] });
+      queryClient.invalidateQueries({ queryKey: ["real-performance"] });
       // Background: persist flame to DB
       if (user) {
         checkAndUpdateFlame(user.id);
@@ -669,30 +684,39 @@ const Treinos = () => {
     }
   }, [view, exercises.length]);
 
-  // Auto-finalize after 3 hours
+  // Auto-finalize after 3 hours — TRANSACTIONAL.
+  // Snapshot is only cleared AFTER the DB insert resolves successfully.
+  // If it fails, state stays intact so the user can retry via "Concluir".
   useEffect(() => {
     if (!timerRunning || timer < MAX_WORKOUT_SECONDS) return;
     if (selectedGroup === null) return;
     const groupName = workoutGroups[selectedGroup]?.name ?? "Treino";
+    const groupIdx = selectedGroup;
 
-    // Auto-save
     setTimerRunning(false);
-    saveWorkout.mutate({
-      exercises,
-      duration: MAX_WORKOUT_SECONDS,
-      effortRating: null,
-      comment: "Finalizado automaticamente (3h)",
-      groupName,
-      startedAtOverride: startedAt,
-    });
-
-    // Clear persisted state
-    clearWorkoutExecutionSnapshot();
-    clearWorkoutInProgress(selectedGroup);
-
-    toast.success("⏱️ Treino finalizado automaticamente após 3h!");
-    setView("list");
-    setSelectedGroup(null);
+    (async () => {
+      try {
+        await saveWorkout.mutateAsync({
+          exercises,
+          duration: MAX_WORKOUT_SECONDS,
+          effortRating: null,
+          comment: "Finalizado automaticamente (3h)",
+          groupName,
+          startedAtOverride: startedAt,
+        });
+        // ONLY on success: clear persisted state and exit
+        clearWorkoutExecutionSnapshot();
+        clearWorkoutInProgress(groupIdx);
+        toast.success("⏱️ Treino finalizado automaticamente após 3h!");
+        setView("list");
+        setSelectedGroup(null);
+      } catch (err) {
+        console.error("[auto-finalize] save failed, keeping snapshot:", err);
+        toast.error("Não foi possível auto-finalizar. Toque em Concluir para tentar de novo.");
+        // Keep snapshot intact; re-arm timer so effect doesn't loop instantly
+        setTimerRunning(true);
+      }
+    })();
   }, [timer, timerRunning]);
 
   // NOTE: We intentionally do NOT auto-clear the snapshot when the selected
@@ -757,20 +781,18 @@ const Treinos = () => {
     };
   }, [view, hasValidSelectedGroup, selectedGroup, startedAt, exercises, expandedExercise, workoutGroups, user?.id]);
 
-  // Determine next group
+  // Determine next group — min-count heuristic (ported from Anaac).
+  // Picks the group with the FEWEST finished sessions in history.
+  // Resilient to a missed save: next save backfills the count and rotation advances.
+  // Tie-break: lowest index wins (group A first).
   const getNextGroupIndex = useCallback(() => {
     if (workoutGroups.length === 0) return 0;
-    // Pure cyclic rotation based on the LAST finished workout: A -> B -> C -> A.
-    // Avoids the brittle string-counting heuristic that would freeze on the
-    // first group if any plan rename desynced history rows.
-    const lastFinished = workoutHistory.find((w) => w.finished_at);
-    if (!lastFinished) return 0;
     const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
-    const lastIdx = workoutGroups.findIndex(
-      (g) => norm(g.name) === norm(lastFinished.group_name)
+    const counts = workoutGroups.map((g) =>
+      workoutHistory.filter((w) => w.finished_at && norm(w.group_name) === norm(g.name)).length
     );
-    if (lastIdx === -1) return 0; // group renamed by specialist — restart at A
-    return (lastIdx + 1) % workoutGroups.length;
+    const min = Math.min(...counts);
+    return counts.indexOf(min);
   }, [workoutGroups, workoutHistory]);
 
   const nextGroupIndex = getNextGroupIndex();
