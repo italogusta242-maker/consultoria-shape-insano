@@ -525,6 +525,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
             avaliacao_postural: avaliacaoPostural || null,
             pontos_melhoria: pontosMelhoria || null,
             objetivo_mesociclo: objetivoMesociclo || null,
+            progression_guide: progressionGuide || null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", editingPlan.id);
