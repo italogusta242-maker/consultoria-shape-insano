@@ -645,6 +645,15 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
               />
             </div>
             <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Guia de Progressão</label>
+              <Textarea
+                value={progressionGuide}
+                onChange={(e) => setProgressionGuide(e.target.value)}
+                placeholder="Ex: Aumentar carga 2,5kg quando completar todas as séries no topo da faixa de reps; após 4 sessões trocar variação..."
+                className="min-h-[80px] text-xs bg-[hsl(var(--glass-bg))] border-[hsl(var(--glass-border))] resize-none"
+              />
+            </div>
+            <div>
               <label className="text-[10px] text-muted-foreground mb-1 block">Objetivo do Mesociclo <span className="text-primary">*</span></label>
               <Textarea
                 value={objetivoMesociclo}
