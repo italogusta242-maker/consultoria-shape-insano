@@ -72,6 +72,7 @@ interface TrainingPlan {
   avaliacao_postural?: string | null;
   pontos_melhoria?: string | null;
   objetivo_mesociclo?: string | null;
+  progression_guide?: string | null;
 }
 
 interface WorkoutLog {
