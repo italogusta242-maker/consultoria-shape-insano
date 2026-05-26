@@ -11,7 +11,8 @@ interface ConversationItem {
   otherName: string;
   otherRole: string;
   color: string;
-  bg: string;
+  iconBg: string;
+  iconShadow: string;
   border: string;
   icon: LucideIcon;
 }
