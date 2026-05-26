@@ -87,17 +87,19 @@ interface WorkoutLog {
 }
 
 // ─── Training Analysis Cards ────────────────────────────────
-const TrainingAnalysisCards = ({ avaliacaoPostural, pontosMelhoria, objetivoMesociclo }: {
+const TrainingAnalysisCards = ({ avaliacaoPostural, pontosMelhoria, objetivoMesociclo, progressionGuide }: {
   avaliacaoPostural?: string | null;
   pontosMelhoria?: string | null;
   objetivoMesociclo?: string | null;
+  progressionGuide?: string | null;
 }) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
   const cards = [
     { key: "objetivo", label: "Objetivo do Mesociclo", icon: Target, content: objetivoMesociclo },
     { key: "avaliacao", label: "Avaliação Postural", icon: ClipboardList, content: avaliacaoPostural },
-    { key: "pontos", label: "Informações Adicionais", icon: TrendingUp, content: pontosMelhoria },
+    { key: "pontos", label: "Informações Adicionais", icon: ClipboardList, content: pontosMelhoria },
+    { key: "progressao", label: "Progressão", icon: TrendingUp, content: progressionGuide },
   ].filter(c => c.content);
 
   if (cards.length === 0) return null;
