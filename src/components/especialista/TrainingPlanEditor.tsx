@@ -134,6 +134,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         avaliacaoPostural: editingPlan.avaliacao_postural || "",
         pontosMelhoria: editingPlan.pontos_melhoria || "",
         objetivoMesociclo: editingPlan.objetivo_mesociclo || "",
+        progressionGuide: (editingPlan as any).progression_guide || "",
       };
       setDraft(selectedStudent, seeded);
       captureSnapshot(seeded);
