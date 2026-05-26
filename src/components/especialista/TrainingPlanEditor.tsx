@@ -194,6 +194,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
       avaliacaoPostural: "",
       pontosMelhoria: "",
       objetivoMesociclo: "",
+      progressionGuide: "",
     };
     setDraft(selectedStudent, blank);
     initialSnapshotRef.current = JSON.parse(JSON.stringify(blank));
