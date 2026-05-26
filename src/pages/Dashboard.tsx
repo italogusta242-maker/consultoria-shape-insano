@@ -416,7 +416,7 @@ const Dashboard = () => {
               </p>
               <p className="text-[10px] text-muted-foreground">{stat.sub || stat.label}</p>
               {stat.label === "Performance" && (
-                <div className="w-full h-2 mt-2 rounded-full overflow-hidden" style={{ backgroundColor: "hsl(0, 0%, 20%)" }}>
+                <div className="w-full h-2 mt-2 rounded-full overflow-hidden bg-muted">
                   <motion.div
                     className="h-full rounded-full"
                     initial={{ width: 0 }}
@@ -424,9 +424,13 @@ const Dashboard = () => {
                     transition={{ duration: 1, ease: "easeOut" }}
                     style={{
                       background: isExtinta
-                        ? "linear-gradient(90deg, hsl(270, 20%, 25%), hsl(270, 35%, 45%))"
+                        ? (isLight
+                            ? "linear-gradient(90deg, hsl(270, 60%, 50%), hsl(280, 70%, 60%))"
+                            : "linear-gradient(90deg, hsl(270, 20%, 25%), hsl(270, 35%, 45%))")
                         : isTregua
-                        ? "linear-gradient(90deg, hsl(200, 50%, 40%), hsl(210, 70%, 55%))"
+                        ? (isLight
+                            ? "linear-gradient(90deg, hsl(210, 75%, 48%), hsl(200, 85%, 58%))"
+                            : "linear-gradient(90deg, hsl(200, 50%, 40%), hsl(210, 70%, 55%))")
                         : "linear-gradient(90deg, hsl(25, 100%, 50%), hsl(30, 100%, 55%))",
                     }}
                   />
