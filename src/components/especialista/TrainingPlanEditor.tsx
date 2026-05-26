@@ -73,6 +73,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const avaliacaoPostural = draft?.avaliacaoPostural ?? "";
   const pontosMelhoria = draft?.pontosMelhoria ?? "";
   const objetivoMesociclo = draft?.objetivoMesociclo ?? "";
+  const progressionGuide = draft?.progressionGuide ?? "";
 
   // Helper setters that patch the store for the CURRENT student
   const setTitle = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { title: v }); };
@@ -81,6 +82,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
   const setAvaliacaoPostural = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { avaliacaoPostural: v }); };
   const setPontosMelhoria = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { pontosMelhoria: v }); };
   const setObjetivoMesociclo = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { objetivoMesociclo: v }); };
+  const setProgressionGuide = (v: string) => { if (selectedStudent) patchDraft(selectedStudent, { progressionGuide: v }); };
 
   // UI-only local state (doesn't need to survive unmount)
   const [exerciseSelectorOpen, setExerciseSelectorOpen] = useState(false);
