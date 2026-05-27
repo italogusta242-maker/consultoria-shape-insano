@@ -253,6 +253,7 @@ const EspecialistaAnamneseSplit = () => {
       avaliacao_postural: existingTrainingPlan.avaliacao_postural,
       pontos_melhoria: existingTrainingPlan.pontos_melhoria,
       objetivo_mesociclo: existingTrainingPlan.objetivo_mesociclo,
+      progression_guide: (existingTrainingPlan as any).progression_guide ?? null,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingTrainingPlan?.id, existingTrainingPlan?.updated_at, studentId]);
