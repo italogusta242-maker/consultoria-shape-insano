@@ -45,6 +45,7 @@ interface Props {
     avaliacao_postural?: string | null;
     pontos_melhoria?: string | null;
     objetivo_mesociclo?: string | null;
+    progression_guide?: string | null;
   } | null;
   embedded?: boolean;
   preSelectedStudent?: string;
