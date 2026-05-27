@@ -80,8 +80,6 @@ REGRAS:
 - Se não tiver fases, deixe "stages" como array vazio []
 - "matched" = true se o nome bate com o catálogo, false se não encontrou correspondência`;
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
-
     const geminiPayload = {
       contents: [
         {
@@ -108,16 +106,51 @@ REGRAS:
       },
     };
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiPayload),
-    });
+    // Modelos em ordem de preferência (fallback automático em caso de sobrecarga)
+    const models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+    let geminiRes: Response | null = null;
+    let lastErrorBody = "";
+    let lastStatus = 0;
 
-    if (!geminiRes.ok) {
-      const errBody = await geminiRes.text();
-      console.error("Gemini error:", errBody);
-      throw new Error(`Gemini API error: ${geminiRes.status}`);
+    outer: for (const model of models) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+
+      // Retry com backoff exponencial para erros transitórios (429/500/503)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(geminiPayload),
+        });
+
+        if (res.ok) {
+          geminiRes = res;
+          break outer;
+        }
+
+        lastStatus = res.status;
+        lastErrorBody = await res.text();
+        console.error(`Gemini ${model} attempt ${attempt + 1} failed (${res.status}):`, lastErrorBody);
+
+        // Erros não transitórios → tenta próximo modelo direto
+        if (![429, 500, 502, 503, 504].includes(res.status)) break;
+
+        // Aguarda antes de retentar (1s, 2s, 4s)
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+
+    if (!geminiRes) {
+      const friendly =
+        lastStatus === 503 || lastStatus === 429
+          ? "A IA está sobrecarregada no momento. Aguarde alguns segundos e tente novamente."
+          : `Erro ao processar o PDF (${lastStatus}). Tente novamente.`;
+      return new Response(JSON.stringify({ error: friendly, details: lastErrorBody }), {
+        status: 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const geminiData = await geminiRes.json();
