@@ -7,13 +7,16 @@ import { initThemeOnBoot } from "./hooks/useTheme";
 // Apply saved theme before first paint to avoid a flash of wrong palette.
 initThemeOnBoot();
 
-// Force service worker update on load
+// Force service worker update on load (guarded — reg.update() throws "newestWorker is null"
+// when a registration exists but has no installing/waiting/active worker yet).
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     for (const reg of registrations) {
-      reg.update();
+      if (reg.installing || reg.waiting || reg.active) {
+        reg.update().catch(() => { /* ignore transient SW update errors */ });
+      }
     }
-  });
+  }).catch(() => { /* ignore */ });
 }
 
 // Global guard: if a dynamic import fails outside React's render cycle
