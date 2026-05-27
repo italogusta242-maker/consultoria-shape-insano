@@ -176,7 +176,7 @@ const EspecialistaAnamneseSplit = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("training_plans")
-        .select("id, title, groups, total_sessions, updated_at, active, avaliacao_postural, objetivo_mesociclo, pontos_melhoria, valid_until, specialist_id")
+        .select("id, title, groups, total_sessions, updated_at, active, avaliacao_postural, objetivo_mesociclo, pontos_melhoria, progression_guide, valid_until, specialist_id")
         .eq("user_id", studentId!)
         .eq("active", true)
         .order("updated_at", { ascending: false })
@@ -253,6 +253,7 @@ const EspecialistaAnamneseSplit = () => {
       avaliacao_postural: existingTrainingPlan.avaliacao_postural,
       pontos_melhoria: existingTrainingPlan.pontos_melhoria,
       objetivo_mesociclo: existingTrainingPlan.objetivo_mesociclo,
+      progression_guide: (existingTrainingPlan as any).progression_guide ?? null,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingTrainingPlan?.id, existingTrainingPlan?.updated_at, studentId]);
