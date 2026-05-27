@@ -141,6 +141,10 @@ const EspecialistaTreino = () => {
             ? [...g.exercises].sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
             : [],
         })) : [],
+        avaliacao_postural: (p as any).avaliacao_postural ?? null,
+        pontos_melhoria: (p as any).pontos_melhoria ?? null,
+        objetivo_mesociclo: (p as any).objetivo_mesociclo ?? null,
+        progression_guide: (p as any).progression_guide ?? null,
       }));
     },
     enabled: !!user && studentIds.length > 0,
