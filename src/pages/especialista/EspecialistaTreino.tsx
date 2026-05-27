@@ -164,6 +164,10 @@ const EspecialistaTreino = () => {
           user_id: plan.user_id,
           groups: plan.groups,
           total_sessions: plan.totalSessions,
+          avaliacao_postural: plan.avaliacao_postural,
+          pontos_melhoria: plan.pontos_melhoria,
+          objetivo_mesociclo: plan.objetivo_mesociclo,
+          progression_guide: plan.progression_guide,
         });
         setEditorOpen(true);
       }
@@ -189,6 +193,10 @@ const EspecialistaTreino = () => {
       user_id: plan.user_id,
       groups: plan.groups,
       total_sessions: plan.totalSessions,
+      avaliacao_postural: plan.avaliacao_postural,
+      pontos_melhoria: plan.pontos_melhoria,
+      objetivo_mesociclo: plan.objetivo_mesociclo,
+      progression_guide: plan.progression_guide,
     });
     setEditorOpen(true);
   };
