@@ -29,6 +29,10 @@ interface TrainingPlanRow {
   totalSessions: number;
   groupsCount: number;
   groups: any[];
+  avaliacao_postural?: string | null;
+  pontos_melhoria?: string | null;
+  objetivo_mesociclo?: string | null;
+  progression_guide?: string | null;
 }
 
 const statusStyle: Record<string, { bg: string; text: string }> = {
@@ -137,6 +141,10 @@ const EspecialistaTreino = () => {
             ? [...g.exercises].sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
             : [],
         })) : [],
+        avaliacao_postural: (p as any).avaliacao_postural ?? null,
+        pontos_melhoria: (p as any).pontos_melhoria ?? null,
+        objetivo_mesociclo: (p as any).objetivo_mesociclo ?? null,
+        progression_guide: (p as any).progression_guide ?? null,
       }));
     },
     enabled: !!user && studentIds.length > 0,
@@ -156,6 +164,10 @@ const EspecialistaTreino = () => {
           user_id: plan.user_id,
           groups: plan.groups,
           total_sessions: plan.totalSessions,
+          avaliacao_postural: plan.avaliacao_postural,
+          pontos_melhoria: plan.pontos_melhoria,
+          objetivo_mesociclo: plan.objetivo_mesociclo,
+          progression_guide: plan.progression_guide,
         });
         setEditorOpen(true);
       }
@@ -181,6 +193,10 @@ const EspecialistaTreino = () => {
       user_id: plan.user_id,
       groups: plan.groups,
       total_sessions: plan.totalSessions,
+      avaliacao_postural: plan.avaliacao_postural,
+      pontos_melhoria: plan.pontos_melhoria,
+      objetivo_mesociclo: plan.objetivo_mesociclo,
+      progression_guide: plan.progression_guide,
     });
     setEditorOpen(true);
   };
