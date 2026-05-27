@@ -62,6 +62,7 @@ const EspecialistaAlimentos = lazy(() => import("./pages/especialista/Especialis
 const EspecialistaExercicios = lazy(() => import("./pages/especialista/EspecialistaExercicios"));
 const EspecialistaAnamneseSplit = lazy(() => import("./pages/especialista/EspecialistaAnamneseSplit"));
 const EspecialistaIA = lazy(() => import("./pages/especialista/EspecialistaIA"));
+const EspecialistaRelatorio = lazy(() => import("./pages/especialista/EspecialistaRelatorio"));
 const MonthlyAssessment = lazy(() => import("./pages/monthly-assessment/MonthlyAssessment"));
 const CloserDashboard = lazy(() => import("./pages/closer/CloserDashboard"));
 const CloserProdutos = lazy(() => import("./pages/closer/CloserProdutos"));
@@ -174,6 +175,7 @@ const AppRoutes = () => {
           <Route path="/especialista/perfil" element={<EspecialistaPerfil />} />
           <Route path="/especialista/ia" element={<EspecialistaIA />} />
         </Route>
+        <Route path="/especialista/relatorio/:studentId" element={<EspecialistaRelatorio />} />
       </Route>
       <Route element={<RoleGuard allowedRoles={["closer"]} />}>
         <Route element={<CloserLayout />}>

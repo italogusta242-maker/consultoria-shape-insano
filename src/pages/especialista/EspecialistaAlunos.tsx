@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus, UserX, UserCheck } from "lucide-react";
+import { Search, Flame, User, Dumbbell, Apple, Brain, ClipboardCheck, BarChart3, MoreVertical, AlertCircle, TrendingUp, UtensilsCrossed, Eye, FileText, Edit, Calendar, MessageSquare, ClipboardList, Filter, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Plus, UserX, UserCheck, LineChart } from "lucide-react";
 import StudentPerformancePanel from "@/components/especialista/StudentPerformancePanel";
 import StudentPhotosPanel from "@/components/especialista/StudentPhotosPanel";
 import StudentEvolutionChart from "@/components/especialista/StudentEvolutionChart";
@@ -767,6 +767,9 @@ const StudentCard = ({
                   <BarChart3 size={14} className="mr-2" /> Editar Volume
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => window.open(`/especialista/relatorio/${aluno.id}`, "_blank")}>
+                <LineChart size={14} className="mr-2" /> Gerar Relatório
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => onToggleStatus(aluno.id, aluno.name, aluno.status)}
