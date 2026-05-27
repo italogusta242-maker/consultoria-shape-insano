@@ -176,7 +176,7 @@ const EspecialistaAnamneseSplit = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("training_plans")
-        .select("id, title, groups, total_sessions, updated_at, active, avaliacao_postural, objetivo_mesociclo, pontos_melhoria, valid_until, specialist_id")
+        .select("id, title, groups, total_sessions, updated_at, active, avaliacao_postural, objetivo_mesociclo, pontos_melhoria, progression_guide, valid_until, specialist_id")
         .eq("user_id", studentId!)
         .eq("active", true)
         .order("updated_at", { ascending: false })
