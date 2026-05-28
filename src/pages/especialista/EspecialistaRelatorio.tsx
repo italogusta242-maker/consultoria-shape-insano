@@ -81,6 +81,54 @@ const EspecialistaRelatorio = () => {
 
   const [selectedWorkout, setSelectedWorkout] = useState<any | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<string>("");
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    setIsExporting(true);
+    const prevLight = isLightMode;
+    setIsLightMode(true);
+    toast.loading("Gerando PDF...", { id: "pdf-export" });
+    try {
+      // small delay to let theme apply
+      await new Promise((r) => setTimeout(r, 250));
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageW = 210;
+      const pageH = 297;
+      const imgH = (canvas.height * pageW) / canvas.width;
+      const imgData = canvas.toDataURL("image/png");
+      let heightLeft = imgH;
+      let position = 0;
+      pdf.addImage(imgData, "PNG", 0, position, pageW, imgH);
+      heightLeft -= pageH;
+      while (heightLeft > 0) {
+        position = heightLeft - imgH;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pageW, imgH);
+        heightLeft -= pageH;
+      }
+      const nome = (studentInfo?.name || "aluno").replace(/\s+/g, "-").toLowerCase();
+      const mes = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+      pdf.save(`relatorio-${nome}-${mes}.pdf`);
+      toast.success("PDF exportado!", { id: "pdf-export" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao gerar PDF", { id: "pdf-export" });
+    } finally {
+      setIsLightMode(prevLight);
+      setIsExporting(false);
+    }
+  };
 
   if (!selectedExercise && progressionData && progressionData.length > 0) {
     setSelectedExercise(progressionData[0].name);
