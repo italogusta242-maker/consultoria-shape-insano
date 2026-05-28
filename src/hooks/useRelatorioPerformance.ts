@@ -96,14 +96,11 @@ export const useRelatorioPerformance = (studentId: string, startDate: Date, endD
         .select("created_at, peso")
         .eq("user_id", studentId);
       
-      const { data: anamnese } = await supabase
-        .from("anamnese")
-        .select("created_at, peso")
-        .eq("user_id", studentId);
-        
-      const combined = [...(anamnese || []), ...(assessments || [])]
-        .filter(x => !!x.peso)
-        .map(x => ({
+      // anamnese table no longer carries `peso` directly (it lives in profiles /
+      // dados_extras), so weight history is derived from monthly_assessments only.
+      const combined = (assessments || [])
+        .filter((x: any) => !!x.peso)
+        .map((x: any) => ({
           date: new Date(x.created_at).toISOString().split('T')[0],
           peso: Number(x.peso)
         }))
