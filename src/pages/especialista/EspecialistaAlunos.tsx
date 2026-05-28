@@ -237,6 +237,7 @@ const StudentDietTab = ({ studentId }: { studentId: string }) => {
         .from("diet_plans")
         .select("id, title, active, updated_at, meals")
         .eq("user_id", studentId)
+        .eq("active", true)
         .order("updated_at", { ascending: false })
         .limit(1);
       if (error) throw error;
