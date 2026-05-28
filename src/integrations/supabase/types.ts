@@ -1808,6 +1808,31 @@ export type Database = {
           similarity: number
         }[]
       }
+      replace_active_diet_plan: {
+        Args: {
+          p_goal: string
+          p_goal_description: string
+          p_meals: Json
+          p_specialist_id: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      replace_active_training_plan: {
+        Args: {
+          p_avaliacao_postural: string
+          p_groups: Json
+          p_objetivo_mesociclo: string
+          p_pontos_melhoria: string
+          p_progression_guide: string
+          p_specialist_id: string
+          p_title: string
+          p_total_sessions: number
+          p_user_id: string
+        }
+        Returns: string
+      }
       search_foods_unaccent: {
         Args: { max_results?: number; search_term: string }
         Returns: {
