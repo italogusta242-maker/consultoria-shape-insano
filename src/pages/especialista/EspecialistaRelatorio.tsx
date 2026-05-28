@@ -182,7 +182,7 @@ const EspecialistaRelatorio = () => {
               <p className={`text-[11px] ${mutec}`}>Total de séries finalizadas no mês.</p>
             </div>
             
-            <div className="flex-1 h-[200px]">
+            <div className="w-full min-h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 20, right: 60, top: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
@@ -242,7 +242,7 @@ const EspecialistaRelatorio = () => {
               </Select>
             </div>
 
-            <div className="flex-1 h-[200px]">
+            <div className="w-full min-h-[200px]">
               {currentProgression ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={currentProgression.history} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
@@ -302,7 +302,7 @@ const EspecialistaRelatorio = () => {
               <p className={`text-[11px] mb-2 ${mutec}`}>Acompanhamento diário de Sono, Humor e Estresse.</p>
             </div>
             
-            <div className="flex-1 h-[180px]">
+            <div className="w-full min-h-[180px]">
               {mentalChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={mentalChartData} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
@@ -361,7 +361,7 @@ const EspecialistaRelatorio = () => {
               <p className={`text-[11px] mb-2 ${mutec}`}>Histórico de pesagem nas avaliações do aluno.</p>
             </div>
             
-            <div className="flex-1 h-[180px]">
+            <div className="w-full min-h-[180px]">
               {weightHistory && weightHistory.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={weightHistory} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
