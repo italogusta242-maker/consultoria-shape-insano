@@ -89,13 +89,18 @@ export function useFlameState(): FlameResult & { isLoading: boolean } {
  * Check if a day is "approved" for the flame system.
  */
 async function isDayApproved(userId: string, dateStr: string): Promise<boolean> {
+  // Local-day boundaries converted to true UTC ISO. Naive "T00:00:00" strings
+  // were being interpreted as UTC by Postgres, so evening BRT workouts fell
+  // out of the day window and the flame stayed off.
+  const dayStart = new Date(`${dateStr}T00:00:00`).toISOString();
+  const dayEnd = new Date(`${dateStr}T23:59:59.999`).toISOString();
   const { data: workouts } = await supabase
     .from("workouts")
     .select("id")
     .eq("user_id", userId)
     .not("finished_at", "is", null)
-    .gte("finished_at", `${dateStr}T00:00:00`)
-    .lt("finished_at", `${dateStr}T23:59:59.999`)
+    .gte("finished_at", dayStart)
+    .lte("finished_at", dayEnd)
     .limit(1);
 
   if (workouts && workouts.length > 0) return true;
