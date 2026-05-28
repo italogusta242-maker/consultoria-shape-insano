@@ -250,9 +250,9 @@ const EspecialistaRelatorio = () => {
             
             <div className="w-full min-h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 20, right: 60, top: 0, bottom: 0 }}>
+                <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 0, right: 60, top: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="grupo" tick={{ fill: isLightMode ? '#475569' : '#94a3b8', fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="grupo" width={90} interval={0} tick={{ fill: isLightMode ? '#475569' : '#94a3b8', fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
                   <Tooltip 
                     cursor={{ fill: isLightMode ? '#e2e8f0' : 'hsl(var(--secondary)/0.5)' }}
                     contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
