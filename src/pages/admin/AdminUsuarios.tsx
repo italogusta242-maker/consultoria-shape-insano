@@ -1724,7 +1724,11 @@ const AdminUsuarios = () => {
           if (!flameEdit) return;
           setFlameMap((prev) => ({
             ...prev,
-            [flameEdit.id]: { state, adherence: prev[flameEdit.id]?.adherence ?? 0 },
+            [flameEdit.id]: {
+              state,
+              streak: prev[flameEdit.id]?.streak ?? 0,
+              adherence: prev[flameEdit.id]?.adherence ?? 0,
+            },
           }));
         }}
       />
