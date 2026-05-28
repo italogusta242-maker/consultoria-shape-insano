@@ -25,16 +25,49 @@ import {
   maquinasDisponiveis, diasSemana, frequenciaOpcoes, tempoTreinoOpcoes,
 } from "./constants";
 
+const DRAFT_KEY = "monthly-assessment-draft-v1";
+
 const MonthlyAssessment = () => {
   const navigate = useNavigate();
   const { data: profile } = useProfile();
-  const [step, setStep] = useState<MonthlyStep>("dados");
+
+  // Synchronously restore draft from localStorage on first render so users
+  // never see the form reset to step 0 after a PWA reload, camera/gallery
+  // re-entry, or background tab kill.
+  const initialDraft = (() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as { step: MonthlyStep; form: MonthlyFormData };
+    } catch { return null; }
+  })();
+
+  const [step, setStep] = useState<MonthlyStep>(initialDraft?.step ?? "dados");
   const [form, setForm] = useState<MonthlyFormData>({
     ...initialMonthlyFormData,
+    ...(initialDraft?.form ?? {}),
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [prefilled, setPrefilled] = useState(false);
+  const [prefilled, setPrefilled] = useState(!!initialDraft);
+  const [draftRestored] = useState(!!initialDraft);
+
+  // Notify the user the form was restored from a saved draft
+  useEffect(() => {
+    if (draftRestored) {
+      toast.success("Continuamos sua reavaliação de onde você parou.", { duration: 4000 });
+    }
+  }, [draftRestored]);
+
+  // Autosave draft on every change. Photos are stored as data URLs (already
+  // strings in the form) so the full state round-trips through localStorage.
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, form }));
+    } catch (err) {
+      console.warn("[MonthlyAssessment] Failed to autosave draft", err);
+    }
+  }, [step, form]);
 
   // Pre-fill from profile first
   useEffect(() => {
@@ -242,6 +275,15 @@ const MonthlyAssessment = () => {
     const result = await submitMonthlyAssessment(form);
     setIsSubmitting(false);
     if (result.success) {
+      try { localStorage.removeItem(DRAFT_KEY); } catch {}
+      toast.success("Reavaliação mensal enviada com sucesso!");
+      navigate("/");
+    } else {
+      const msg = result.error || "Erro ao enviar reavaliação. Verifique sua conexão e tente novamente.";
+      setSubmitError(msg);
+      toast.error(msg, { duration: 8000 });
+    }
+  };
       toast.success("Reavaliação mensal enviada com sucesso!");
       navigate("/");
     } else {
