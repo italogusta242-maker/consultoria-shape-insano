@@ -142,14 +142,19 @@ async function calculateAdherence(userId: string): Promise<number> {
   const todayStr = toLocalDate(new Date());
   let score = 0;
 
+  // Local-day window converted to UTC ISO so timestamptz filters match the
+  // user's actual day (BRT-aware), not a misaligned UTC slice.
+  const dayStart = new Date(`${todayStr}T00:00:00`).toISOString();
+  const dayEnd = new Date(`${todayStr}T23:59:59.999`).toISOString();
+
   const [workoutsRes, habitsRes, checkinRes] = await Promise.all([
     supabase
       .from("workouts")
       .select("id")
       .eq("user_id", userId)
       .not("finished_at", "is", null)
-      .gte("finished_at", `${todayStr}T00:00:00`)
-      .lt("finished_at", `${todayStr}T23:59:59.999`)
+      .gte("finished_at", dayStart)
+      .lte("finished_at", dayEnd)
       .limit(1),
     supabase
       .from("daily_habits")
@@ -161,8 +166,8 @@ async function calculateAdherence(userId: string): Promise<number> {
       .from("psych_checkins")
       .select("sleep_hours")
       .eq("user_id", userId)
-      .gte("created_at", `${todayStr}T00:00:00`)
-      .lt("created_at", `${todayStr}T23:59:59.999`)
+      .gte("created_at", dayStart)
+      .lte("created_at", dayEnd)
       .limit(1)
       .maybeSingle(),
   ]);
