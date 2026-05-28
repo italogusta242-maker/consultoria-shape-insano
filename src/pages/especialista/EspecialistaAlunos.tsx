@@ -110,8 +110,9 @@ const StudentTrainingTab = ({ studentId, studentName, canEdit, onEditPlan }: { s
     queryFn: async () => {
       const { data, error } = await supabase
         .from("training_plans")
-        .select("id, title, active, updated_at, valid_until, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo")
+        .select("id, title, active, updated_at, valid_until, groups, total_sessions, avaliacao_postural, pontos_melhoria, objetivo_mesociclo, progression_guide")
         .eq("user_id", studentId)
+        .eq("active", true)
         .order("updated_at", { ascending: false })
         .limit(1);
       if (error) throw error;

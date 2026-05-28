@@ -561,14 +561,7 @@ export default function TrainingPlanEditor({ open, onClose, students, editingPla
         
         if (error) throw error;
 
-        // Notificar o aluno (apenas no primeiro envio do novo plano)
-        await supabase.from("notifications").insert({
-          user_id: studentId,
-          title: "Novo Treino Disponível",
-          message: "Seu especialista enviou um novo plano de treino para você!",
-          type: "system",
-        });
-
+        // Notificação é criada automaticamente pelo trigger notify_plan_created
         return data;
       }
     },
