@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRelatorioPerformance } from "@/hooks/useRelatorioPerformance";
 import { useSpecialistStudents } from "@/hooks/useSpecialistStudents";
@@ -10,6 +10,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, LabelList, AreaChart, Area, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
+
+const formatDateBR = (val: string) => {
+  if (!val || typeof val !== "string" || !val.includes("-")) return val;
+  const [y, m, d] = val.split("-");
+  if (!y || !m || !d) return val;
+  return `${d}/${m}/${y}`;
+};
 
 const insightIcons = {
   positive: <CheckCircle className="text-emerald-400" size={16} />,
@@ -73,6 +81,54 @@ const EspecialistaRelatorio = () => {
 
   const [selectedWorkout, setSelectedWorkout] = useState<any | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<string>("");
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    setIsExporting(true);
+    const prevLight = isLightMode;
+    setIsLightMode(true);
+    toast.loading("Gerando PDF...", { id: "pdf-export" });
+    try {
+      // small delay to let theme apply
+      await new Promise((r) => setTimeout(r, 250));
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageW = 210;
+      const pageH = 297;
+      const imgH = (canvas.height * pageW) / canvas.width;
+      const imgData = canvas.toDataURL("image/png");
+      let heightLeft = imgH;
+      let position = 0;
+      pdf.addImage(imgData, "PNG", 0, position, pageW, imgH);
+      heightLeft -= pageH;
+      while (heightLeft > 0) {
+        position = heightLeft - imgH;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pageW, imgH);
+        heightLeft -= pageH;
+      }
+      const nome = (studentInfo?.name || "aluno").replace(/\s+/g, "-").toLowerCase();
+      const mes = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+      pdf.save(`relatorio-${nome}-${mes}.pdf`);
+      toast.success("PDF exportado!", { id: "pdf-export" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Falha ao gerar PDF", { id: "pdf-export" });
+    } finally {
+      setIsLightMode(prevLight);
+      setIsExporting(false);
+    }
+  };
 
   if (!selectedExercise && progressionData && progressionData.length > 0) {
     setSelectedExercise(progressionData[0].name);
@@ -122,7 +178,8 @@ const EspecialistaRelatorio = () => {
   return (
     <div className={`min-h-screen p-2 sm:p-4 transition-colors duration-300 ${isLightMode ? 'bg-[#f8f9fa]' : 'bg-background'} print:!bg-white print:!p-0`}>
       {/* Container is completely unconstrained for max horizontal stretch and tight vertical gaps */}
-      <div className="w-full space-y-4 flex flex-col">
+      <div ref={reportRef} className="w-full space-y-4 flex flex-col">
+
         
         {/* Header - Very compact */}
         <div className={`flex flex-col md:flex-row items-center justify-between gap-4 p-3 rounded-lg border shadow-sm w-full ${bgc}`}>
@@ -171,9 +228,14 @@ const EspecialistaRelatorio = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 sm:gap-4 print:hidden">
-            <button onClick={() => window.print()} className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${isLightMode ? 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-800' : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-500/50 text-emerald-400'}`} title="Exportar Relatório em PDF">
-              <Download size={16} /> <span className="text-xs font-semibold uppercase tracking-wider hidden sm:inline">Exportar PDF</span>
+          <div className={`flex items-center gap-2 sm:gap-4 ${isExporting ? 'hidden' : 'print:hidden'}`}>
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${isLightMode ? 'bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-800' : 'bg-amber-500 hover:bg-amber-600 border-amber-600 text-white'} disabled:opacity-60 text-xs font-semibold uppercase tracking-wider`}
+              title="Exportar relatório em PDF"
+            >
+              <Download size={16} /> <span className="hidden sm:inline">{isExporting ? "Gerando..." : "Exportar PDF"}</span>
             </button>
             <div className={`w-px h-6 mx-1 ${isLightMode ? 'bg-slate-300' : 'bg-border'}`}></div>
             <button onClick={() => setIsStackedLayout(!isStackedLayout)} className={`p-2 rounded-lg border transition-colors ${isLightMode ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800' : 'bg-secondary/50 hover:bg-secondary border-border text-foreground'}`} title={isStackedLayout ? "Visão Dividida" : "Visão Empilhada"}>
@@ -186,9 +248,9 @@ const EspecialistaRelatorio = () => {
         </div>
 
         {/* 1. Volume and Progression Chart - Super compact vertical size */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full ${isExporting ? 'flex flex-col gap-6' : 'print:flex print:flex-col print:gap-6'}`}>
           {/* Volume Chart */}
-          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
+          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} ${isExporting ? 'break-inside-avoid shadow-none' : 'print:break-inside-avoid print:shadow-none'}`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Dumbbell size={16} className="text-amber-500" /> Volume por Agrupamento
@@ -196,11 +258,11 @@ const EspecialistaRelatorio = () => {
               <p className={`text-[11px] ${mutec}`}>Total de séries finalizadas no mês.</p>
             </div>
             
-            <div className="w-full min-h-[200px] print:hidden">
+            <div className={`w-full min-h-[200px] ${isExporting ? 'hidden' : 'print:hidden'}`}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 20, right: 60, top: 0, bottom: 0 }}>
+                <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 0, right: 60, top: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="grupo" tick={{ fill: isLightMode ? '#475569' : '#94a3b8', fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="grupo" width={90} interval={0} tick={{ fill: isLightMode ? '#475569' : '#94a3b8', fontSize: 11, fontWeight: 500 }} axisLine={false} tickLine={false} />
                   <Tooltip 
                     cursor={{ fill: isLightMode ? '#e2e8f0' : 'hsl(var(--secondary)/0.5)' }}
                     contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
@@ -231,7 +293,7 @@ const EspecialistaRelatorio = () => {
             </div>
             
             {/* Print layout */}
-            <div className="hidden print:block w-full mt-2">
+            <div className={`w-full mt-2 ${isExporting ? 'block' : 'hidden print:block'}`}>
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-300">
@@ -257,7 +319,7 @@ const EspecialistaRelatorio = () => {
           </div>
 
           {/* Load Progression Chart */}
-          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
+          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} ${isExporting ? 'break-inside-avoid shadow-none' : 'print:break-inside-avoid print:shadow-none'}`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
@@ -266,7 +328,7 @@ const EspecialistaRelatorio = () => {
                 <p className={`text-[11px] ${mutec}`}>Evolução do peso médio ao longo do mês.</p>
               </div>
               
-              <div className="print:hidden">
+              <div className={`${isExporting ? 'hidden' : 'print:hidden'}`}>
                 <Select value={selectedExercise} onValueChange={setSelectedExercise}>
                   <SelectTrigger className={`w-full sm:w-[180px] h-8 text-xs font-medium ${isLightMode ? 'bg-white border-slate-300 text-slate-800' : ''}`}>
                     <SelectValue placeholder="Selecione..." />
@@ -283,7 +345,7 @@ const EspecialistaRelatorio = () => {
               </div>
             </div>
 
-            <div className="w-full min-h-[200px] print:hidden">
+            <div className={`w-full min-h-[200px] ${isExporting ? 'hidden' : 'print:hidden'}`}>
               {currentProgression ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={currentProgression.history} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
@@ -308,7 +370,7 @@ const EspecialistaRelatorio = () => {
                     />
                     <Tooltip 
                       contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
-                      labelFormatter={(label) => `Data: ${label}`}
+                      labelFormatter={(label) => `Data: ${formatDateBR(label)}`}
                       formatter={(value: any) => [`${value} kg`, 'Peso Médio']}
                     />
                     {/* Fixed explicit colors for Light/Dark instead of using nonexistent hsl variables */}
@@ -331,7 +393,7 @@ const EspecialistaRelatorio = () => {
             </div>
 
             {/* Print layout */}
-            <div className="hidden print:block w-full mt-2">
+            <div className={`w-full mt-2 ${isExporting ? 'block' : 'hidden print:block'}`}>
               <table className="w-full text-[10px] sm:text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-300">
@@ -368,9 +430,9 @@ const EspecialistaRelatorio = () => {
         </div>
 
         {/* 2. Mental Checkin and Weight History */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full ${isExporting ? 'flex flex-col gap-6' : 'print:flex print:flex-col print:gap-6'}`}>
           {/* Mental Checkin Chart */}
-          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
+          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} ${isExporting ? 'break-inside-avoid shadow-none' : 'print:break-inside-avoid print:shadow-none'}`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Brain size={16} className="text-blue-500" /> Saúde Mental
@@ -412,6 +474,7 @@ const EspecialistaRelatorio = () => {
                     />
                     <Tooltip 
                       contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
+                      labelFormatter={(label) => formatDateBR(String(label))}
                     />
                     <Legend verticalAlign="top" height={24} iconSize={10} wrapperStyle={{ fontSize: '10px' }}/>
                     <Area type="monotone" dataKey="sleep" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSleep)" name="Sono (h)" strokeWidth={2} />
@@ -429,7 +492,7 @@ const EspecialistaRelatorio = () => {
           </div>
 
           {/* Weight History Chart */}
-          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
+          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} ${isExporting ? 'break-inside-avoid shadow-none' : 'print:break-inside-avoid print:shadow-none'}`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Activity size={16} className="text-purple-500" /> Evolução de Peso
@@ -462,7 +525,7 @@ const EspecialistaRelatorio = () => {
                     />
                     <Tooltip 
                       contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
-                      labelFormatter={(label) => `Data: ${label}`}
+                      labelFormatter={(label) => `Data: ${formatDateBR(label)}`}
                       formatter={(value: any) => [`${value} kg`, 'Peso']}
                     />
                     <Line 
@@ -486,8 +549,8 @@ const EspecialistaRelatorio = () => {
         </div>
 
         {/* 3. Insights Section and Calendar */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-4'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
-          <div className={`${isStackedLayout ? '' : 'lg:col-span-3'} space-y-2 print:break-inside-avoid`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-4'} gap-4 w-full ${isExporting ? 'flex flex-col gap-6' : 'print:flex print:flex-col print:gap-6'}`}>
+          <div className={`${isStackedLayout ? '' : 'lg:col-span-3'} space-y-2 ${isExporting ? 'break-inside-avoid' : 'print:break-inside-avoid'}`}>
             <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 ${tc}`}>
               <Brain size={16} className="text-amber-500" /> Insights Automáticos do Mês
             </h2>
@@ -507,11 +570,11 @@ const EspecialistaRelatorio = () => {
             </div>
           </div>
 
-          <div className="space-y-2 print:break-inside-avoid">
+          <div className={`space-y-2 ${isExporting ? 'break-inside-avoid' : 'print:break-inside-avoid'}`}>
             <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 ${tc}`}>
               <CalendarIcon size={16} className="text-emerald-500" /> Frequência
             </h2>
-            <div className={`rounded-xl border p-2 flex justify-center shadow-sm ${bgc} print:shadow-none`}>
+            <div className={`rounded-xl border p-2 flex justify-center shadow-sm ${bgc} ${isExporting ? 'shadow-none' : 'print:shadow-none'}`}>
               <Calendar
                 mode="single"
                 locale={ptBR}

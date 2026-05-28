@@ -1,56 +1,95 @@
-## Problema
+## Causa raiz confirmada do "treino fantasma"
 
-O sistema de "UI gamificada" (Trégua / Chama Extinta) foi desenhado exclusivamente para o modo escuro:
+Reproduzi o caminho no código. O cenário que você descreveu está acontecendo assim:
 
-- Os tokens `--dishonor-*` e `--truce-*` em `index.css` têm valores escuros e nunca são redefinidos no bloco `.light`.
-- `Dashboard.tsx` e `FlameCard.tsx` usam **dezenas de cores HSL hardcoded** (ex.: `hsl(270, 15%, 60%)`, `hsl(210, 25%, 7%)`) para fundos de página, bordas, textos de citação, gradientes de botão e barras de progresso.
+1. Em algum momento o aluno abriu/iniciou um treino e o app salvou um snapshot local no aparelho.
+2. Ao trocar de aba ou fechar o app, o sistema regrava o snapshot e atualiza a "data" do snapshot para o dia atual — sem mexer no horário de início original.
+3. O snapshot tem expiração teórica de 6h, mas como a data é reescrita toda vez que o app perde o foco, ele consegue sobreviver por dias.
+4. Quando o aluno reabre o aplicativo:
+   - o app encontra o snapshot;
+   - restaura como se o treino estivesse em andamento;
+   - liga o cronômetro;
+   - calcula tempo decorrido desde o início original (que pode ser de horas ou dias atrás);
+   - cai imediatamente na regra de "passou de 3h, finalizar automaticamente";
+   - grava no banco um treino com comentário "Finalizado automaticamente (3h)".
 
-Resultado no print: no modo claro com Chama Extinta, o `pageBg` força fundo arroxeado escuro, o card "Bem-vindo ao Coliseu / ITALO..." fica com texto roxo invisível, os stat cards (Performance / Mental) ficam roxos com texto ilegível, e o card da chama central fica preto sobre quase preto.
+Resultado: aparece um treino que o aluno nunca fez. Os dados do banco confirmam isso — existem 33 treinos gravados assim, alguns iniciados num dia e salvos no dia seguinte.
 
-## Plano de ação (cirúrgico)
+A finalização automática de 3h é a fonte real do "treino contabilizado sozinho", da chama errada e da sensação de "app preso no treino".
 
-### 1. `src/index.css` — adicionar overrides `.light` para os tokens dinâmicos
+## Plano de correção definitivo
 
-Dentro do bloco `.light { ... }` redefinir:
+### 1. Remover por completo a finalização automática de treino
 
-- `--dishonor-bg`, `--dishonor-card`, `--dishonor-border`, `--dishonor-muted`, `--dishonor-accent`, `--dishonor-glow` → versões claras (fundo lavanda muito suave, bordas finas roxa-acinzentadas, texto roxo escuro legível sobre branco).
-- `--truce-bg`, `--truce-card`, `--truce-border`, `--truce-muted`, `--truce-accent`, `--truce-glow` → versões claras equivalentes em azul.
+Nada será gravado em treino sem ação explícita do aluno.
 
-Isso resolve automaticamente todo o uso de `hsl(var(--dishonor-card))`, `hsl(var(--truce-border))` etc. em `FlameCard.tsx`, `StoicQuote` do Dashboard, e nos overrides `bg-[hsl(var(--dishonor-card))]`.
+- Remover o gatilho de auto-finalização após 3h.
+- Substituir por: quando o app detectar uma sessão muito antiga, mostrar uma tela perguntando ao aluno o que fazer:
+  - Retomar treino;
+  - Finalizar agora e registrar;
+  - Descartar este treino.
+- Enquanto o aluno não decidir, nada é gravado no histórico nem influencia a chama.
 
-### 2. `src/pages/Dashboard.tsx` — desligar overrides hardcoded no modo claro
+### 2. Validar snapshot antigo de forma confiável
 
-Adicionar `const isLight = document.documentElement.classList.contains("light")` (ou via `useTheme()`) no topo do componente e ramificar todas as constantes que hoje usam HSL escuros:
+- A data efetiva do snapshot passa a ser sempre o horário real de início, nunca reescrita.
+- Snapshot com início acima de um limite (ex.: 4h sem interação) entra automaticamente em modo "sessão pausada" e exibe a tela do item 1.
+- Snapshot de outro dia local é tratado como sessão expirada e pede confirmação antes de qualquer ação.
+- Snapshot inválido, sem grupo válido no plano atual, é descartado em vez de virar treino genérico.
 
-- `pageBg` → `undefined` em light (deixa o `bg-background` neutro aparecer).
-- `quoteBorder`, `quoteTextColor` → versões claras (`hsl(270, 20%, 35%)` para texto, `hsl(220, 13%, 91%)` para borda).
-- Gradientes de botão (`buttonGradient`/`buttonShadow`) para Trégua/Extinta → versões saturadas mais vivas em fundo claro (mantém o roxo/azul de marca mas com luminância adequada para texto branco).
-- `mealBarColor`/`sleepBarColor`/`waterBarColor`/`volumeBarColor`/`chartColor` → versões com saturação maior em light (acentos vívidos, conforme já exigido pela diretriz "destacar vividamente em ambos os modos").
-- `iconAccentColor`/`iconAccentClass`/`dropletsClass`/`statIconColor` → usar HSL com luminância em torno de 45% no light em vez de 40-50% no dark.
-- Pequeno ajuste: o trilho da barra de Performance (`hsl(0, 0%, 20%)` linha 350) também precisa virar `hsl(var(--muted))` para não ficar quase preto sobre branco.
+### 3. Limpar histórico já contaminado
 
-### 3. `src/components/FlameCard.tsx` — fazer o card respeitar o modo
+Existem 33 registros de "Finalizado automaticamente (3h)" no banco. Vou:
 
-Trocar `progressColor`, `gradientStart`, `iconColor`, `numberColor`, `labelColor`, `subtitleColor` por valores `light`-aware nos states `tregua` e `extinta`. Em particular:
+- Listar todos esses registros.
+- Marcar/remover esses registros após sua aprovação para não contarem como treino real, chama e relatórios.
+- Recalcular a chama dos alunos afetados.
 
-- `numberColor` em Extinta hoje é `hsl(0, 0%, 60%)` → em fundo claro fica fantasma; usar token `hsl(var(--foreground))` ou um cinza escuro (`hsl(270, 20%, 30%)`).
-- Trilho do círculo SVG (`stroke="hsl(0, 0%, 22%)"`, linha 106) → `hsl(var(--muted))`.
-- `subtitleColor` Extinta `hsl(270, 15%, 40%)` continua ok em claro; verificar contraste e ajustar para `hsl(270, 25%, 35%)`.
+### 4. Blindar a reavaliação mensal contra reset
 
-Implementação: mesmo padrão de detectar `isLight` e selecionar o conjunto de cores adequado dentro do `stateConfig`.
+- Salvar rascunho local da reavaliação a cada mudança de campo e a cada troca de etapa.
+- Restaurar automaticamente o rascunho ao abrir `/reavaliacao`.
+- Marcar a reavaliação como "fluxo crítico ativo" enquanto o aluno está nela, não só durante o envio.
+- Impedir reload pelo PWA durante esse fluxo.
+- Limpar rascunho apenas após envio confirmado.
 
-### 4. Verificação visual
+### 5. Tornar salvamento de treino + chama uma operação só
 
-Após as mudanças, rodar o preview no modo claro nas três telas-chave:
+- Criar função no banco que recebe o treino, grava em `workouts` e atualiza `flame_status` na mesma transação, usando o timezone do perfil do aluno.
+- Atualizar o app para usar essa função em vez de fazer dois passos separados.
+- Otimismo visual continua, mas o valor real volta do banco.
 
-- `/` Dashboard com Chama Extinta (caso do print) → confirmar fundo branco/slate, textos legíveis, acento roxo nítido.
-- `/` Dashboard com Trégua → mesmo check em azul.
-- Componente `FlameCard` nos 3 estados (normal/ativa/tregua/extinta).
+### 6. Padronizar datas
 
-E re-verificar o modo escuro para garantir que nada regrediu (os tokens dark continuam intactos no `:root`).
+- Usar timezone do perfil (com fallback `America/Sao_Paulo`) em: histórico, chama, relatórios, alertas de inatividade, streak.
 
-## Detalhes técnicos
+## Arquivos que serão alterados
 
-- Sem mudanças em DB, edge functions, ou lógica de negócio. Estritamente UI/CSS.
-- Sem mudanças em outros componentes (`WorkoutShareCard` usa os tokens, então herdará automaticamente as cores claras do passo 1).
-- Não vou expandir o escopo para criar um `useThemeAwareColor` global agora — apenas a detecção pontual em Dashboard e FlameCard, mantendo o "surgical strike".
+- `src/pages/Treinos.tsx`
+- `src/lib/workoutSnapshot.ts`
+- `src/lib/flameMotor.ts`
+- `src/hooks/useFlameState.ts`
+- `src/hooks/useStreak.ts`
+- `src/pages/monthly-assessment/MonthlyAssessment.tsx`
+- `src/lib/submitMonthlyAssessment.ts`
+- `src/hooks/useSilentUpdate.ts`
+- Nova migration: função atômica de finalizar treino + atualizar chama
+- Operação de dados: limpar treinos automáticos já gravados (após sua aprovação)
+
+## Testes que vou executar
+
+- Snapshot antigo no aparelho + abrir app: não pode criar treino sozinho. Deve mostrar tela "sessão pausada".
+- Abrir o app sem nunca ter iniciado treino: nenhum registro automático.
+- Treino real iniciado, sair para outra aba por horas, voltar: deve restaurar e perguntar antes de finalizar.
+- Finalizar manualmente: gera exatamente um registro, chama atualiza junto.
+- Reavaliação preenchida pela metade: trocar de aba, abrir câmera, recarregar — sempre volta de onde parou.
+- Conferir banco depois das mudanças: nenhum novo registro com "Finalizado automaticamente (3h)".
+
+## Ordem de execução
+
+1. Remover auto-finalização (corta o sangramento imediatamente).
+2. Validar/expirar snapshot corretamente.
+3. Blindar reavaliação mensal.
+4. Finalização atômica treino + chama.
+5. Limpeza dos treinos fantasmas já gravados.
+6. Padronização de timezone nos relatórios e hooks.
