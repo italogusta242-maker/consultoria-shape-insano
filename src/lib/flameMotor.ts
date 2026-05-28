@@ -78,14 +78,20 @@ export async function checkAndUpdateFlame(userId: string): Promise<void> {
 }
 
 async function isDayApprovedClient(userId: string, dateStr: string): Promise<boolean> {
+  // Local-day boundaries converted to true UTC ISO — naive "T00:00:00" strings
+  // were being interpreted as UTC by Postgres, dropping evening BRT workouts
+  // out of the day window (flame never lit up).
+  const dayStart = new Date(`${dateStr}T00:00:00`).toISOString();
+  const dayEnd = new Date(`${dateStr}T23:59:59.999`).toISOString();
+
   // Check workouts
   const { data: workouts } = await supabase
     .from("workouts")
     .select("id")
     .eq("user_id", userId)
     .not("finished_at", "is", null)
-    .gte("finished_at", `${dateStr}T00:00:00`)
-    .lt("finished_at", `${dateStr}T23:59:59.999`)
+    .gte("finished_at", dayStart)
+    .lte("finished_at", dayEnd)
     .limit(1);
 
   if (workouts && workouts.length > 0) return true;
