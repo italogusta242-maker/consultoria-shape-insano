@@ -333,7 +333,7 @@ const EspecialistaRelatorio = () => {
                     />
                     <Tooltip 
                       contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
-                      labelFormatter={(label) => `Data: ${label}`}
+                      labelFormatter={(label) => `Data: ${formatDateBR(label)}`}
                       formatter={(value: any) => [`${value} kg`, 'Peso Médio']}
                     />
                     {/* Fixed explicit colors for Light/Dark instead of using nonexistent hsl variables */}
