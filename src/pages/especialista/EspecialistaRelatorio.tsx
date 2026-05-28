@@ -168,7 +168,8 @@ const EspecialistaRelatorio = () => {
   return (
     <div className={`min-h-screen p-2 sm:p-4 transition-colors duration-300`} style={isLightMode ? { backgroundColor: "#f8f9fa" } : { backgroundColor: "hsl(var(--background))" }}>
       {/* Container is completely unconstrained for max horizontal stretch and tight vertical gaps */}
-      <div className="w-full space-y-4 flex flex-col">
+      <div ref={reportRef} className="w-full space-y-4 flex flex-col">
+
         
         {/* Header - Very compact */}
         <div className={`flex flex-col md:flex-row items-center justify-between gap-4 p-3 rounded-lg border shadow-sm w-full ${bgc}`}>
