@@ -402,6 +402,7 @@ const EspecialistaRelatorio = () => {
                     />
                     <Tooltip 
                       contentStyle={{ backgroundColor: isLightMode ? '#fff' : 'hsl(var(--card))', border: isLightMode ? '1px solid #cbd5e1' : '1px solid hsl(var(--border))', borderRadius: '8px', color: isLightMode ? '#000' : '#fff' }}
+                      labelFormatter={(label) => formatDateBR(String(label))}
                     />
                     <Legend verticalAlign="top" height={24} iconSize={10} wrapperStyle={{ fontSize: '10px' }}/>
                     <Area type="monotone" dataKey="sleep" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSleep)" name="Sono (h)" strokeWidth={2} />
