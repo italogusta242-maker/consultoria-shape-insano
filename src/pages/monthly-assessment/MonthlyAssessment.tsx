@@ -284,14 +284,7 @@ const MonthlyAssessment = () => {
       toast.error(msg, { duration: 8000 });
     }
   };
-      toast.success("Reavaliação mensal enviada com sucesso!");
-      navigate("/");
-    } else {
-      const msg = result.error || "Erro ao enviar reavaliação. Verifique sua conexão e tente novamente.";
-      setSubmitError(msg);
-      toast.error(msg, { duration: 8000 });
-    }
-  };
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-start p-4 marble-texture overflow-y-auto">
