@@ -1,56 +1,65 @@
-## Problema
+# Correções no Relatório do Especialista
 
-O sistema de "UI gamificada" (Trégua / Chama Extinta) foi desenhado exclusivamente para o modo escuro:
+## Problemas identificados (pelas screenshots)
 
-- Os tokens `--dishonor-*` e `--truce-*` em `index.css` têm valores escuros e nunca são redefinidos no bloco `.light`.
-- `Dashboard.tsx` e `FlameCard.tsx` usam **dezenas de cores HSL hardcoded** (ex.: `hsl(270, 15%, 60%)`, `hsl(210, 25%, 7%)`) para fundos de página, bordas, textos de citação, gradientes de botão e barras de progresso.
+1. **Volume por Agrupamento**: os nomes dos grupos musculares (Ombro, Tríceps, Posterior, etc.) ficam cortados no eixo Y — só aparecem no hover. Causa: o YAxis categórico não tem `width` definido, então o Recharts reserva ~60px e corta nomes longos.
 
-Resultado no print: no modo claro com Chama Extinta, o `pageBg` força fundo arroxeado escuro, o card "Bem-vindo ao Coliseu / ITALO..." fica com texto roxo invisível, os stat cards (Performance / Mental) ficam roxos com texto ilegível, e o card da chama central fica preto sobre quase preto.
+2. **Datas em formato ISO/curto**: nos gráficos "Evolução de Peso", "Progressão de Carga" e "Saúde Mental", o tooltip mostra a data crua (`2026-03-23`) e o eixo X mostra só `dd/mm`. Usuário quer **dd/mm/yyyy**.
 
-## Plano de ação (cirúrgico)
+3. **Faltando**: botão de **Exportar PDF** do relatório completo.
 
-### 1. `src/index.css` — adicionar overrides `.light` para os tokens dinâmicos
+## Mudanças
 
-Dentro do bloco `.light { ... }` redefinir:
+### 1. `src/pages/especialista/EspecialistaRelatorio.tsx`
 
-- `--dishonor-bg`, `--dishonor-card`, `--dishonor-border`, `--dishonor-muted`, `--dishonor-accent`, `--dishonor-glow` → versões claras (fundo lavanda muito suave, bordas finas roxa-acinzentadas, texto roxo escuro legível sobre branco).
-- `--truce-bg`, `--truce-card`, `--truce-border`, `--truce-muted`, `--truce-accent`, `--truce-glow` → versões claras equivalentes em azul.
+**a) Volume por Agrupamento (~linha 187-189)**
+- Adicionar `width={80}` no `YAxis` categórico e reduzir `margin.left` adequadamente, para que os nomes dos grupos fiquem sempre visíveis.
 
-Isso resolve automaticamente todo o uso de `hsl(var(--dishonor-card))`, `hsl(var(--truce-border))` etc. em `FlameCard.tsx`, `StoicQuote` do Dashboard, e nos overrides `bg-[hsl(var(--dishonor-card))]`.
+**b) Formatação de datas dd/mm/yyyy** nos 3 gráficos (Progressão de Carga, Saúde Mental, Evolução de Peso):
+- Criar helper `formatDateBR(val)` que recebe `YYYY-MM-DD` e retorna `DD/MM/YYYY`.
+- Usar no `labelFormatter` do `<Tooltip>` (substituindo o atual que mostra a string crua).
+- Manter o `tickFormatter` do XAxis em `dd/mm` (espaço curto), mas o tooltip ao tocar mostra a data completa `dd/mm/yyyy`.
 
-### 2. `src/pages/Dashboard.tsx` — desligar overrides hardcoded no modo claro
+**c) Botão Exportar PDF**
+- Adicionar botão "Exportar PDF" no header (ao lado dos botões de tema/layout), com ícone `Download` do lucide-react.
+- Envolver toda a área de conteúdo em uma `ref` (`reportRef`).
+- Handler `handleExportPDF`:
+  - Usar `html2canvas` (já presente como dep transitiva ou instalar) + `jsPDF` para capturar o `reportRef` e gerar A4 paisagem multi-página.
+  - Nome do arquivo: `relatorio-{nomeAluno}-{mes-ano}.pdf`.
+  - Forçar modo claro temporariamente durante a captura (melhor legibilidade no PDF) e restaurar ao final.
+  - Mostrar toast de "Gerando PDF..." e "PDF exportado!".
 
-Adicionar `const isLight = document.documentElement.classList.contains("light")` (ou via `useTheme()`) no topo do componente e ramificar todas as constantes que hoje usam HSL escuros:
-
-- `pageBg` → `undefined` em light (deixa o `bg-background` neutro aparecer).
-- `quoteBorder`, `quoteTextColor` → versões claras (`hsl(270, 20%, 35%)` para texto, `hsl(220, 13%, 91%)` para borda).
-- Gradientes de botão (`buttonGradient`/`buttonShadow`) para Trégua/Extinta → versões saturadas mais vivas em fundo claro (mantém o roxo/azul de marca mas com luminância adequada para texto branco).
-- `mealBarColor`/`sleepBarColor`/`waterBarColor`/`volumeBarColor`/`chartColor` → versões com saturação maior em light (acentos vívidos, conforme já exigido pela diretriz "destacar vividamente em ambos os modos").
-- `iconAccentColor`/`iconAccentClass`/`dropletsClass`/`statIconColor` → usar HSL com luminância em torno de 45% no light em vez de 40-50% no dark.
-- Pequeno ajuste: o trilho da barra de Performance (`hsl(0, 0%, 20%)` linha 350) também precisa virar `hsl(var(--muted))` para não ficar quase preto sobre branco.
-
-### 3. `src/components/FlameCard.tsx` — fazer o card respeitar o modo
-
-Trocar `progressColor`, `gradientStart`, `iconColor`, `numberColor`, `labelColor`, `subtitleColor` por valores `light`-aware nos states `tregua` e `extinta`. Em particular:
-
-- `numberColor` em Extinta hoje é `hsl(0, 0%, 60%)` → em fundo claro fica fantasma; usar token `hsl(var(--foreground))` ou um cinza escuro (`hsl(270, 20%, 30%)`).
-- Trilho do círculo SVG (`stroke="hsl(0, 0%, 22%)"`, linha 106) → `hsl(var(--muted))`.
-- `subtitleColor` Extinta `hsl(270, 15%, 40%)` continua ok em claro; verificar contraste e ajustar para `hsl(270, 25%, 35%)`.
-
-Implementação: mesmo padrão de detectar `isLight` e selecionar o conjunto de cores adequado dentro do `stateConfig`.
-
-### 4. Verificação visual
-
-Após as mudanças, rodar o preview no modo claro nas três telas-chave:
-
-- `/` Dashboard com Chama Extinta (caso do print) → confirmar fundo branco/slate, textos legíveis, acento roxo nítido.
-- `/` Dashboard com Trégua → mesmo check em azul.
-- Componente `FlameCard` nos 3 estados (normal/ativa/tregua/extinta).
-
-E re-verificar o modo escuro para garantir que nada regrediu (os tokens dark continuam intactos no `:root`).
+### 2. Dependências
+- `bun add jspdf html2canvas` se ainda não estiverem instaladas.
 
 ## Detalhes técnicos
 
-- Sem mudanças em DB, edge functions, ou lógica de negócio. Estritamente UI/CSS.
-- Sem mudanças em outros componentes (`WorkoutShareCard` usa os tokens, então herdará automaticamente as cores claras do passo 1).
-- Não vou expandir o escopo para criar um `useThemeAwareColor` global agora — apenas a detecção pontual em Dashboard e FlameCard, mantendo o "surgical strike".
+```ts
+const formatDateBR = (val: string) => {
+  if (!val || !val.includes('-')) return val;
+  const [y, m, d] = val.split('-');
+  return `${d}/${m}/${y}`;
+};
+```
+
+Exportação PDF (multi-página):
+```ts
+const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+const pdf = new jsPDF('p', 'mm', 'a4');
+const pageW = 210, pageH = 297;
+const imgH = (canvas.height * pageW) / canvas.width;
+let heightLeft = imgH, position = 0;
+pdf.addImage(canvas, 'PNG', 0, position, pageW, imgH);
+heightLeft -= pageH;
+while (heightLeft > 0) {
+  position = heightLeft - imgH;
+  pdf.addPage();
+  pdf.addImage(canvas, 'PNG', 0, position, pageW, imgH);
+  heightLeft -= pageH;
+}
+pdf.save(`relatorio-${nome}-${mes}.pdf`);
+```
+
+## Fora de escopo
+- Não mexer em lógica de cálculo de dados (`useRelatorioPerformance`).
+- Não alterar `StudentEvolutionChart`, `StudentLoadProgression`, `StudentMentalCheckins` (componentes separados usados em outras telas) — o reporte usa charts inline na própria página.
