@@ -1,15 +1,23 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useRelatorioPerformance } from "@/hooks/useRelatorioPerformance";
 import { useSpecialistStudents } from "@/hooks/useSpecialistStudents";
 import { motion } from "framer-motion";
-import { Calendar as CalendarIcon, LineChart as LineChartIcon, Brain, Dumbbell, AlertTriangle, CheckCircle, Info, Sun, Moon, ChevronDown, Activity, LayoutGrid, List } from "lucide-react";
+import { Calendar as CalendarIcon, LineChart as LineChartIcon, Brain, Dumbbell, AlertTriangle, CheckCircle, Info, Sun, Moon, ChevronDown, Activity, LayoutGrid, List, Download } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, LabelList, AreaChart, Area, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
+
+const formatDateBR = (val: string) => {
+  if (!val || typeof val !== "string" || !val.includes("-")) return val;
+  const [y, m, d] = val.split("-");
+  if (!y || !m || !d) return val;
+  return `${d}/${m}/${y}`;
+};
 
 const insightIcons = {
   positive: <CheckCircle className="text-emerald-400" size={16} />,
