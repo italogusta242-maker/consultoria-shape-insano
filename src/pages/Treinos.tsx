@@ -426,6 +426,13 @@ const Treinos = () => {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [staleSession, setStaleSession] = useState<null | {
+    groupIndex: number;
+    groupName: string;
+    startedAt: string;
+    exercises: Exercise[];
+    expandedExercise: number | null;
+  }>(null);
   const [effortRating, setEffortRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [startedAt, setStartedAt] = useState<string>("");
@@ -453,6 +460,30 @@ const Treinos = () => {
     const belongs = persisted.userId == null || persisted.userId === user.id;
     if (!belongs) { hasRestoredRef.current = true; return; }
     const safe = sanitizeExercises(persisted.exercises);
+
+    // Detect "stale" session: started more than 3h ago, or on a different
+    // calendar day. We do NOT auto-resume it (that's what caused phantom
+    // workouts to be auto-finalized). Instead, hold it and ask the user.
+    const startedTs = persisted.startedAt ? new Date(persisted.startedAt).getTime() : NaN;
+    const elapsedMs = Number.isFinite(startedTs) ? Date.now() - startedTs : 0;
+    const STALE_AFTER_MS = 3 * 60 * 60 * 1000; // 3h
+    const isStale =
+      persisted.view === "execution" &&
+      (elapsedMs > STALE_AFTER_MS || (persisted.date && persisted.date !== getToday()));
+
+    if (isStale) {
+      // Keep snapshot intact, stay on the list view, prompt the user.
+      setStaleSession({
+        groupIndex: persisted.selectedGroup,
+        groupName: persisted.groupName,
+        startedAt: persisted.startedAt,
+        exercises: safe,
+        expandedExercise: persisted.expandedExercise,
+      });
+      hasRestoredRef.current = true;
+      return;
+    }
+
     setExercises(safe);
     setSelectedGroup(persisted.selectedGroup);
     setExpandedExercise(persisted.expandedExercise);
@@ -687,40 +718,26 @@ const Treinos = () => {
     }
   }, [view, exercises.length]);
 
-  // Auto-finalize after 3 hours — TRANSACTIONAL.
-  // Snapshot is only cleared AFTER the DB insert resolves successfully.
-  // If it fails, state stays intact so the user can retry via "Concluir".
+  // After 3h of active timer, pause and prompt the user. We NEVER auto-write
+  // a workout to the DB without explicit confirmation — that was the source
+  // of "phantom" treinos (sessões antigas restauradas e finalizadas sozinhas).
+  const stalePromptShownRef = useRef(false);
   useEffect(() => {
     if (!timerRunning || timer < MAX_WORKOUT_SECONDS) return;
     if (selectedGroup === null) return;
-    const groupName = workoutGroups[selectedGroup]?.name ?? "Treino";
-    const groupIdx = selectedGroup;
+    if (stalePromptShownRef.current) return;
+    stalePromptShownRef.current = true;
 
     setTimerRunning(false);
-    (async () => {
-      try {
-        await saveWorkout.mutateAsync({
-          exercises,
-          duration: MAX_WORKOUT_SECONDS,
-          effortRating: null,
-          comment: "Finalizado automaticamente (3h)",
-          groupName,
-          startedAtOverride: startedAt,
-        });
-        // ONLY on success: clear persisted state and exit
-        clearWorkoutExecutionSnapshot();
-        clearWorkoutInProgress(groupIdx);
-        toast.success("⏱️ Treino finalizado automaticamente após 3h!");
-        setView("list");
-        setSelectedGroup(null);
-      } catch (err) {
-        console.error("[auto-finalize] save failed, keeping snapshot:", err);
-        toast.error("Não foi possível auto-finalizar. Toque em Concluir para tentar de novo.");
-        // Keep snapshot intact; re-arm timer so effect doesn't loop instantly
-        setTimerRunning(true);
-      }
-    })();
-  }, [timer, timerRunning]);
+    setStaleSession({
+      groupIndex: selectedGroup,
+      groupName: workoutGroups[selectedGroup]?.name ?? "Treino",
+      startedAt,
+      exercises,
+      expandedExercise,
+    });
+    setView("list");
+  }, [timer, timerRunning, selectedGroup, workoutGroups, startedAt, exercises, expandedExercise]);
 
   // NOTE: We intentionally do NOT auto-clear the snapshot when the selected
   // group looks "invalid" or "mismatched". During a refetch of the training
@@ -1138,6 +1155,58 @@ const Treinos = () => {
   if (view === "list") {
     return (
       <div className="p-4 max-w-lg mx-auto pb-24">
+        {/* Recovery dialog for stale workout sessions (>3h or different day) */}
+        <AlertDialog open={!!staleSession} onOpenChange={(o) => { if (!o) return; }}>
+          <AlertDialogContent className="bg-card border-border max-w-sm">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={18} className="text-accent" />
+                <AlertDialogTitle className="font-cinzel text-foreground">Sessão pausada</AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="text-muted-foreground">
+                Encontramos um treino de <strong>{staleSession?.groupName}</strong> que ficou aberto
+                {staleSession?.startedAt ? ` desde ${new Date(staleSession.startedAt).toLocaleString("pt-BR")}` : ""}.
+                <br /><br />
+                O que você quer fazer? Nada será registrado sem a sua confirmação.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
+              <AlertDialogAction
+                onClick={() => {
+                  if (!staleSession) return;
+                  // Resume: keep progress but restart the timer from now
+                  const now = new Date().toISOString();
+                  setExercises(staleSession.exercises);
+                  setSelectedGroup(staleSession.groupIndex);
+                  setExpandedExercise(staleSession.expandedExercise);
+                  setStartedAt(now);
+                  setTimer(0);
+                  setTimerRunning(true);
+                  setView("execution");
+                  stalePromptShownRef.current = false;
+                  setStaleSession(null);
+                }}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Retomar treino
+              </AlertDialogAction>
+              <AlertDialogCancel
+                onClick={() => {
+                  // Discard: clear snapshot and in-progress draft; no DB write
+                  if (staleSession) clearWorkoutInProgress(staleSession.groupIndex);
+                  clearWorkoutExecutionSnapshot();
+                  setStaleSession(null);
+                  stalePromptShownRef.current = false;
+                  toast("Treino antigo descartado. Nenhum registro foi criado.", { icon: "🗑️" });
+                }}
+                className="bg-secondary text-foreground border-border mt-0"
+              >
+                Descartar
+              </AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <div className="flex items-center justify-between pt-2 mb-1">
           <h1 className="font-cinzel text-2xl font-bold text-foreground">TREINOS</h1>
           <button

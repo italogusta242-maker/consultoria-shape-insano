@@ -1,65 +1,95 @@
-# Correções no Relatório do Especialista
+## Causa raiz confirmada do "treino fantasma"
 
-## Problemas identificados (pelas screenshots)
+Reproduzi o caminho no código. O cenário que você descreveu está acontecendo assim:
 
-1. **Volume por Agrupamento**: os nomes dos grupos musculares (Ombro, Tríceps, Posterior, etc.) ficam cortados no eixo Y — só aparecem no hover. Causa: o YAxis categórico não tem `width` definido, então o Recharts reserva ~60px e corta nomes longos.
+1. Em algum momento o aluno abriu/iniciou um treino e o app salvou um snapshot local no aparelho.
+2. Ao trocar de aba ou fechar o app, o sistema regrava o snapshot e atualiza a "data" do snapshot para o dia atual — sem mexer no horário de início original.
+3. O snapshot tem expiração teórica de 6h, mas como a data é reescrita toda vez que o app perde o foco, ele consegue sobreviver por dias.
+4. Quando o aluno reabre o aplicativo:
+   - o app encontra o snapshot;
+   - restaura como se o treino estivesse em andamento;
+   - liga o cronômetro;
+   - calcula tempo decorrido desde o início original (que pode ser de horas ou dias atrás);
+   - cai imediatamente na regra de "passou de 3h, finalizar automaticamente";
+   - grava no banco um treino com comentário "Finalizado automaticamente (3h)".
 
-2. **Datas em formato ISO/curto**: nos gráficos "Evolução de Peso", "Progressão de Carga" e "Saúde Mental", o tooltip mostra a data crua (`2026-03-23`) e o eixo X mostra só `dd/mm`. Usuário quer **dd/mm/yyyy**.
+Resultado: aparece um treino que o aluno nunca fez. Os dados do banco confirmam isso — existem 33 treinos gravados assim, alguns iniciados num dia e salvos no dia seguinte.
 
-3. **Faltando**: botão de **Exportar PDF** do relatório completo.
+A finalização automática de 3h é a fonte real do "treino contabilizado sozinho", da chama errada e da sensação de "app preso no treino".
 
-## Mudanças
+## Plano de correção definitivo
 
-### 1. `src/pages/especialista/EspecialistaRelatorio.tsx`
+### 1. Remover por completo a finalização automática de treino
 
-**a) Volume por Agrupamento (~linha 187-189)**
-- Adicionar `width={80}` no `YAxis` categórico e reduzir `margin.left` adequadamente, para que os nomes dos grupos fiquem sempre visíveis.
+Nada será gravado em treino sem ação explícita do aluno.
 
-**b) Formatação de datas dd/mm/yyyy** nos 3 gráficos (Progressão de Carga, Saúde Mental, Evolução de Peso):
-- Criar helper `formatDateBR(val)` que recebe `YYYY-MM-DD` e retorna `DD/MM/YYYY`.
-- Usar no `labelFormatter` do `<Tooltip>` (substituindo o atual que mostra a string crua).
-- Manter o `tickFormatter` do XAxis em `dd/mm` (espaço curto), mas o tooltip ao tocar mostra a data completa `dd/mm/yyyy`.
+- Remover o gatilho de auto-finalização após 3h.
+- Substituir por: quando o app detectar uma sessão muito antiga, mostrar uma tela perguntando ao aluno o que fazer:
+  - Retomar treino;
+  - Finalizar agora e registrar;
+  - Descartar este treino.
+- Enquanto o aluno não decidir, nada é gravado no histórico nem influencia a chama.
 
-**c) Botão Exportar PDF**
-- Adicionar botão "Exportar PDF" no header (ao lado dos botões de tema/layout), com ícone `Download` do lucide-react.
-- Envolver toda a área de conteúdo em uma `ref` (`reportRef`).
-- Handler `handleExportPDF`:
-  - Usar `html2canvas` (já presente como dep transitiva ou instalar) + `jsPDF` para capturar o `reportRef` e gerar A4 paisagem multi-página.
-  - Nome do arquivo: `relatorio-{nomeAluno}-{mes-ano}.pdf`.
-  - Forçar modo claro temporariamente durante a captura (melhor legibilidade no PDF) e restaurar ao final.
-  - Mostrar toast de "Gerando PDF..." e "PDF exportado!".
+### 2. Validar snapshot antigo de forma confiável
 
-### 2. Dependências
-- `bun add jspdf html2canvas` se ainda não estiverem instaladas.
+- A data efetiva do snapshot passa a ser sempre o horário real de início, nunca reescrita.
+- Snapshot com início acima de um limite (ex.: 4h sem interação) entra automaticamente em modo "sessão pausada" e exibe a tela do item 1.
+- Snapshot de outro dia local é tratado como sessão expirada e pede confirmação antes de qualquer ação.
+- Snapshot inválido, sem grupo válido no plano atual, é descartado em vez de virar treino genérico.
 
-## Detalhes técnicos
+### 3. Limpar histórico já contaminado
 
-```ts
-const formatDateBR = (val: string) => {
-  if (!val || !val.includes('-')) return val;
-  const [y, m, d] = val.split('-');
-  return `${d}/${m}/${y}`;
-};
-```
+Existem 33 registros de "Finalizado automaticamente (3h)" no banco. Vou:
 
-Exportação PDF (multi-página):
-```ts
-const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-const pdf = new jsPDF('p', 'mm', 'a4');
-const pageW = 210, pageH = 297;
-const imgH = (canvas.height * pageW) / canvas.width;
-let heightLeft = imgH, position = 0;
-pdf.addImage(canvas, 'PNG', 0, position, pageW, imgH);
-heightLeft -= pageH;
-while (heightLeft > 0) {
-  position = heightLeft - imgH;
-  pdf.addPage();
-  pdf.addImage(canvas, 'PNG', 0, position, pageW, imgH);
-  heightLeft -= pageH;
-}
-pdf.save(`relatorio-${nome}-${mes}.pdf`);
-```
+- Listar todos esses registros.
+- Marcar/remover esses registros após sua aprovação para não contarem como treino real, chama e relatórios.
+- Recalcular a chama dos alunos afetados.
 
-## Fora de escopo
-- Não mexer em lógica de cálculo de dados (`useRelatorioPerformance`).
-- Não alterar `StudentEvolutionChart`, `StudentLoadProgression`, `StudentMentalCheckins` (componentes separados usados em outras telas) — o reporte usa charts inline na própria página.
+### 4. Blindar a reavaliação mensal contra reset
+
+- Salvar rascunho local da reavaliação a cada mudança de campo e a cada troca de etapa.
+- Restaurar automaticamente o rascunho ao abrir `/reavaliacao`.
+- Marcar a reavaliação como "fluxo crítico ativo" enquanto o aluno está nela, não só durante o envio.
+- Impedir reload pelo PWA durante esse fluxo.
+- Limpar rascunho apenas após envio confirmado.
+
+### 5. Tornar salvamento de treino + chama uma operação só
+
+- Criar função no banco que recebe o treino, grava em `workouts` e atualiza `flame_status` na mesma transação, usando o timezone do perfil do aluno.
+- Atualizar o app para usar essa função em vez de fazer dois passos separados.
+- Otimismo visual continua, mas o valor real volta do banco.
+
+### 6. Padronizar datas
+
+- Usar timezone do perfil (com fallback `America/Sao_Paulo`) em: histórico, chama, relatórios, alertas de inatividade, streak.
+
+## Arquivos que serão alterados
+
+- `src/pages/Treinos.tsx`
+- `src/lib/workoutSnapshot.ts`
+- `src/lib/flameMotor.ts`
+- `src/hooks/useFlameState.ts`
+- `src/hooks/useStreak.ts`
+- `src/pages/monthly-assessment/MonthlyAssessment.tsx`
+- `src/lib/submitMonthlyAssessment.ts`
+- `src/hooks/useSilentUpdate.ts`
+- Nova migration: função atômica de finalizar treino + atualizar chama
+- Operação de dados: limpar treinos automáticos já gravados (após sua aprovação)
+
+## Testes que vou executar
+
+- Snapshot antigo no aparelho + abrir app: não pode criar treino sozinho. Deve mostrar tela "sessão pausada".
+- Abrir o app sem nunca ter iniciado treino: nenhum registro automático.
+- Treino real iniciado, sair para outra aba por horas, voltar: deve restaurar e perguntar antes de finalizar.
+- Finalizar manualmente: gera exatamente um registro, chama atualiza junto.
+- Reavaliação preenchida pela metade: trocar de aba, abrir câmera, recarregar — sempre volta de onde parou.
+- Conferir banco depois das mudanças: nenhum novo registro com "Finalizado automaticamente (3h)".
+
+## Ordem de execução
+
+1. Remover auto-finalização (corta o sangramento imediatamente).
+2. Validar/expirar snapshot corretamente.
+3. Blindar reavaliação mensal.
+4. Finalização atômica treino + chama.
+5. Limpeza dos treinos fantasmas já gravados.
+6. Padronização de timezone nos relatórios e hooks.
