@@ -218,7 +218,16 @@ const EspecialistaRelatorio = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 print:hidden">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="px-3 py-2 rounded-lg border bg-amber-500 hover:bg-amber-600 disabled:opacity-60 border-amber-600 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              title="Exportar relatório em PDF"
+            >
+              <Download size={14} />
+              {isExporting ? "Gerando..." : "Exportar PDF"}
+            </button>
             <button onClick={() => setIsStackedLayout(!isStackedLayout)} className={`p-2 rounded-lg border transition-colors ${isLightMode ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800' : 'bg-secondary/50 hover:bg-secondary border-border text-foreground'}`} title={isStackedLayout ? "Visão Dividida" : "Visão Empilhada"}>
               {isStackedLayout ? <LayoutGrid size={16} /> : <List size={16} />}
             </button>
