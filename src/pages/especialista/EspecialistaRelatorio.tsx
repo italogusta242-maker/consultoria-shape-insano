@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useRelatorioPerformance } from "@/hooks/useRelatorioPerformance";
 import { useSpecialistStudents } from "@/hooks/useSpecialistStudents";
 import { motion } from "framer-motion";
-import { Calendar as CalendarIcon, LineChart as LineChartIcon, Brain, Dumbbell, AlertTriangle, CheckCircle, Info, Sun, Moon, ChevronDown, Activity, LayoutGrid, List } from "lucide-react";
+import { Calendar as CalendarIcon, LineChart as LineChartIcon, Brain, Dumbbell, AlertTriangle, CheckCircle, Info, Sun, Moon, ChevronDown, Activity, LayoutGrid, List, Download } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -47,9 +47,9 @@ const EspecialistaRelatorio = () => {
   const [isStackedLayout, setIsStackedLayout] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const tc = isLightMode ? "text-slate-900" : "text-foreground";
-  const mutec = isLightMode ? "text-slate-500" : "text-muted-foreground";
-  const bgc = isLightMode ? "bg-white border-slate-200" : "bg-card border-border";
+  const tc = isLightMode ? "text-slate-900" : "text-foreground print:!text-slate-900";
+  const mutec = isLightMode ? "text-slate-500" : "text-muted-foreground print:!text-slate-500";
+  const bgc = isLightMode ? "bg-white border-slate-200" : "bg-card border-border print:!bg-white print:!border-slate-200";
 
   const {
     studentInfo,
@@ -101,6 +101,16 @@ const EspecialistaRelatorio = () => {
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [checkins]);
 
+  // Extract unique dates for the print table
+  const printDates = useMemo(() => {
+    if (!progressionData) return [];
+    const dates = new Set<string>();
+    progressionData.forEach(p => {
+      p.history.forEach(h => dates.add(h.date));
+    });
+    return Array.from(dates).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  }, [progressionData]);
+
   if (isLoading && !workouts) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isLightMode ? "bg-slate-50" : "bg-background"}`}>
@@ -110,7 +120,7 @@ const EspecialistaRelatorio = () => {
   }
 
   return (
-    <div className={`min-h-screen p-2 sm:p-4 transition-colors duration-300`} style={isLightMode ? { backgroundColor: "#f8f9fa" } : { backgroundColor: "hsl(var(--background))" }}>
+    <div className={`min-h-screen p-2 sm:p-4 transition-colors duration-300 ${isLightMode ? 'bg-[#f8f9fa]' : 'bg-background'} print:!bg-white print:!p-0`}>
       {/* Container is completely unconstrained for max horizontal stretch and tight vertical gaps */}
       <div className="w-full space-y-4 flex flex-col">
         
@@ -161,7 +171,11 @@ const EspecialistaRelatorio = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 print:hidden">
+            <button onClick={() => window.print()} className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${isLightMode ? 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-800' : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-500/50 text-emerald-400'}`} title="Exportar Relatório em PDF">
+              <Download size={16} /> <span className="text-xs font-semibold uppercase tracking-wider hidden sm:inline">Exportar PDF</span>
+            </button>
+            <div className={`w-px h-6 mx-1 ${isLightMode ? 'bg-slate-300' : 'bg-border'}`}></div>
             <button onClick={() => setIsStackedLayout(!isStackedLayout)} className={`p-2 rounded-lg border transition-colors ${isLightMode ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800' : 'bg-secondary/50 hover:bg-secondary border-border text-foreground'}`} title={isStackedLayout ? "Visão Dividida" : "Visão Empilhada"}>
               {isStackedLayout ? <LayoutGrid size={16} /> : <List size={16} />}
             </button>
@@ -172,9 +186,9 @@ const EspecialistaRelatorio = () => {
         </div>
 
         {/* 1. Volume and Progression Chart - Super compact vertical size */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
           {/* Volume Chart */}
-          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc}`}>
+          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Dumbbell size={16} className="text-amber-500" /> Volume por Agrupamento
@@ -182,7 +196,7 @@ const EspecialistaRelatorio = () => {
               <p className={`text-[11px] ${mutec}`}>Total de séries finalizadas no mês.</p>
             </div>
             
-            <div className="w-full min-h-[200px]">
+            <div className="w-full min-h-[200px] print:hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={volumeDetalhado} layout="vertical" margin={{ left: 20, right: 60, top: 0, bottom: 0 }}>
                   <XAxis type="number" hide />
@@ -215,10 +229,35 @@ const EspecialistaRelatorio = () => {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            
+            {/* Print layout */}
+            <div className="hidden print:block w-full mt-2">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-300">
+                    <th className="text-left py-2 font-semibold text-slate-800">Grupamento</th>
+                    <th className="text-right py-2 font-semibold text-slate-800">Séries no Mês</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {volumeDetalhado?.map((v, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 last:border-0">
+                      <td className="py-2 text-slate-700">{v.grupo}</td>
+                      <td className="py-2 text-right text-slate-700 font-medium">{v.series}</td>
+                    </tr>
+                  ))}
+                  {(!volumeDetalhado || volumeDetalhado.length === 0) && (
+                    <tr>
+                      <td colSpan={2} className="text-center py-4 text-slate-500">Sem dados registrados.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Load Progression Chart */}
-          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc}`}>
+          <div className={`rounded-xl border p-4 space-y-2 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
@@ -227,22 +266,24 @@ const EspecialistaRelatorio = () => {
                 <p className={`text-[11px] ${mutec}`}>Evolução do peso médio ao longo do mês.</p>
               </div>
               
-              <Select value={selectedExercise} onValueChange={setSelectedExercise}>
-                <SelectTrigger className={`w-full sm:w-[180px] h-8 text-xs font-medium ${isLightMode ? 'bg-white border-slate-300 text-slate-800' : ''}`}>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {progressionData?.map(p => (
-                    <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
-                  ))}
-                  {progressionData?.length === 0 && (
-                    <SelectItem value="none" disabled>Sem dados</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="print:hidden">
+                <Select value={selectedExercise} onValueChange={setSelectedExercise}>
+                  <SelectTrigger className={`w-full sm:w-[180px] h-8 text-xs font-medium ${isLightMode ? 'bg-white border-slate-300 text-slate-800' : ''}`}>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {progressionData?.map(p => (
+                      <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                    ))}
+                    {progressionData?.length === 0 && (
+                      <SelectItem value="none" disabled>Sem dados</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="w-full min-h-[200px]">
+            <div className="w-full min-h-[200px] print:hidden">
               {currentProgression ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={currentProgression.history} margin={{ top: 10, right: 20, bottom: 0, left: 0 }}>
@@ -288,13 +329,48 @@ const EspecialistaRelatorio = () => {
                 </div>
               )}
             </div>
+
+            {/* Print layout */}
+            <div className="hidden print:block w-full mt-2">
+              <table className="w-full text-[10px] sm:text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-300">
+                    <th className="text-left py-2 pr-4 font-semibold text-slate-800 whitespace-nowrap">Exercício</th>
+                    {printDates.map(date => {
+                      const [, m, d] = date.split('-');
+                      return <th key={date} className="text-center py-2 px-2 font-semibold text-slate-800 whitespace-nowrap">{`${d}/${m}`}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {progressionData?.map((p, idx) => (
+                    <tr key={idx} className="border-b border-slate-200 last:border-0">
+                      <td className="py-2 pr-4 text-slate-700 font-medium whitespace-nowrap">{p.name}</td>
+                      {printDates.map(date => {
+                        const historyItem = p.history.find(h => h.date === date);
+                        return (
+                          <td key={date} className="text-center py-2 px-2 text-slate-600">
+                            {historyItem ? `${historyItem.weight} kg` : '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {(!progressionData || progressionData.length === 0) && (
+                    <tr>
+                      <td colSpan={printDates.length + 1} className="text-center py-4 text-slate-500">Sem dados registrados.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         {/* 2. Mental Checkin and Weight History */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-2'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
           {/* Mental Checkin Chart */}
-          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc}`}>
+          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Brain size={16} className="text-blue-500" /> Saúde Mental
@@ -353,7 +429,7 @@ const EspecialistaRelatorio = () => {
           </div>
 
           {/* Weight History Chart */}
-          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc}`}>
+          <div className={`rounded-xl border p-4 shadow-sm flex flex-col ${bgc} print:break-inside-avoid print:shadow-none`}>
             <div>
               <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 mb-0.5 ${tc}`}>
                 <Activity size={16} className="text-purple-500" /> Evolução de Peso
@@ -410,8 +486,8 @@ const EspecialistaRelatorio = () => {
         </div>
 
         {/* 3. Insights Section and Calendar */}
-        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-4'} gap-4 w-full`}>
-          <div className={`${isStackedLayout ? '' : 'lg:col-span-3'} space-y-2`}>
+        <div className={`grid grid-cols-1 ${isStackedLayout ? '' : 'lg:grid-cols-4'} gap-4 w-full print:flex print:flex-col print:gap-6`}>
+          <div className={`${isStackedLayout ? '' : 'lg:col-span-3'} space-y-2 print:break-inside-avoid`}>
             <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 ${tc}`}>
               <Brain size={16} className="text-amber-500" /> Insights Automáticos do Mês
             </h2>
@@ -431,11 +507,11 @@ const EspecialistaRelatorio = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 print:break-inside-avoid">
             <h2 className={`font-cinzel text-base font-bold flex items-center gap-2 ${tc}`}>
               <CalendarIcon size={16} className="text-emerald-500" /> Frequência
             </h2>
-            <div className={`rounded-xl border p-2 flex justify-center shadow-sm ${bgc}`}>
+            <div className={`rounded-xl border p-2 flex justify-center shadow-sm ${bgc} print:shadow-none`}>
               <Calendar
                 mode="single"
                 locale={ptBR}
