@@ -1155,6 +1155,58 @@ const Treinos = () => {
   if (view === "list") {
     return (
       <div className="p-4 max-w-lg mx-auto pb-24">
+        {/* Recovery dialog for stale workout sessions (>3h or different day) */}
+        <AlertDialog open={!!staleSession} onOpenChange={(o) => { if (!o) return; }}>
+          <AlertDialogContent className="bg-card border-border max-w-sm">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={18} className="text-accent" />
+                <AlertDialogTitle className="font-cinzel text-foreground">Sessão pausada</AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="text-muted-foreground">
+                Encontramos um treino de <strong>{staleSession?.groupName}</strong> que ficou aberto
+                {staleSession?.startedAt ? ` desde ${new Date(staleSession.startedAt).toLocaleString("pt-BR")}` : ""}.
+                <br /><br />
+                O que você quer fazer? Nada será registrado sem a sua confirmação.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
+              <AlertDialogAction
+                onClick={() => {
+                  if (!staleSession) return;
+                  // Resume: keep progress but restart the timer from now
+                  const now = new Date().toISOString();
+                  setExercises(staleSession.exercises);
+                  setSelectedGroup(staleSession.groupIndex);
+                  setExpandedExercise(staleSession.expandedExercise);
+                  setStartedAt(now);
+                  setTimer(0);
+                  setTimerRunning(true);
+                  setView("execution");
+                  stalePromptShownRef.current = false;
+                  setStaleSession(null);
+                }}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Retomar treino
+              </AlertDialogAction>
+              <AlertDialogCancel
+                onClick={() => {
+                  // Discard: clear snapshot and in-progress draft; no DB write
+                  if (staleSession) clearWorkoutInProgress(staleSession.groupIndex);
+                  clearWorkoutExecutionSnapshot();
+                  setStaleSession(null);
+                  stalePromptShownRef.current = false;
+                  toast("Treino antigo descartado. Nenhum registro foi criado.", { icon: "🗑️" });
+                }}
+                className="bg-secondary text-foreground border-border mt-0"
+              >
+                Descartar
+              </AlertDialogCancel>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <div className="flex items-center justify-between pt-2 mb-1">
           <h1 className="font-cinzel text-2xl font-bold text-foreground">TREINOS</h1>
           <button
